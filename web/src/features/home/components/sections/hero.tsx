@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { useStatus } from '@/hooks/use-status'
 
 import { HeroTerminalDemo } from '../hero-terminal-demo'
+import { SiteOwnerContact } from '../site-owner-contact'
 
 interface HeroProps {
   className?: string
@@ -167,6 +168,13 @@ export function Hero(props: HeroProps) {
                 {renderDocsButton()}
               </>
             )}
+          </div>
+
+          <div
+            className='landing-animate-fade-up mt-6 w-full max-w-md opacity-0'
+            style={{ animationDelay: '220ms' }}
+          >
+            <SiteOwnerContact />
           </div>
 
           {/* Supported Apps (参考图二样式，进行卡片化和信息扩充设计，增加视觉高度) */}

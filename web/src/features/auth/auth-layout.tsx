@@ -70,7 +70,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         <div className='flex max-w-md flex-col gap-6'>
           <h2
             id='auth-brand-title'
-            className='text-4xl leading-tight font-bold tracking-tight'
+            className='text-4xl leading-tight font-bold tracking-tight text-balance'
           >
             {t('An LLM API platform built for teams')}
           </h2>

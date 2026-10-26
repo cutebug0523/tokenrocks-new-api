@@ -426,10 +426,14 @@ For commercial licensing, please contact support@quantumnous.com
  *   - `anthropic`: warm cream surfaces are a brand choice, NOT a primary-mix
  *     derivation (the Anthropic system deliberately uses warm neutrals for
  *     cards/borders rather than tinting them with the clay accent).
- *   - `simple-large`: keeps intentionally neutral, high-contrast surfaces. */
+ *   - `simple-large`: keeps intentionally neutral, high-contrast surfaces.
+ *   - `tokenrocks`: neutral gray surfaces with a teal accent, matching the
+ *     static marketing pages. */
 [data-theme-preset]:not([data-theme-preset='default']):not(
-  [data-theme-preset='anthropic']
-):not([data-theme-preset='simple-large']) {
+    [data-theme-preset='anthropic']
+  ):not([data-theme-preset='simple-large']):not(
+    [data-theme-preset='tokenrocks']
+  ) {
   --card: color-mix(in oklch, var(--primary) 3%, var(--background));
   --popover: color-mix(in oklch, var(--primary) 5%, var(--background));
   --muted: color-mix(in oklch, var(--primary) 7%, var(--background));
@@ -454,7 +458,9 @@ For commercial licensing, please contact support@quantumnous.com
 .dark
   [data-theme-preset]:not([data-theme-preset='default']):not(
     [data-theme-preset='anthropic']
-  ):not([data-theme-preset='simple-large']) {
+  ):not([data-theme-preset='simple-large']):not(
+    [data-theme-preset='tokenrocks']
+  ) {
   --card: color-mix(in oklch, var(--primary) 8%, var(--background));
   --popover: color-mix(in oklch, var(--primary) 12%, var(--background));
   --muted: color-mix(in oklch, var(--primary) 12%, var(--background));
@@ -610,6 +616,94 @@ For commercial licensing, please contact support@quantumnous.com
 
   --skeleton-base: oklch(0.305 0.004 60);
   --skeleton-highlight: oklch(0.41 0.004 60);
+}
+
+/* ── TokenRocks ───────────────────────────────────────────────────────── */
+/* Site brand for tokenrocks.ai: teal accent (#0e7c66) on white and neutral
+ * gray surfaces, ink text (#0b1220), Inter for UI text. Mirrors the static
+ * marketing pages so the console and the site read as one product. */
+[data-theme-preset='tokenrocks'] {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.183 0.031 263.4);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.183 0.031 263.4);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.183 0.031 263.4);
+
+  --primary: oklch(0.525 0.097 174.1);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.976 0.003 264.5);
+  --secondary-foreground: oklch(0.183 0.031 263.4);
+
+  --muted: oklch(0.976 0.003 264.5);
+  --muted-foreground: oklch(0.446 0.026 256.8);
+  --accent: oklch(0.977 0.011 176.3);
+  --accent-foreground: oklch(0.429 0.077 175);
+
+  --border: oklch(0.928 0.006 264.5);
+  --input: oklch(0.928 0.006 264.5);
+  --ring: oklch(0.525 0.097 174.1);
+
+  --chart-1: oklch(0.525 0.097 174.1);
+  --chart-2: oklch(0.76 0.105 175.5);
+  --chart-3: oklch(0.623 0.188 259.8);
+  --chart-4: oklch(0.666 0.157 58.3);
+  --chart-5: oklch(0.606 0.219 292.7);
+
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.373 0.031 259.7);
+  --sidebar-primary: oklch(0.525 0.097 174.1);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.977 0.011 176.3);
+  --sidebar-accent-foreground: oklch(0.429 0.077 175);
+  --sidebar-border: oklch(0.928 0.006 264.5);
+  --sidebar-ring: oklch(0.525 0.097 174.1);
+
+  --radius: 0.5rem;
+
+  /* Auto font for this preset. The Font axis still wins: `sans` swaps in
+   * Public Sans and `serif` swaps `--font-body` (blocks below). */
+  --font-ui-sans:
+    'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+}
+.dark [data-theme-preset='tokenrocks'] {
+  --background: oklch(0.183 0.031 263.4);
+  --foreground: oklch(0.967 0.003 264.5);
+  --card: oklch(0.21 0.032 264.7);
+  --card-foreground: oklch(0.967 0.003 264.5);
+  --popover: oklch(0.252 0.033 263.7);
+  --popover-foreground: oklch(0.967 0.003 264.5);
+
+  /* Teal lifts for legibility on the ink background. */
+  --primary: oklch(0.694 0.123 173.4);
+  --primary-foreground: oklch(0.183 0.031 263.4);
+  --secondary: oklch(0.252 0.033 263.7);
+  --secondary-foreground: oklch(0.967 0.003 264.5);
+
+  --muted: oklch(0.252 0.033 263.7);
+  --muted-foreground: oklch(0.714 0.019 261.3);
+  --accent: oklch(0.326 0.052 175.5);
+  --accent-foreground: oklch(0.967 0.003 264.5);
+
+  --border: oklch(0.278 0.03 256.8);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.694 0.123 173.4);
+
+  --chart-1: oklch(0.694 0.123 173.4);
+  --chart-2: oklch(0.76 0.105 175.5);
+  --chart-3: oklch(0.623 0.188 259.8);
+  --chart-4: oklch(0.666 0.157 58.3);
+  --chart-5: oklch(0.606 0.219 292.7);
+
+  --sidebar: oklch(0.183 0.031 263.4);
+  --sidebar-foreground: oklch(0.967 0.003 264.5);
+  --sidebar-primary: oklch(0.694 0.123 173.4);
+  --sidebar-primary-foreground: oklch(0.183 0.031 263.4);
+  --sidebar-accent: oklch(0.326 0.052 175.5);
+  --sidebar-accent-foreground: oklch(0.967 0.003 264.5);
+  --sidebar-border: oklch(0.278 0.03 256.8);
+  --sidebar-ring: oklch(0.694 0.123 173.4);
 }
 
 /* ── Font axis ────────────────────────────────────────────────────────────

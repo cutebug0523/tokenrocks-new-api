@@ -125,7 +125,7 @@ describe('theme preference persistence', () => {
 
     expect(screen.getByLabelText('Theme mode')).toHaveTextContent('system')
     expect(document.documentElement).toHaveClass('light')
-    expect(document.body).not.toHaveAttribute('data-theme-preset')
+    expect(document.body).toHaveAttribute('data-theme-preset', 'tokenrocks')
     expect(document.body).toHaveAttribute('data-theme-font', 'system')
     expect(document.body).not.toHaveAttribute('data-theme-radius')
     expect(document.body).not.toHaveAttribute('data-theme-scale')
@@ -171,7 +171,7 @@ describe('theme preference persistence', () => {
 
     expect(screen.getByLabelText('Theme mode')).toHaveTextContent('system')
     expect(document.documentElement).toHaveClass('light')
-    expect(document.body).not.toHaveAttribute('data-theme-preset')
+    expect(document.body).toHaveAttribute('data-theme-preset', 'tokenrocks')
     expect(document.body).toHaveAttribute('data-theme-font', 'system')
     expect(document.body).not.toHaveAttribute('data-theme-radius')
     expect(document.body).not.toHaveAttribute('data-theme-scale')
@@ -193,7 +193,7 @@ describe('theme preference persistence', () => {
       render(<ThemeFixture />)
 
       expect(screen.getByLabelText('Theme mode')).toHaveTextContent('system')
-      expect(document.body).not.toHaveAttribute('data-theme-preset')
+      expect(document.body).toHaveAttribute('data-theme-preset', 'tokenrocks')
       expect(document.body).toHaveAttribute('data-theme-font', 'system')
       expect(document.body).not.toHaveAttribute('data-theme-radius')
       expect(document.body).not.toHaveAttribute('data-theme-scale')
@@ -209,7 +209,7 @@ describe('theme preference persistence', () => {
     render(<ThemeFixture />)
 
     expect(screen.getByLabelText('Theme mode')).toHaveTextContent('system')
-    expect(document.body).not.toHaveAttribute('data-theme-preset')
+    expect(document.body).toHaveAttribute('data-theme-preset', 'tokenrocks')
   })
 
   it('still applies and resets preferences when storage writes fail', async () => {
@@ -230,7 +230,7 @@ describe('theme preference persistence', () => {
     await user.click(screen.getByRole('button', { name: 'Reset' }))
 
     expect(screen.getByLabelText('Theme mode')).toHaveTextContent('system')
-    expect(document.body).not.toHaveAttribute('data-theme-preset')
+    expect(document.body).toHaveAttribute('data-theme-preset', 'tokenrocks')
   })
 
   it('preserves saved theme preferences during frontend cache initialization', () => {
@@ -283,6 +283,18 @@ describe('theme font selection', () => {
     render(<ThemeFixture />)
 
     expect(document.body).toHaveAttribute('data-theme-font', 'system')
+  })
+
+  it('keeps the neutral Default palette after remounting when chosen over the TokenRocks default', async () => {
+    const user = userEvent.setup()
+    const first = render(<ThemeFixture />)
+
+    await user.click(screen.getByRole('button', { name: 'Default preset' }))
+    first.unmount()
+    render(<ThemeFixture />)
+
+    expect(document.body).not.toHaveAttribute('data-theme-preset')
+    expect(localStorage.getItem('newapi:theme:v1:preset')).toBe('default')
   })
 
   it('uses the preset font in Auto and restores the browser font on the default preset', async () => {

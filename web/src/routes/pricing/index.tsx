@@ -21,6 +21,7 @@ import z from 'zod'
 
 import { Pricing } from '@/features/pricing'
 import { getModuleAccessForGuard } from '@/lib/nav-modules'
+import { openStaticPage } from '@/lib/static-pages'
 import { useAuthStore } from '@/stores/auth-store'
 
 const pricingSearchSchema = z.object({
@@ -38,7 +39,9 @@ const pricingSearchSchema = z.object({
 
 export const Route = createFileRoute('/pricing/')({
   validateSearch: pricingSearchSchema,
-  beforeLoad: async ({ context, location }) => {
+  beforeLoad: async ({ context, location, preload }) => {
+    const staticPage = openStaticPage({ location, preload })
+    if (staticPage) return staticPage
     const access = await getModuleAccessForGuard(context.queryClient, 'pricing')
     if (!access.enabled) {
       throw redirect({ to: '/' })

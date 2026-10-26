@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TokenRocks · 为团队打造的大模型 API 平台</title>
+<meta name="description" content="一套接口接入 DeepSeek、Qwen、Claude、GPT 等主流模型，价格低至官方的 0.5 折，按量付费，余额不过期。">
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/_s/site.css">
+<style>
+  .hero-inner { max-width: 1200px; margin: 0 auto; padding: 80px 24px 72px; display: flex; flex-wrap: wrap; gap: 56px; align-items: center; }
+  .stat-grid { padding: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; white-space: nowrap; }
+  .section { max-width: 1200px; margin: 0 auto; padding: 88px 24px; }
+  .h2 { margin: 0; font-size: 38px; font-weight: 800; letter-spacing: -0.8px; }
+  .cta-box { max-width: 1200px; margin: 0 auto; background: var(--brand); color: #fff; border-radius: 20px; padding: 56px 48px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 24px; }
+  @media (max-width: 640px) {
+    .hero-inner { padding: 48px 16px 40px; gap: 36px; }
+    .stat-grid { gap: 8px; padding: 12px; }
+    .stat-value { font-size: 17px; }
+    .section { padding: 56px 16px; }
+    .h2 { font-size: 28px; }
+    .cta-box { padding: 36px 24px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="inner">
+    <div class="left">
+      <a class="brand" href="/" aria-label="TokenRocks 首页">
+        <span class="brand-mark" aria-hidden="true">T</span>
+        <span class="brand-name">TokenRocks</span>
+      </a>
+      <nav class="main-nav" aria-label="主导航">
+        <a class="optional" href="#features">产品</a>
+        <a href="/pricing">模型</a>
+        <a class="optional" href="#plans">价格</a>
+        <a href="/guide/">文档</a>
+        <a class="optional" href="#enterprise">企业</a>
+      </nav>
+    </div>
+    <div class="header-actions">
+      <a class="link-btn" href="/sign-in">登录</a>
+      <a class="btn-dark" href="/sign-up">免费开始</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section style="background: #F6F7F9; border-bottom: 1px solid #E5E7EB;">
+    <div class="hero-inner">
+      <div style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 22px;">
+        <span style="align-self: flex-start; font-size: 13px; font-weight: 600; color: #0E7C66; background: #FFFFFF; border: 1px solid #D1E7E1; padding: 6px 12px; border-radius: 999px;">新：自动分组，按模型自动选最省的线路</span>
+        <h1 style="margin: 0; font-size: clamp(36px, 5vw, 60px); line-height: 1.1; font-weight: 800; letter-spacing: -1.2px;">为团队打造的<br>大模型 API 平台</h1>
+        <p style="margin: 0; max-width: 500px; font-size: 18px; line-height: 1.7; color: #4B5563;">一套接口接入 DeepSeek、Qwen、Claude、GPT 等 <span data-model-count>27</span> 个模型。用量、成本、密钥集中管理，价格低至官方的 0.5 折。</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+          <a href="/sign-up" style="display: inline-flex; align-items: center; min-height: 48px; padding: 0 22px; border-radius: 8px; background: #0E7C66; color: #FFFFFF; text-decoration: none; font-weight: 600; font-size: 16px;">免费开始 · 送 ¥0.2</a>
+          <a href="#enterprise" style="display: inline-flex; align-items: center; min-height: 48px; padding: 0 22px; border-radius: 8px; border: 1px solid #D1D5DB; background: #FFFFFF; text-decoration: none; font-weight: 600; font-size: 16px;">企业咨询</a>
+        </div>
+      </div>
+
+      <figure aria-label="控制台界面示意（示例数据）" style="flex: 1 1 480px; min-width: 0; margin: 0; background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 14px; box-shadow: 0 24px 48px -24px rgba(11,18,32,0.25); overflow: hidden;">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid #F0F1F3; font-size: 13px; color: #6B7280;">
+          <span style="font-weight: 600; color: #0B1220;">用量概览 · 本月</span><span>示例数据</span>
+        </div>
+        <div class="stat-grid">
+          <div style="border: 1px solid #F0F1F3; border-radius: 10px; padding: 12px;"><div style="font-size: 12px; color: #6B7280;">本月消耗</div><div class="stat-value">¥128.40</div></div>
+          <div style="border: 1px solid #F0F1F3; border-radius: 10px; padding: 12px;"><div style="font-size: 12px; color: #6B7280;">调用次数</div><div class="stat-value">18,302</div></div>
+          <div style="border: 1px solid #D1E7E1; background: #F0FAF7; border-radius: 10px; padding: 12px;"><div style="font-size: 12px; color: #0B5D4D;">比官方价省</div><div class="stat-value" style="color: #0B5D4D;">¥2,439</div></div>
+        </div>
+        <div aria-hidden="true" style="padding: 0 18px 18px; display: flex; align-items: flex-end; gap: 10px; height: 120px;">
+          <div style="flex: 1; height: 38%; background: #D1E7E1; border-radius: 4px;"></div>
+          <div style="flex: 1; height: 52%; background: #D1E7E1; border-radius: 4px;"></div>
+          <div style="flex: 1; height: 45%; background: #D1E7E1; border-radius: 4px;"></div>
+          <div style="flex: 1; height: 70%; background: #D1E7E1; border-radius: 4px;"></div>
+          <div style="flex: 1; height: 64%; background: #D1E7E1; border-radius: 4px;"></div>
+          <div style="flex: 1; height: 88%; background: #0E7C66; border-radius: 4px;"></div>
+          <div style="flex: 1; height: 76%; background: #D1E7E1; border-radius: 4px;"></div>
+        </div>
+        <div style="border-top: 1px solid #F0F1F3;">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #F6F7F9; font-size: 14px;">
+            <span style="flex: 1 1 auto; font-weight: 500;">研发 · 编码助手</span>
+            <span style="font-size: 12px; color: #374151; background: #F3F4F6; padding: 2px 8px; border-radius: 6px;">auto</span>
+            <span style="font-family: var(--mono); min-width: 72px; text-align: right;">¥63.20</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #F6F7F9; font-size: 14px;">
+            <span style="flex: 1 1 auto; font-weight: 500;">客服机器人</span>
+            <span style="font-size: 12px; color: #374151; background: #F3F4F6; padding: 2px 8px; border-radius: 6px;">国模特价</span>
+            <span style="font-family: var(--mono); min-width: 72px; text-align: right;">¥21.70</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 12px 18px; font-size: 14px;">
+            <span style="flex: 1 1 auto; font-weight: 500;">数据清洗任务</span>
+            <span style="font-size: 12px; color: #374151; background: #F3F4F6; padding: 2px 8px; border-radius: 6px;">国模特价</span>
+            <span style="font-family: var(--mono); min-width: 72px; text-align: right;">¥43.50</span>
+          </div>
+        </div>
+      </figure>
+    </div>
+  </section>
+
+  <section aria-label="已接入的模型厂商" style="border-bottom: 1px solid #E5E7EB;">
+    <div style="max-width: 1200px; margin: 0 auto; padding: 28px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 40px; color: #4B5563; font-size: 15px;">
+      <span style="font-size: 13px; color: #6B7280;">已接入</span>
+      <span style="font-weight: 700; font-size: 18px; color: #0B1220;">Anthropic</span>
+      <span style="font-weight: 700; font-size: 18px; color: #0B1220;">OpenAI</span>
+      <span style="font-weight: 700; font-size: 18px; color: #0B1220;">DeepSeek</span>
+      <span style="font-weight: 700; font-size: 18px; color: #0B1220;">阿里巴巴 Qwen</span>
+      <span style="font-weight: 700; font-size: 18px; color: #0B1220;">Google</span>
+    </div>
+  </section>
+
+  <section id="features" aria-labelledby="features-title" class="section" style="display: flex; flex-direction: column; gap: 44px;">
+    <div style="max-width: 640px; display: flex; flex-direction: column; gap: 12px;">
+      <h2 id="features-title" class="h2">一个平台，管好团队的模型调用</h2>
+      <p style="margin: 0; font-size: 17px; line-height: 1.7; color: #4B5563;">不用再分别注册、充值、对账。一个账户，所有模型，所有成本。</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px;">
+      <div style="border: 1px solid #E5E7EB; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 12px;">
+        <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0E7C66" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"></path></svg>
+        <h3 style="margin: 0; font-size: 20px; font-weight: 700;">统一接口</h3>
+        <p style="margin: 0; font-size: 15px; line-height: 1.75; color: #4B5563;">兼容 OpenAI Chat、Responses 和 Anthropic Messages。现有代码和客户端只换接口地址和密钥。</p>
+      </div>
+      <div style="border: 1px solid #E5E7EB; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 12px;">
+        <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0E7C66" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path></svg>
+        <h3 style="margin: 0; font-size: 20px; font-weight: 700;">成本看得见</h3>
+        <p style="margin: 0; font-size: 15px; line-height: 1.75; color: #4B5563;">每次调用的模型、token 和扣费都有明细，模型价格页里每个价格都标着官方原价。</p>
+      </div>
+      <div style="border: 1px solid #E5E7EB; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 12px;">
+        <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0E7C66" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"></circle><path d="M11 12l9-9M17 6l3 3"></path></svg>
+        <h3 style="margin: 0; font-size: 20px; font-weight: 700;">密钥与额度管理</h3>
+        <p style="margin: 0; font-size: 15px; line-height: 1.75; color: #4B5563;">按项目建多把密钥，各自设额度、分组和有效期，用量分开统计。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="plans" aria-labelledby="plans-title" style="background: #F6F7F9; border-top: 1px solid #E5E7EB; border-bottom: 1px solid #E5E7EB;">
+    <div class="section" style="display: flex; flex-direction: column; gap: 40px;">
+      <div style="text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center;">
+        <h2 id="plans-title" class="h2">按量付费，选你要的线路</h2>
+        <p style="margin: 0; font-size: 17px; color: #4B5563;">没有月费、没有最低消费，余额不过期。</p>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; align-items: stretch;">
+        <div style="background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: 30px; display: flex; flex-direction: column; gap: 16px;">
+          <h3 style="margin: 0; font-size: 18px; font-weight: 700;">特价线路</h3>
+          <div><span style="font-size: 44px; font-weight: 800; letter-spacing: -1px;">0.5 折</span><span style="font-size: 15px; color: #4B5563;"> 起</span></div>
+          <p style="margin: 0; font-size: 15px; line-height: 1.7; color: #4B5563;">个人开发、编码助手、批量任务。</p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 15px; line-height: 2; color: #374151;">
+            <li>DeepSeek、Qwen 0.5 折</li><li>Claude 0.6 折，GPT 0.5 折</li><li>个别上游附带固定提示词</li>
+          </ul>
+          <a href="/sign-up" style="margin-top: auto; display: flex; justify-content: center; align-items: center; min-height: 46px; border-radius: 8px; border: 1px solid #D1D5DB; text-decoration: none; font-weight: 600;">免费开始</a>
+        </div>
+        <div style="background: #0B1220; color: #FFFFFF; border-radius: 16px; padding: 30px; display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;"><h3 style="margin: 0; font-size: 18px; font-weight: 700;">企业满血线路</h3><span style="font-size: 12px; font-weight: 600; background: #0E7C66; padding: 4px 10px; border-radius: 999px;">团队推荐</span></div>
+          <div><span style="font-size: 44px; font-weight: 800; letter-spacing: -1px;">1.2 折</span><span style="font-size: 15px; color: #C7CDD8;"> 起</span></div>
+          <p style="margin: 0; font-size: 15px; line-height: 1.7; color: #C7CDD8;">生产环境与团队协作，稳定优先。</p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 15px; line-height: 2; color: #E5E7EB;">
+            <li>官方原版模型</li><li>Claude 3 折，GPT 1.2 折，DeepSeek 3 折</li><li>失败自动跨线路重试</li>
+          </ul>
+          <a href="/sign-up" style="margin-top: auto; display: flex; justify-content: center; align-items: center; min-height: 46px; border-radius: 8px; background: #FFFFFF; color: #0B1220; text-decoration: none; font-weight: 700;">免费开始</a>
+        </div>
+        <div id="enterprise" style="background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: 30px; display: flex; flex-direction: column; gap: 16px;">
+          <h3 style="margin: 0; font-size: 18px; font-weight: 700;">企业定制</h3>
+          <div><span style="font-size: 44px; font-weight: 800; letter-spacing: -1px;">联系我们</span></div>
+          <p style="margin: 0; font-size: 15px; line-height: 1.7; color: #4B5563;">大额用量与专属需求。</p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 15px; line-height: 2; color: #374151;">
+            <li>大额充值，加微信咨询</li><li>专属分组与额度</li><li>微信直连对接</li>
+          </ul>
+          <a href="/about" style="margin-top: auto; display: flex; justify-content: center; align-items: center; min-height: 46px; border-radius: 8px; border: 1px solid #D1D5DB; text-decoration: none; font-weight: 600;">微信 cutebug0523</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="faq-title" style="max-width: 860px; margin: 0 auto; padding: 88px 24px; display: flex; flex-direction: column; gap: 24px;">
+    <h2 id="faq-title" style="margin: 0; font-size: 34px; font-weight: 800; text-align: center;">常见问题</h2>
+    <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">接口地址填什么？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">OpenAI 兼容客户端填 https://api.tokenrocks.ai/v1，Claude Code 等填 https://api.tokenrocks.ai。详见<a href="/guide/" style="color: #0E7C66;">使用指南</a>。</p></details>
+    <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">特价和企业满血有什么区别？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">特价最便宜，个别上游会附带固定提示词；企业满血走官方原版模型，稳定优先。</p></details>
+    <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">怎么充值？余额会过期吗？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">目前用兑换码充值，加站长微信 cutebug0523 购买；余额不过期。</p></details>
+  </section>
+
+  <section style="padding: 0 16px 88px;">
+    <div class="cta-box">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <h2 style="margin: 0; font-size: 32px; font-weight: 800;">今天就把模型账单降下来</h2>
+        <p style="margin: 0; font-size: 16px; color: #DDF3EC;">注册即送 ¥0.2 体验额度，五分钟接入。</p>
+      </div>
+      <a href="/sign-up" style="display: inline-flex; align-items: center; min-height: 50px; padding: 0 26px; border-radius: 10px; background: #FFFFFF; color: #0B1220; text-decoration: none; font-weight: 700; font-size: 16px;">免费开始</a>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="inner">
+    <div class="col"><span class="title" style="font-size: 16px;">TokenRocks</span><span>大模型 API 平台</span></div>
+    <div class="col"><span class="title">产品</span><a href="/pricing">模型与价格</a><a href="#plans">线路方案</a><a href="/dashboard">控制台</a></div>
+    <div class="col"><span class="title">资源</span><a href="/guide/">使用指南</a><a href="https://github.com/cutebug0523/tokenrocks-new-api">GitHub 开源</a></div>
+    <div class="col"><span class="title">联系</span><span>微信 cutebug0523</span></div>
+  </div>
+</footer>
+
+<script>
+  // 模型数量按价格接口实时计数，接口失败就保留页面上的默认数字
+  fetch('/api/pricing')
+    .then(function (r) { return r.json() })
+    .then(function (j) {
+      if (!j || !Array.isArray(j.data) || !j.data.length) return
+      document.querySelectorAll('[data-model-count]').forEach(function (el) { el.textContent = j.data.length })
+    })
+    .catch(function () {})
+</script>
+</body>
+</html>

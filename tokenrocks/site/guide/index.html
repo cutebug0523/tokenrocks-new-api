@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使用指南 · TokenRocks</title>
+<meta name="description" content="TokenRocks 使用指南：注册、创建 API 密钥、接口地址、线路分组、Claude Code 与各类客户端配置、充值与常见问题。">
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/_s/site.css">
+<style>
+  .doc { max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; gap: 40px; align-items: flex-start; }
+  .doc-nav { flex: 0 0 220px; position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: 36px 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+  .doc-nav .label { font-size: 12px; font-weight: 600; color: var(--muted-2); letter-spacing: 0.5px; padding: 14px 10px 6px; }
+  .doc-nav .label:first-child { padding-top: 6px; }
+  .doc-nav a { text-decoration: none; color: var(--text-2); padding: 8px 10px; border-radius: 6px; }
+  .doc-nav a:hover { background: var(--alt); }
+  .doc-main { flex: 1 1 auto; min-width: 0; padding: 36px 0 80px; display: flex; flex-direction: column; gap: 44px; font-size: 16px; line-height: 1.8; }
+  .doc-main h2 { margin: 0; font-size: 26px; font-weight: 700; line-height: 1.3; scroll-margin-top: 16px; }
+  .doc-main h3 { margin: 8px 0 0; font-size: 18px; font-weight: 700; }
+  .doc-main section { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 16px; }
+  .doc-main p { margin: 0; color: var(--text-2); }
+  .doc-main ul { margin: 0; padding-left: 20px; color: var(--text-2); }
+  .doc-main a { color: var(--brand); }
+  .doc-toc { flex: 0 0 180px; position: sticky; top: 0; padding: 40px 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+  .doc-toc a { text-decoration: none; color: var(--muted); }
+  .doc-toc a:hover { color: var(--brand); }
+  .steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; }
+  .steps li { display: flex; gap: 16px; align-items: flex-start; color: var(--text-2); }
+  .step-no { flex-shrink: 0; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+  .code { background: var(--ink); border-radius: 12px; overflow: hidden; }
+  .code-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; border-bottom: 1px solid #1f2937; font-size: 13px; color: #9ca3af; }
+  .code-head button { background: transparent; border: 1px solid #374151; color: #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-family: inherit; cursor: pointer; }
+  .code pre { margin: 0; padding: 16px; color: #e5e7eb; font-size: 13px; line-height: 1.75; white-space: pre-wrap; word-break: break-all; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .doc-table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 15px; line-height: 1.6; }
+  .doc-table th { padding: 10px 14px; font-weight: 600; text-align: left; font-size: 13px; color: var(--muted); background: var(--alt); }
+  .doc-table td { padding: 12px 14px; border-top: 1px solid var(--line-soft); vertical-align: top; color: var(--text-2); }
+  .doc-table code, .doc-main p code, .doc-main li code { font-size: 14px; background: var(--alt); padding: 1px 6px; border-radius: 4px; color: var(--ink); overflow-wrap: anywhere; }
+  .note { background: var(--brand-light); border: 1px solid var(--brand-border); border-radius: 10px; padding: 14px 16px; font-size: 15px; color: #0b3d33; }
+  .tier-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .tier-card { border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+  .tier-card.strong { border-color: var(--brand); }
+  .tier-card .t { font-weight: 700; }
+  .tier-card .d { font-size: 14px; color: var(--muted); margin-top: 6px; line-height: 1.7; }
+  .faq details { border-bottom: 1px solid var(--line); padding: 14px 0; }
+  .faq summary { font-weight: 600; }
+  .faq details p { margin-top: 8px; color: var(--muted); }
+  .mobile-toc { display: none; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 15px; }
+  .mobile-toc nav { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; }
+  .mobile-toc a { text-decoration: none; }
+  @media (max-width: 1100px) { .doc-toc { display: none; } }
+  @media (max-width: 860px) {
+    .doc { padding: 0 16px; }
+    .doc-nav { display: none; }
+    .mobile-toc { display: block; }
+    .doc-main h1 { font-size: 32px !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="inner">
+    <div class="left">
+      <a class="brand" href="/" aria-label="TokenRocks 首页">
+        <span class="brand-mark" aria-hidden="true">T</span>
+        <span class="brand-name">TokenRocks</span>
+        <span class="brand-sub">文档</span>
+      </a>
+      <nav class="main-nav" aria-label="主导航">
+        <a class="optional" href="/">产品</a>
+        <a href="/pricing">模型</a>
+        <a href="/guide/" aria-current="page">文档</a>
+      </nav>
+    </div>
+    <div class="header-actions">
+      <a class="btn-dark" href="/dashboard">进入控制台</a>
+    </div>
+  </div>
+</header>
+
+<div class="doc">
+  <nav class="doc-nav" aria-label="文档目录">
+    <span class="label">开始</span>
+    <a href="#start">快速开始</a>
+    <a href="#api">接口地址</a>
+    <a href="#topup">充值</a>
+    <span class="label">线路</span>
+    <a href="#tiers">选择线路</a>
+    <a href="#tier-diff">特价和企业满血的区别</a>
+    <span class="label">接入</span>
+    <a href="#chat-clients">聊天客户端</a>
+    <a href="#claude-code">Claude Code</a>
+    <a href="#python">代码调用</a>
+    <span class="label">帮助</span>
+    <a href="#faq">常见问题</a>
+  </nav>
+
+  <main class="doc-main">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <h1 style="margin: 0; font-size: 40px; font-weight: 800; letter-spacing: -0.8px; line-height: 1.2;">使用指南</h1>
+      <p style="font-size: 18px; color: var(--muted);">一个 API 密钥调用 DeepSeek、Qwen、Claude、GPT 等主流模型，按量计费，价格低至官方价的 0.5 折，余额不过期。五分钟内完成注册、拿到密钥并发出第一次请求。</p>
+    </div>
+
+    <details class="mobile-toc">
+      <summary>本页目录</summary>
+      <nav aria-label="本页目录（手机）">
+        <a href="#start">快速开始</a><a href="#api">接口地址</a><a href="#topup">充值</a><a href="#tiers">选择线路</a><a href="#tier-diff">特价和企业满血的区别</a><a href="#chat-clients">聊天客户端</a><a href="#claude-code">Claude Code</a><a href="#python">代码调用</a><a href="#faq">常见问题</a>
+      </nav>
+    </details>
+
+    <section id="start" aria-labelledby="start-title">
+      <h2 id="start-title">快速开始</h2>
+      <ol class="steps">
+        <li><span class="step-no" aria-hidden="true">1</span><div><b>注册并充值</b>：在<a href="/sign-up">注册页</a>用邮箱注册（验证码邮件没收到就看看垃圾箱），新用户送 ¥0.2 体验额度。正式使用请到控制台「钱包」用兑换码充值，详见<a href="#topup">充值</a>。</div></li>
+        <li><span class="step-no" aria-hidden="true">2</span><div><b>创建 API 密钥</b>：控制台 →「API 密钥」→ 创建 API 密钥。名称随便填；分组保持默认的「auto」（自动）即可，它会按模型自动选最便宜的可用线路。想固定走某条线路时再手动选分组，见<a href="#tiers">选择线路</a>。</div></li>
+        <li><span class="step-no" aria-hidden="true">3</span><div><b>填进客户端开始调用</b>：把接口地址、密钥、模型名填进你用的工具（见下方「接入」），或者先用下面的命令测一下：</div></li>
+      </ol>
+      <div class="code">
+        <div class="code-head"><span>cURL</span><button type="button" data-copy="curl-sample">复制</button></div>
+        <pre id="curl-sample">curl https://api.tokenrocks.ai/v1/chat/completions \
+  -H "Authorization: Bearer sk-你的密钥" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "deepseek-v4.1-flash", "messages": [{"role": "user", "content": "你好"}]}'</pre>
+      </div>
+      <p>返回一段 JSON 回复就说明通了。调用记录和扣费明细在控制台「使用日志」里查。</p>
+    </section>
+
+    <section id="api" aria-labelledby="api-title">
+      <h2 id="api-title">接口地址</h2>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th scope="col">用途</th><th scope="col">地址</th></tr></thead>
+          <tbody>
+            <tr><td>OpenAI 兼容（Chat Completions、Responses、图片生成）</td><td><code>https://api.tokenrocks.ai/v1</code></td></tr>
+            <tr><td>Anthropic 原生（Messages，Claude 系客户端用这个）</td><td><code>https://api.tokenrocks.ai</code></td></tr>
+            <tr><td>API 密钥</td><td>在控制台「API 密钥」页创建，形如 <code>sk-xxxx</code></td></tr>
+            <tr><td>模型名</td><td>见<a href="/pricing">模型与价格</a>，例如 <code>deepseek-v4.1-flash</code>、<code>claude-opus-5-5</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">大部分客户端只要填「接口地址 + API 密钥 + 模型名」三样就能用。要求填到 <code>/v1</code> 的客户端填第一个地址；会自己拼 <code>/v1</code> 的填 <code>https://api.tokenrocks.ai</code>。</div>
+    </section>
+
+    <section id="topup" aria-labelledby="topup-title">
+      <h2 id="topup-title">充值</h2>
+      <ul>
+        <li>目前通过兑换码充值：控制台 →「钱包」→ 在「有兑换码吗？」处粘贴兑换码 → 兑换额度，余额立即到账。</li>
+        <li>购买兑换码或大额充值，请加站长微信 <b>cutebug0523</b>。</li>
+        <li>余额按实际用量扣减，不过期；一个兑换码只能用一次。</li>
+      </ul>
+    </section>
+
+    <section id="tiers" aria-labelledby="tiers-title">
+      <h2 id="tiers-title">选择线路</h2>
+      <p>API 密钥的分组决定走哪条线路、按什么折扣计费。价格都是相对官方价打折，每个模型的具体价格见<a href="/pricing">模型与价格</a>（划线价就是官方价）。</p>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th scope="col">分组</th><th scope="col">包含模型</th><th scope="col">价格</th><th scope="col">适合</th></tr></thead>
+          <tbody>
+            <tr><td><b>auto（自动）</b></td><td>全部</td><td>按实际走的分组计费</td><td>不知道选什么就用它，按模型自动选最便宜的可用分组</td></tr>
+            <tr><td>国模特价</td><td>DeepSeek、Qwen</td><td>0.5 折</td><td>日常使用、批量任务，性价比最高</td></tr>
+            <tr><td>国模企业满血</td><td>DeepSeek</td><td>3 折</td><td>对稳定性和效果要求高的生产场景</td></tr>
+            <tr><td>国外特价</td><td>Claude、GPT</td><td>Claude 0.6 折，GPT 0.5 折</td><td>个人开发、编码助手，性价比优先</td></tr>
+            <tr><td>国外企业满血</td><td>Claude、GPT</td><td>Claude 3 折，GPT 1.2 折</td><td>团队与生产环境，稳定优先</td></tr>
+            <tr><td>生图</td><td>GPT Image、Nano Banana</td><td>按张计费</td><td>图片生成与改图</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>auto 的选择顺序：国模特价 → 国外特价 → 生图 → 国模企业满血 → 国外企业满血，取第一个有该模型的分组。所以 auto 默认走特价线路，想用企业满血请手动选分组。</p>
+    </section>
+
+    <section id="tier-diff" aria-labelledby="tier-diff-title">
+      <h2 id="tier-diff-title">特价和企业满血的区别</h2>
+      <div class="tier-cards">
+        <div class="tier-card"><div class="t">特价线路</div><div class="d">价格最便宜。个别模型的上游会在请求里附带固定的系统提示词，多计少量输入 token（通常能命中缓存，影响很小）；高峰期偶尔会慢。</div></div>
+        <div class="tier-card strong"><div class="t">企业满血线路</div><div class="d">保真线路，走官方原版模型，稳定优先，适合正式项目。</div></div>
+      </div>
+      <p>同一个模型名在两个分组里都可以用，区别只在线路和价格。报错「分组 xxx 下模型 yyy 无可用渠道」，说明这个密钥所在分组里没有这个模型（例如在「国模特价」里调 Claude），到「API 密钥」页把分组改成 auto 或对应分组即可。</p>
+    </section>
+
+    <section id="chat-clients" aria-labelledby="chat-title">
+      <h2 id="chat-title">聊天客户端（Cherry Studio 等）</h2>
+      <p>控制台「API 密钥」页，点密钥右侧的「聊天」可以一键导入到 Cherry Studio、CC Switch、DeepChat、Lobe Chat 等客户端。手动配置时：服务商类型选 OpenAI 兼容，接口地址填 <code>https://api.tokenrocks.ai</code>，填入密钥，再添加要用的模型名。</p>
+    </section>
+
+    <section id="claude-code" aria-labelledby="cc-title">
+      <h2 id="cc-title">Claude Code</h2>
+      <p>设置环境变量后启动即可（Windows 用 <code>set</code> 或在系统环境变量里配置）：</p>
+      <div class="code">
+        <div class="code-head"><span>终端</span><button type="button" data-copy="cc-sample">复制</button></div>
+        <pre id="cc-sample">export ANTHROPIC_BASE_URL=https://api.tokenrocks.ai
+export ANTHROPIC_AUTH_TOKEN=sk-你的密钥
+export ANTHROPIC_MODEL=claude-opus-5-5
+claude</pre>
+      </div>
+      <p>也可以用 CC Switch 一键导入，省去手动配置。</p>
+    </section>
+
+    <section id="python" aria-labelledby="py-title">
+      <h2 id="py-title">代码调用（Python）</h2>
+      <div class="code">
+        <div class="code-head"><span>Python</span><button type="button" data-copy="py-sample">复制</button></div>
+        <pre id="py-sample">from openai import OpenAI
+
+client = OpenAI(base_url="https://api.tokenrocks.ai/v1", api_key="sk-你的密钥")
+reply = client.chat.completions.create(
+    model="deepseek-v4.1-flash",
+    messages=[{"role": "user", "content": "你好"}],
+)
+print(reply.choices[0].message.content)</pre>
+      </div>
+      <p>Claude 模型也可以用 Anthropic 官方 SDK：<code>Anthropic(base_url="https://api.tokenrocks.ai", api_key="sk-你的密钥")</code>。</p>
+    </section>
+
+    <section id="faq" aria-labelledby="faq-title" class="faq">
+      <h2 id="faq-title">常见问题</h2>
+      <div>
+        <details><summary>价格是怎么算的？token 是什么？</summary><p>模型按 token 计费，价格写成「每百万 token 多少元」。token 是模型处理文字的单位，中文一个字大约对应 1 个 token。输入（你发的）、输出（模型回的）、缓存（重复发送的上下文命中缓存）分别计价，缓存价格最便宜。图片生成按张计费。</p></details>
+        <details><summary>报错「无可用渠道」</summary><p>密钥所在分组里没有这个模型，把密钥分组改成 auto，或换成包含该模型的分组。也可能是模型名写错了，模型名以模型与价格页为准。</p></details>
+        <details><summary>报错「额度不足」或「余额不足」</summary><p>到「钱包」用兑换码充值。如果给密钥单独设置了额度上限，也可能是密钥额度用完了，在「API 密钥」页编辑。</p></details>
+        <details><summary>报错 401 / 无效的令牌</summary><p>检查密钥是否完整复制（以 sk- 开头）、是否被禁用或过期；接口地址要用 api.tokenrocks.ai，不要填官网页面地址。</p></details>
+        <details><summary>回复很慢或超时</summary><p>大模型首字一般需要几秒到十几秒，长回复建议开启流式输出（stream）。特价线路高峰期可能变慢，着急的任务可以换企业满血分组。</p></details>
+        <details><summary>余额会过期吗？可以退款吗？</summary><p>余额不过期。兑换码兑换后不支持退回；如果遇到兑换码无效、扣费异常，请带上截图联系站长微信 cutebug0523。</p></details>
+        <details><summary>怎么查每次调用花了多少钱？</summary><p>控制台「使用日志」里有每次调用的模型、token 数和扣费金额；「数据看板」可以看按天汇总。</p></details>
+      </div>
+    </section>
+
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 20px; font-size: 15px;">
+      <span style="color: var(--muted-2);">还有问题？加站长微信 cutebug0523</span>
+      <a href="/pricing" style="text-decoration: none; font-weight: 600;">查看模型与价格 →</a>
+    </div>
+  </main>
+
+  <aside class="doc-toc" aria-label="本页内容">
+    <span style="font-weight: 600; color: var(--ink);">本页内容</span>
+    <a href="#start">快速开始</a>
+    <a href="#api">接口地址</a>
+    <a href="#topup">充值</a>
+    <a href="#tiers">选择线路</a>
+    <a href="#tier-diff">特价和企业满血的区别</a>
+    <a href="#chat-clients">聊天客户端</a>
+    <a href="#claude-code">Claude Code</a>
+    <a href="#python">代码调用</a>
+    <a href="#faq">常见问题</a>
+  </aside>
+</div>
+
+<footer class="site-footer">
+  <div class="inner">
+    <div class="col"><span class="title" style="font-size: 16px;">TokenRocks</span><span>大模型 API 平台</span></div>
+    <div class="col"><span class="title">产品</span><a href="/pricing">模型与价格</a><a href="/#plans">线路方案</a><a href="/dashboard">控制台</a></div>
+    <div class="col"><span class="title">资源</span><a href="/guide/">使用指南</a><a href="https://github.com/cutebug0523/tokenrocks-new-api">GitHub 开源</a></div>
+    <div class="col"><span class="title">联系</span><span>微信 cutebug0523</span></div>
+  </div>
+</footer>
+
+<script>
+  // 代码块复制按钮
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = document.getElementById(btn.getAttribute('data-copy')).textContent
+      if (!navigator.clipboard) return
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = '已复制'
+        setTimeout(function () { btn.textContent = '复制' }, 1500)
+      })
+    })
+  })
+</script>
+</body>
+</html>

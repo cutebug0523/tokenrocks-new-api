@@ -26,6 +26,7 @@ import { applyFaviconToDom } from '@/lib/dom-utils'
 import '@/lib/dayjs'
 import { initializeFrontendCache } from '@/lib/frontend-cache'
 import { createAppQueryClient } from '@/lib/query-client'
+import { markFirstRouteResolved } from '@/lib/static-pages'
 import { readCachedStatus, statusQueryOptions } from '@/lib/status-query'
 
 import { DirectionProvider } from './context/direction-provider'
@@ -53,6 +54,13 @@ const router = createRouter({
   context: { queryClient },
   defaultPreload: 'intent',
   defaultPreloadStaleTime: 0,
+})
+
+// After the first page resolves, links to `/` and `/pricing` load the
+// static documents nginx serves for them (see lib/static-pages.ts).
+const stopWatchingFirstRoute = router.subscribe('onResolved', () => {
+  markFirstRouteResolved()
+  stopWatchingFirstRoute()
 })
 
 // Register the router instance for type safety

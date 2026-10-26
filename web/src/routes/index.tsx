@@ -19,7 +19,9 @@ For commercial licensing, please contact support@quantumnous.com
 import { createFileRoute } from '@tanstack/react-router'
 
 import { Home } from '@/features/home'
+import { openStaticPage } from '@/lib/static-pages'
 
 export const Route = createFileRoute('/')({
+  beforeLoad: (load) => openStaticPage(load),
   component: Home,
 })

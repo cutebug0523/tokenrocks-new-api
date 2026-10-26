@@ -25,6 +25,13 @@ For commercial licensing, please contact support@quantumnous.com
 
 export const THEME_PRESETS = [
   {
+    // TokenRocks site brand: teal accent on neutral gray surfaces, matching
+    // the static marketing pages served next to the console.
+    value: 'tokenrocks',
+    name: 'TokenRocks',
+    swatches: ['oklch(0.525 0.097 174.1)', 'oklch(0.183 0.031 263.4)'],
+  },
+  {
     value: 'default',
     name: 'Default',
     swatches: ['oklch(0.72 0.18 250)', 'oklch(0.7 0.12 280)'],
@@ -112,7 +119,7 @@ export type ThemeCustomization = {
 }
 
 export const DEFAULT_THEME_CUSTOMIZATION: ThemeCustomization = {
-  preset: 'default',
+  preset: 'tokenrocks',
   font: 'default',
   radius: 'default',
   scale: 'default',

@@ -38,6 +38,7 @@ import { StaticDataTable } from '@/components/data-table'
 import { sideDrawerContentClassName } from '@/components/drawer-layout'
 import { GroupBadge } from '@/components/group-badge'
 import { PublicLayout } from '@/components/layout'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -56,6 +57,7 @@ import {
   getSuccessRateTextClass,
 } from '@/features/performance-metrics/lib/format'
 import { PluginIcon } from '@/features/task-plugins/components/plugin-icon'
+import { toIntlLocale } from '@/i18n/languages'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
@@ -78,6 +80,7 @@ import {
   type DynamicPriceEntry,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
+import { formatGroupDiscount } from '../lib/group-discount'
 import { getAvailableGroups, isTokenBasedModel } from '../lib/model-helpers'
 import { withPluginPricing } from '../lib/plugin-pricing'
 import { formatFixedPrice, formatGroupPrice } from '../lib/price'
@@ -1056,6 +1059,15 @@ function ProviderGroupPricingSection(
 ) {
   const { t, i18n } = useTranslation()
   const showRechargePrice = props.showRechargePrice ?? false
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  const renderGroupRatio = (ratio: number) => {
+    const discount = formatGroupDiscount(ratio, t, locale)
+    return discount ? (
+      <Badge variant='destructive'>{discount}</Badge>
+    ) : (
+      `${ratio}x`
+    )
+  }
 
   const availableGroups = useMemo(
     () => getAvailableGroups(props.model, props.usableGroup || {}),
@@ -1200,7 +1212,7 @@ function ProviderGroupPricingSection(
                 <div className='bg-muted/20 flex items-center justify-between gap-3 border-b px-3 py-2'>
                   <GroupBadge group={group} size='sm' />
                   <span className='text-muted-foreground font-mono text-xs'>
-                    {ratio}x
+                    {renderGroupRatio(ratio)}
                   </span>
                 </div>
                 <StaticDataTable
@@ -1393,10 +1405,10 @@ function ProviderGroupPricingSection(
           },
           {
             id: 'ratio',
-            header: t('Ratio'),
+            header: t('Discount'),
             className: thClass,
             cellClassName: 'text-muted-foreground py-2.5 font-mono',
-            cell: (group) => `${props.groupRatio[group] || 1}x`,
+            cell: (group) => renderGroupRatio(props.groupRatio[group] || 1),
           },
           ...(isTokenBased
             ? [
@@ -1512,6 +1524,16 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
 
           <section className='bg-card/60 space-y-5 rounded-xl border p-4 shadow-sm'>
             <SectionTitle>{t('Pricing')}</SectionTitle>
+            <GroupPricingSection
+              model={props.model}
+              groupRatio={props.model.group_ratio ?? props.groupRatio}
+              usableGroup={props.usableGroup}
+              autoGroups={props.autoGroups}
+              priceRate={props.priceRate}
+              usdExchangeRate={props.usdExchangeRate}
+              tokenUnit={props.tokenUnit}
+              showRechargePrice={showRechargePrice}
+            />
             {showBasePrices && (
               <PriceSection
                 model={props.model}
@@ -1532,16 +1554,6 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
                 }}
               />
             )}
-            <GroupPricingSection
-              model={props.model}
-              groupRatio={props.model.group_ratio ?? props.groupRatio}
-              usableGroup={props.usableGroup}
-              autoGroups={props.autoGroups}
-              priceRate={props.priceRate}
-              usdExchangeRate={props.usdExchangeRate}
-              tokenUnit={props.tokenUnit}
-              showRechargePrice={showRechargePrice}
-            />
           </section>
 
           <ModelBackendDetailsSection model={props.model} />

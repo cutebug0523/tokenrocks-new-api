@@ -21,8 +21,10 @@ import { memo, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
+import { toIntlLocale } from '@/i18n/languages'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
@@ -37,6 +39,11 @@ import {
   isUnconfiguredTaskUsageModel,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
+import {
+  formatGroupDiscount,
+  getDisplayGroup,
+  toOfficialPriceModel,
+} from '../lib/group-discount'
 import { isTokenBasedModel } from '../lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '../lib/price'
 import { taskPriceLabel, taskUsageUnitLabel } from '../lib/task-price-display'
@@ -53,6 +60,16 @@ export interface ModelCardProps {
   showRechargePrice?: boolean
   selectedGroup?: string
   perf?: ModelPerfBadgeData
+}
+
+function StruckOfficialPrice(props: { price: string }) {
+  const { t } = useTranslation()
+  return (
+    <s className='text-muted-foreground text-xs font-normal tabular-nums'>
+      <span className='sr-only'>{t('Base Price')} </span>
+      {props.price}
+    </s>
+  )
 }
 
 export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
@@ -72,6 +89,13 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const isUnconfiguredTaskUsage = isUnconfiguredTaskUsageModel(props.model)
   const billingTime = useBillingTime(props.model.billing_expr)
   const currency = useSystemConfigStore((state) => state.config.currency)
+  const displayGroup = getDisplayGroup(props.model, props.selectedGroup)
+  const discount = formatGroupDiscount(
+    displayGroup.ratio,
+    t,
+    toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  )
+  const officialModel = discount ? toOfficialPriceModel(props.model) : null
   const dynamicPriceOptions = useMemo(
     () => ({
       now: billingTime === undefined ? undefined : new Date(billingTime),
@@ -106,6 +130,22 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [props.model, dynamicPriceOptions, currency]
   )
+  const officialDynamicPrices = useMemo(() => {
+    if (!discount) return null
+    const summary = getDynamicPricingSummary(props.model, {
+      ...dynamicPriceOptions,
+      groupRatioMultiplier: 1,
+    })
+    if (!summary) return null
+    return new Map(
+      [...summary.primaryEntries, ...summary.secondaryEntries].map((entry) => [
+        entry.key,
+        entry.formattedRange ?? entry.formatted,
+      ])
+    )
+    // Currency is read indirectly by the price formatter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.model, dynamicPriceOptions, discount, currency])
   let priceSummary: ReactNode
   if (dynamicSummary) {
     const cacheReadEntries = dynamicSummary.secondaryEntries.filter(
@@ -137,6 +177,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           ]
             .flat()
             .map((entry) => {
+              const officialPrice = officialDynamicPrices?.get(entry.key)
               const unitLabelKey = getDynamicPriceUnitLabelKey(entry)
               const unitLabel = taskUsageUnitLabel(
                 entry,
@@ -173,6 +214,9 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                       / {unitLabel}
                     </span>
                   </span>
+                  {officialPrice && (
+                    <StruckOfficialPrice price={officialPrice} />
+                  )}
                 </div>
               )
             })}
@@ -244,6 +288,19 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             / {tokenUnitLabel}
           </span>
         </span>
+        {officialModel && (
+          <StruckOfficialPrice
+            price={formatPrice(
+              officialModel,
+              price.type,
+              tokenUnit,
+              showRechargePrice,
+              priceRate,
+              usdExchangeRate,
+              props.selectedGroup
+            )}
+          />
+        )}
       </div>
     ))
   } else {
@@ -262,6 +319,17 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             / {t('request')}
           </span>
         </span>
+        {officialModel && (
+          <StruckOfficialPrice
+            price={formatRequestPrice(
+              officialModel,
+              showRechargePrice,
+              priceRate,
+              usdExchangeRate,
+              props.selectedGroup
+            )}
+          />
+        )}
       </div>
     )
   }
@@ -331,6 +399,19 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           className='mt-auto flex min-w-0 flex-col gap-1.5'
         >
           <ModelBillingModeBadge model={props.model} appearance='caption' />
+          {discount && displayGroup.group && (
+            <div className='flex min-w-0 items-center gap-1.5 text-xs'>
+              <span
+                className='text-muted-foreground truncate'
+                title={displayGroup.group}
+              >
+                {t('{{group}} price', { group: displayGroup.group })}
+              </span>
+              <Badge variant='destructive' className='shrink-0'>
+                {discount}
+              </Badge>
+            </div>
+          )}
           {dynamicSummary?.providerCount && (
             <span className='text-muted-foreground text-xs break-words'>
               {t('{{count}} providers', {

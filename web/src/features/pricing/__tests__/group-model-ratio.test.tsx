@@ -120,6 +120,6 @@ it('shows the model ratio instead of the group ratio in the group price table', 
     </QueryClientProvider>
   )
 
-  expect(screen.getByText('0.05x')).toBeVisible()
-  expect(screen.queryByText('0.06x')).not.toBeInTheDocument()
+  expect(screen.getByText('95% off')).toBeVisible()
+  expect(screen.queryByText('94% off')).not.toBeInTheDocument()
 })

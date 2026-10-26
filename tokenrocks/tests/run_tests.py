@@ -134,24 +134,42 @@ def failed(res):
     return {'status': 'fail', 'text': 'HTTP %s' % res['status'] if res['status'] else '超时或断连', 'detail': {'error': res.get('error'), 'ms': res['ms']}}
 
 
-def check_input_tokens(model, fmt, vendor, key):
-    body = body_for(model, fmt, vendor, PROMPT, 16, False)
-    res = post('/v1/messages' if fmt == 'anthropic' else '/v1/chat/completions', key, fmt, body, 120)
-    if res['status'] != 200:
-        return failed(res)
-    usage = res['json'].get('usage') or {}
-    return {'status': 'info', 'text': str(input_tokens_of(usage)), 'detail': {'request': body, 'usage': usage, 'ms': res['ms']}}
+def input_tokens_text(usage):
+    """输入 token 连同缓存一起算：上游塞进去的隐藏提示词常常以缓存 token 的形式出现。"""
+    if 'input_tokens' in usage:
+        cached = (usage.get('cache_read_input_tokens') or 0) + (usage.get('cache_creation_input_tokens') or 0)
+        total = (usage.get('input_tokens') or 0) + cached
+    elif 'prompt_tokens' in usage:
+        total = usage.get('prompt_tokens') or 0
+        cached = (usage.get('prompt_tokens_details') or {}).get('cached_tokens') or 0
+    else:
+        return None
+    return '%s（其中缓存 %s）' % (format(total, ','), format(cached, ',')) if cached else format(total, ',')
 
 
-def check_max_tokens(model, fmt, vendor, key):
+def check_max_tokens_and_input(model, fmt, vendor, key):
+    """一次流式请求同时测两项：max_tokens=16 有没有被遵守，以及上游计了多少输入 token。
+    不守上限的上游会先跑完整段再返回，所以不能用非流式请求等结果。"""
     body = body_for(model, fmt, vendor, PROMPT, 16, True)
     res = post('/v1/messages' if fmt == 'anthropic' else '/v1/chat/completions', key, fmt, body, 300, stream=True)
     if res['status'] != 200:
-        return failed(res)
+        bad = failed(res)
+        return bad, bad
+    usage = res['usage'] or {}
+    out = output_tokens_of(usage)
     secs = res['ms'] / 1000
-    ok = secs < 30
-    return {'status': 'ok' if ok else 'fail', 'text': '%.1f 秒%s' % (secs, '停下' if ok else '才结束'),
-            'detail': {'request': body, 'stop_reason': res['stop'], 'usage': res['usage'], 'ms': res['ms']}}
+    honored = res['stop'] in ('max_tokens', 'length') and (out is None or out <= 64)
+    if honored:
+        max_check = {'status': 'ok', 'text': '%.1f 秒停下' % secs}
+    elif out:
+        max_check = {'status': 'fail', 'text': '没停：回了 %s token' % format(out, ',')}
+    else:
+        max_check = {'status': 'fail', 'text': '没停：%.0f 秒才结束' % secs}
+    detail = {'request': body, 'stop_reason': res['stop'], 'usage': usage, 'ms': res['ms']}
+    max_check['detail'] = detail
+    text = input_tokens_text(usage)
+    input_check = {'status': 'info', 'text': text or '上游没返回', 'detail': detail}
+    return max_check, input_check
 
 
 def check_session(model, fmt, vendor, key):
@@ -257,11 +275,9 @@ def main():
                 log(model, tier, 'no test key for group', group)
                 continue
             log(model, tier, group, 'start')
-            checks = {
-                'input_tokens': check_input_tokens(model, fmt, vendor, key),
-                'max_tokens': check_max_tokens(model, fmt, vendor, key),
-                'session': check_session(model, fmt, vendor, key),
-            }
+            checks = {}
+            checks['max_tokens'], checks['input_tokens'] = check_max_tokens_and_input(model, fmt, vendor, key)
+            checks['session'] = check_session(model, fmt, vendor, key)
             checks['format'], checks['pelican'] = check_pelican(model, fmt, vendor, key, tier)
             report['lines'][tier] = {'group': group, 'api': fmt, 'checks': checks}
             log(model, tier, 'done', {k: v.get('text') for k, v in checks.items()})

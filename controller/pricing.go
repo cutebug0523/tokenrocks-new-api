@@ -64,11 +64,35 @@ func GetPricing(c *gin.Context) {
 		}
 	}
 
+	// Per-model ratios that differ from the group ratio. A user group special
+	// ratio still wins in billing, so those groups keep the group-level value.
+	modelGroupRatio := map[string]map[string]float64{}
+	for _, item := range pricing {
+		for _, g := range item.EnableGroup {
+			base, ok := groupRatio[g]
+			if !ok {
+				continue
+			}
+			if _, special := ratio_setting.GetGroupGroupRatio(group, g); special {
+				continue
+			}
+			ratio := ratio_setting.GetGroupRatioForModel(g, item.ModelName)
+			if ratio == base {
+				continue
+			}
+			if modelGroupRatio[item.ModelName] == nil {
+				modelGroupRatio[item.ModelName] = map[string]float64{}
+			}
+			modelGroupRatio[item.ModelName][g] = ratio
+		}
+	}
+
 	c.JSON(200, gin.H{
 		"success":            true,
 		"data":               pricing,
 		"vendors":            model.GetVendors(),
 		"group_ratio":        groupRatio,
+		"model_group_ratio":  modelGroupRatio,
 		"usable_group":       usableGroup,
 		"supported_endpoint": model.GetSupportedEndpointMap(),
 		"auto_groups":        service.GetUserAutoGroup(group),

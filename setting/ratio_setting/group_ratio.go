@@ -3,6 +3,7 @@ package ratio_setting
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -31,6 +32,9 @@ type GroupRatioSetting struct {
 	GroupRatio              *types.RWMap[string, float64]            `json:"group_ratio"`
 	GroupGroupRatio         *types.RWMap[string, map[string]float64] `json:"group_group_ratio"`
 	GroupSpecialUsableGroup *types.RWMap[string, map[string]string]  `json:"group_special_usable_group"`
+	// GroupModelRatio overrides a group's ratio for some models:
+	// group -> model name or "prefix*" pattern -> ratio.
+	GroupModelRatio *types.RWMap[string, map[string]float64] `json:"group_model_ratio"`
 }
 
 var groupRatioSetting GroupRatioSetting
@@ -46,6 +50,7 @@ func init() {
 		GroupSpecialUsableGroup: groupSpecialUsableGroup,
 		GroupRatio:              groupRatioMap,
 		GroupGroupRatio:         groupGroupRatioMap,
+		GroupModelRatio:         types.NewRWMap[string, map[string]float64](),
 	}
 
 	config.GlobalConfig.Register("group_ratio_setting", &groupRatioSetting)
@@ -85,6 +90,35 @@ func GetGroupRatio(name string) float64 {
 	return ratio
 }
 
+// GetGroupRatioForModel returns the ratio a model is billed at in a group:
+// the group_model_ratio entry for the exact model name, else the entry with
+// the longest matching "prefix*" pattern, else the group's GroupRatio.
+func GetGroupRatioForModel(group, modelName string) float64 {
+	modelRatios := groupRatioSetting.GroupModelRatio
+	if modelRatios == nil {
+		return GetGroupRatio(group)
+	}
+	rules, ok := modelRatios.Get(group)
+	if !ok {
+		return GetGroupRatio(group)
+	}
+	if ratio, ok := rules[modelName]; ok {
+		return ratio
+	}
+	bestLen, bestRatio := -1, 0.0
+	for pattern, ratio := range rules {
+		prefix, isPattern := strings.CutSuffix(pattern, "*")
+		if !isPattern || len(prefix) <= bestLen || !strings.HasPrefix(modelName, prefix) {
+			continue
+		}
+		bestLen, bestRatio = len(prefix), ratio
+	}
+	if bestLen >= 0 {
+		return bestRatio
+	}
+	return GetGroupRatio(group)
+}
+
 func GetGroupGroupRatio(userGroup, usingGroup string) (float64, bool) {
 	gp, ok := groupGroupRatioMap.Get(userGroup)
 	if !ok {
@@ -114,6 +148,24 @@ func CheckGroupRatio(jsonStr string) error {
 	for name, ratio := range checkGroupRatio {
 		if ratio < 0 {
 			return errors.New("group ratio must be not less than 0: " + name)
+		}
+	}
+	return nil
+}
+
+func CheckGroupModelRatio(jsonStr string) error {
+	var check map[string]map[string]float64
+	if err := common.UnmarshalJsonStr(jsonStr, &check); err != nil {
+		return err
+	}
+	for group, rules := range check {
+		for pattern, ratio := range rules {
+			if pattern == "" || strings.Contains(strings.TrimSuffix(pattern, "*"), "*") {
+				return errors.New("group model ratio pattern must be a model name or end with a single *: " + group + "/" + pattern)
+			}
+			if ratio < 0 {
+				return errors.New("group model ratio must be not less than 0: " + group + "/" + pattern)
+			}
 		}
 	}
 	return nil

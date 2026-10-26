@@ -802,3 +802,61 @@ func (s *priceTestReservation) GetPreConsumedQuota() int { return s.held }
 func (s *priceTestReservation) Reserve(quota int) error  { s.held = max(s.held, quota); return nil }
 
 func (s *priceTestReservation) ReserveBeforeSubmit(quota int) error { return s.Reserve(quota) }
+
+func TestHandleGroupRatioAppliesGroupModelRatio(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	saved := map[string]string{}
+	require.NoError(t, config.GlobalConfig.SaveToDB(func(key, value string) error {
+		saved[key] = value
+		return nil
+	}))
+	t.Cleanup(func() {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(saved))
+	})
+
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+		"group_ratio_setting.group_ratio":       `{"default":1,"foreign":0.06,"foreign-max":0.3}`,
+		"group_ratio_setting.group_group_ratio": `{"vip":{"foreign":0.5}}`,
+		"group_ratio_setting.group_model_ratio": `{"foreign":{"gpt-*":0.05,"gpt-6.1-*":0.03,"gpt-6-luna":0.02}}`,
+	}))
+
+	tests := []struct {
+		name      string
+		userGroup string
+		group     string
+		model     string
+		want      float64
+	}{
+		{name: "model without a rule uses the group ratio", userGroup: "default", group: "foreign", model: "claude-opus-5-5", want: 0.06},
+		{name: "prefix rule overrides the group ratio", userGroup: "default", group: "foreign", model: "gpt-6-astra", want: 0.05},
+		{name: "exact name beats prefix rules", userGroup: "default", group: "foreign", model: "gpt-6-luna", want: 0.02},
+		{name: "longest prefix wins", userGroup: "default", group: "foreign", model: "gpt-6.1-sol", want: 0.03},
+		{name: "rules only apply to their own group", userGroup: "default", group: "foreign-max", model: "gpt-6-astra", want: 0.3},
+		{name: "user group special ratio still wins", userGroup: "vip", group: "foreign", model: "gpt-6-astra", want: 0.5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			info := &relaycommon.RelayInfo{OriginModelName: tt.model, UserGroup: tt.userGroup, UsingGroup: tt.group}
+
+			got := HandleGroupRatio(ctx, info)
+
+			assert.InDelta(t, tt.want, got.GroupRatio, 1e-12)
+		})
+	}
+}
+
+func TestCheckGroupModelRatioRejectsInvalidRules(t *testing.T) {
+	require.NoError(t, ratio_setting.CheckGroupModelRatio(`{"foreign":{"gpt-*":0.05,"gpt-6-luna":0,"*":1}}`))
+
+	for _, invalid := range []string{
+		`{"foreign":{"gpt-*":-0.1}}`,
+		`{"foreign":{"g*pt":0.1}}`,
+		`{"foreign":{"*gpt":0.1}}`,
+		`{"foreign":{"":0.1}}`,
+		`{"foreign":0.1}`,
+	} {
+		assert.Error(t, ratio_setting.CheckGroupModelRatio(invalid), invalid)
+	}
+}

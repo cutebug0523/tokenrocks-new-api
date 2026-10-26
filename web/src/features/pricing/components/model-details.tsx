@@ -1534,7 +1534,7 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
             )}
             <GroupPricingSection
               model={props.model}
-              groupRatio={props.groupRatio}
+              groupRatio={props.model.group_ratio ?? props.groupRatio}
               usableGroup={props.usableGroup}
               autoGroups={props.autoGroups}
               priceRate={props.priceRate}

@@ -144,6 +144,8 @@ def input_tokens_text(usage):
         cached = (usage.get('prompt_tokens_details') or {}).get('cached_tokens') or 0
     else:
         return None
+    if not total:  # 有的上游流式响应不带用量，记 0 会误导
+        return None
     return '%s（其中缓存 %s）' % (format(total, ','), format(cached, ',')) if cached else format(total, ',')
 
 
@@ -228,7 +230,8 @@ def check_pelican(model, fmt, vendor, key, tier):
     detail = {'request': body, 'stop_reason': res['stop'], 'usage': res['usage'], 'ms': res['ms'],
               'first_text_ms': res['first_text_ms'], 'chars': len(text), 'artwork_bytes': len(art.encode()),
               'external_links': links[:5], 'head': text[:200]}
-    pelican = {'status': 'info', 'text': '%d 秒 · %s token' % (round(res['ms'] / 1000), format(tokens, ',')),
+    usage_text = '%s token' % format(tokens, ',') if tokens else '用量没返回'
+    pelican = {'status': 'info', 'text': '%d 秒 · %s' % (round(res['ms'] / 1000), usage_text),
                'kind': kind if file_name else 'none', 'file': file_name, 'detail': detail}
     if kind == 'none':
         fmt_check = {'status': 'fail', 'text': '没有交回作品'}

@@ -96,6 +96,10 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
     toIntlLocale(i18n.resolvedLanguage || i18n.language)
   )
   const officialModel = discount ? toOfficialPriceModel(props.model) : null
+  // List the group whose price is shown first.
+  const orderedGroups = displayGroup.group
+    ? [displayGroup.group, ...groups.filter((g) => g !== displayGroup.group)]
+    : groups
   const dynamicPriceOptions = useMemo(
     () => ({
       now: billingTime === undefined ? undefined : new Date(billingTime),
@@ -438,13 +442,13 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                   {t('Groups')}
                 </dt>
                 <dd className='flex min-w-0 items-baseline gap-1'>
-                  <span className='truncate' title={groups.join(', ')}>
-                    {groups[0]}
+                  <span className='truncate' title={orderedGroups.join(', ')}>
+                    {orderedGroups[0]}
                   </span>
                   {groups.length > 1 && (
                     <span
                       className='text-muted-foreground shrink-0'
-                      title={groups.slice(1).join(', ')}
+                      title={orderedGroups.slice(1).join(', ')}
                     >
                       +{groups.length - 1}
                     </span>

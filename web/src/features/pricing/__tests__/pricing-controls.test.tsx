@@ -198,7 +198,19 @@ describe('pricing controls', () => {
   })
 
   it('opens mobile filters from the left, selects a group, and restores focus on close', async () => {
-    const props = toolbarProps()
+    const props = {
+      ...toolbarProps(),
+      models: [
+        {
+          id: 1,
+          model_name: 'grouped-model',
+          quota_type: 0,
+          model_ratio: 1,
+          completion_ratio: 1,
+          enable_groups: ['default', 'premium'],
+        },
+      ],
+    }
     const user = userEvent.setup()
     const { rerender } = render(<PricingToolbar {...props} />)
     await user.click(screen.getByRole('button', { name: 'Filter' }))
@@ -222,5 +234,35 @@ describe('pricing controls', () => {
     expect(props.onClearFilters).toHaveBeenCalledOnce()
     await user.keyboard('{Escape}')
     expect(await screen.findByRole('button', { name: /Filter/ })).toHaveFocus()
+  })
+  it('hides groups without models and labels discounted groups in the filter', () => {
+    const props = toolbarProps()
+    const model: PricingModel = {
+      id: 1,
+      model_name: 'grouped-model',
+      quota_type: 0,
+      model_ratio: 1,
+      completion_ratio: 1,
+      enable_groups: ['value', 'images'],
+    }
+
+    render(
+      <PricingSidebar
+        {...props}
+        groups={['default', 'value', 'images']}
+        groupRatios={{ default: 1, value: 0.06, images: 1 }}
+        models={[model]}
+      />
+    )
+
+    expect(
+      screen.queryByRole('button', { name: /^default/ })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /value/ })).toHaveTextContent(
+      '94% off'
+    )
+    expect(screen.getByRole('button', { name: /images/ })).toHaveTextContent(
+      'x1'
+    )
   })
 })

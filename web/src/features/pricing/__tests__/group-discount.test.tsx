@@ -165,3 +165,18 @@ it('lists group prices before the official price and labels group discounts in d
   expect(screen.queryByText('0.06x')).not.toBeInTheDocument()
   client.clear()
 })
+
+it('lists the group whose price is shown first in the card group field', () => {
+  const model = { ...claude, enable_groups: ['国外企业满血', '国外特价'] }
+  const { rerender } = render(<ModelCard model={model} onClick={() => {}} />)
+  const groupField = () =>
+    screen.getByText('Groups').parentElement as HTMLElement
+
+  expect(groupField()).toHaveTextContent(/Groups国外特价\+1/)
+
+  rerender(
+    <ModelCard model={model} onClick={() => {}} selectedGroup='国外企业满血' />
+  )
+
+  expect(groupField()).toHaveTextContent(/Groups国外企业满血\+1/)
+})

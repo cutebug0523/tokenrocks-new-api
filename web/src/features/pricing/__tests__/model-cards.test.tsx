@@ -156,20 +156,13 @@ describe('model cards', () => {
     expect(onClick).toHaveBeenCalledWith(name)
   })
 
-  it('shows missing values without placeholder bars when metrics are unavailable', () => {
+  it('hides the metrics row and keeps the details action when a card has no metrics', () => {
     render(<ModelCard model={pricingModel()} onClick={vi.fn()} />)
-    const metrics = screen.getByLabelText(
-      'Performance metrics for the last 24 hours'
-    )
-    expect(within(metrics).getAllByText('—')).toHaveLength(2)
-    expect(within(metrics).getByText('—s')).toBeVisible()
-    expect(within(metrics).getByText('—t/s')).toBeVisible()
-    expect(within(metrics).queryByText(/100/)).not.toBeInTheDocument()
-    const statusStrip = within(metrics).getByRole('img', {
-      name: 'No performance data available',
-    })
-    expect(statusStrip).toHaveTextContent('—')
-    expect(statusStrip.querySelectorAll('[aria-hidden]')).toHaveLength(0)
+
+    expect(
+      screen.queryByLabelText('Performance metrics for the last 24 hours')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('—s')).not.toBeInTheDocument()
     expect(screen.getByText('No description available.')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Details' })).toBeEnabled()
   })
@@ -270,6 +263,11 @@ describe('model cards', () => {
       <ModelCard
         model={pricingModel({
           enable_groups: groups,
+          group_ratio: {
+            'default-with-a-long-group-name': 1,
+            premium: 3,
+            internal: 2,
+          },
           supported_endpoint_types: endpoints,
           tags: tags.join(','),
         })}
@@ -594,7 +592,7 @@ describe('model cards', () => {
     expect(screen.getByText(expression)).toBeVisible()
   })
 
-  it('keeps browsing and missing metric values available after the metrics request fails', async () => {
+  it('keeps browsing available and hides metrics after the metrics request fails', async () => {
     const request = vi
       .spyOn(api, 'get')
       .mockRejectedValue(new Error('metrics unavailable'))
@@ -618,10 +616,8 @@ describe('model cards', () => {
       paramsSerializer: { indexes: null },
     })
     expect(
-      within(
-        screen.getByLabelText('Performance metrics for the last 24 hours')
-      ).getAllByText(/^—/)
-    ).toHaveLength(4)
+      screen.queryByLabelText('Performance metrics for the last 24 hours')
+    ).not.toBeInTheDocument()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Details' }))
     expect(onModelClick).toHaveBeenCalledWith('example-model')

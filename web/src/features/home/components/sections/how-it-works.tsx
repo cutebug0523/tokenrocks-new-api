@@ -27,24 +27,24 @@ export function HowItWorks() {
   const steps = [
     {
       num: '1',
-      title: t('Configure'),
+      title: t('Sign up and top up'),
       desc: t(
-        'Add your API keys, set up channels and configure access permissions'
+        'Register with your email and redeem a code in Wallet; new users get a small trial credit'
       ),
       icon: <Settings className='size-6' strokeWidth={1.5} />,
     },
     {
       num: '2',
-      title: t('Connect'),
-      desc: t(
-        'Connect through OpenAI, Claude, Gemini, and other compatible API routes'
-      ),
+      title: t('Create an API key'),
+      desc: t('Create a key on the API Keys page and leave its group on auto'),
       icon: <Zap className='size-6' strokeWidth={1.5} />,
     },
     {
       num: '3',
-      title: t('Monitor'),
-      desc: t('Track usage, costs and performance with real-time analytics'),
+      title: t('Start calling'),
+      desc: t(
+        'Use https://api.tokenrocks.ai as the base URL and pick a model name from the model square'
+      ),
       icon: <BarChart3 className='size-6' strokeWidth={1.5} />,
     },
   ]

@@ -71,6 +71,19 @@ export const ModelPerfBadge = memo(function ModelPerfBadge(
         .slice(-STATUS_SAMPLE_LIMIT),
     [props.perf?.recent_success_series]
   )
+  if (!props.perf) {
+    // No metrics yet: keep the actions (e.g. Details) without a row of dashes.
+    return (
+      <div
+        className={cn(
+          'flex w-full min-w-0 items-center justify-end gap-3',
+          props.className
+        )}
+      >
+        {props.children}
+      </div>
+    )
+  }
   const statusLabel =
     statusSamples.length > 0
       ? t('Success rate')

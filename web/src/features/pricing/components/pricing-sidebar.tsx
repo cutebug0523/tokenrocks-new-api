@@ -27,6 +27,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import { toIntlLocale } from '@/i18n/languages'
 import { getLobeIcon } from '@/lib/lobe-icon'
 import { cn } from '@/lib/utils'
 
@@ -39,6 +40,7 @@ import {
 } from '../constants'
 import { hasTaskUsageSchema } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
+import { formatGroupDiscount } from '../lib/group-discount'
 import type { PricingModel, PricingVendor } from '../types'
 
 type FilterOption = {
@@ -151,9 +153,11 @@ function FilterSection(props: FilterSectionProps) {
 export const PricingSidebar = memo(function PricingSidebar(
   props: PricingSidebarProps
 ) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const counts = useMemo(() => {
     const vendors = new Map<string, number>()
+    const groups = new Map<string, number>()
     const tags = new Map<string, number>()
     const endpoints = new Map<string, number>()
     const quotas = { token: 0, request: 0, task: 0 }
@@ -172,6 +176,9 @@ export const PricingSidebar = memo(function PricingSidebar(
       for (const endpoint of new Set(model.supported_endpoint_types ?? [])) {
         endpoints.set(endpoint, (endpoints.get(endpoint) ?? 0) + 1)
       }
+      for (const group of new Set(model.enable_groups ?? [])) {
+        groups.set(group, (groups.get(group) ?? 0) + 1)
+      }
       if (hasTaskUsageSchema(model)) {
         quotas.task++
       } else if (model.quota_type === 0) {
@@ -180,7 +187,7 @@ export const PricingSidebar = memo(function PricingSidebar(
         quotas.request++
       }
     }
-    return { vendors, tags, endpoints, quotas }
+    return { vendors, groups, tags, endpoints, quotas }
   }, [props.models])
   const quotaTypeLabels = getQuotaTypeLabels(t)
   const endpointTypeLabels = getEndpointTypeLabels(t)
@@ -206,11 +213,18 @@ export const PricingSidebar = memo(function PricingSidebar(
       value: FILTER_ALL,
       label: t('All Groups'),
     },
-    ...props.groups.map((group) => ({
-      value: group,
-      label: group,
-      suffix: formatGroupRatio(props.groupRatios?.[group]),
-    })),
+    ...props.groups
+      .filter((group) => (counts.groups.get(group) ?? 0) > 0)
+      .map((group) => {
+        const ratio = props.groupRatios?.[group]
+        return {
+          value: group,
+          label: group,
+          suffix:
+            (ratio != null && formatGroupDiscount(ratio, t, locale)) ||
+            formatGroupRatio(ratio),
+        }
+      }),
   ]
 
   const quotaOptions: FilterOption[] = [

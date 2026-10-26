@@ -62,7 +62,7 @@ export function CTA(props: CTAProps) {
         </h2>
         <p className='text-muted-foreground/80 mx-auto mt-5 max-w-md text-sm leading-relaxed md:text-base'>
           {t(
-            'Deploy your own gateway and start routing requests through your configured upstream services.'
+            'New users get a trial credit. Stuck on setup? Read the guide or add the site owner on WeChat.'
           )}
         </p>
         <div className='mt-8 flex items-center justify-center gap-3'>

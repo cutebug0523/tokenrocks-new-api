@@ -56,8 +56,9 @@ const router = createRouter({
   defaultPreloadStaleTime: 0,
 })
 
-// After the first page resolves, links to `/` and `/pricing` load the
-// static documents nginx serves for them (see lib/static-pages.ts).
+// After the first page resolves, links to `/`, `/pricing` and model detail
+// pages load the static documents nginx serves for them (see
+// lib/static-pages.ts).
 const stopWatchingFirstRoute = router.subscribe('onResolved', () => {
   markFirstRouteResolved()
   stopWatchingFirstRoute()

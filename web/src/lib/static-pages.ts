@@ -18,7 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 /**
  * Pages served as static documents by nginx in production: the marketing
- * home page (`/`) and the model price list (`/pricing`).
+ * home page (`/`), the model price list (`/pricing`) and the model detail
+ * pages (`/pricing/<model>`).
  *
  * In-app navigation to them must load the real document instead of the SPA
  * route. The first route resolution of a page load is left to the SPA, so a

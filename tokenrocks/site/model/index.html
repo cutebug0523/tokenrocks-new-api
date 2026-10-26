@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模型详情 · TokenRocks</title>
+<meta name="description" content="TokenRocks 模型详情：两条线路的价格、每周实测结果和接入示例。">
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/_s/site.css">
+<style>
+  .wrap { max-width: 1200px; margin: 0 auto; padding-left: 24px; padding-right: 24px; }
+  .crumb { font-size: 14px; color: var(--muted); }
+  .crumb a { color: var(--muted); text-decoration: none; }
+  .model-title { margin: 0; font-family: var(--mono); font-size: 34px; font-weight: 700; letter-spacing: -0.5px; word-break: break-all; }
+  .chip-vendor { font-size: 13px; color: var(--text-2); background: #fff; border: 1px solid var(--line); padding: 3px 10px; border-radius: 999px; }
+  .btn-outline { height: 40px; padding: 0 16px; border: 1px solid #d1d5db; background: #fff; border-radius: 8px; font-size: 14px; font-family: inherit; cursor: pointer; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 700; }
+  .badge { display: inline-block; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; color: var(--brand-dark); background: var(--brand-soft); }
+  .price-pair { display: flex; flex-wrap: wrap; gap: 24px; }
+  .price-label { font-size: 12px; color: var(--muted); }
+  .price-big { font-family: var(--mono); font-weight: 700; font-size: 22px; }
+  .official { font-family: var(--mono); font-size: 13px; color: var(--muted-2); }
+  .card-note { font-size: 13px; color: var(--muted); }
+  .tabs { display: flex; gap: 28px; margin-top: 6px; }
+  .tab { min-height: 44px; padding: 0 2px; border: 0; border-bottom: 3px solid transparent; background: transparent; font-size: 16px; font-family: inherit; cursor: pointer; color: var(--muted); font-weight: 500; }
+  .tab[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--brand); font-weight: 700; }
+  .panel { padding-top: 32px; padding-bottom: 72px; display: flex; flex-direction: column; gap: 28px; }
+  .panel[hidden] { display: none; }
+  .h2 { margin: 0; font-size: 22px; font-weight: 800; }
+  .h3 { margin: 0; font-size: 18px; font-weight: 700; }
+  .sub { margin: 0; font-size: 15px; color: var(--muted); line-height: 1.7; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  .t { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .t th { padding: 12px 16px; font-weight: 600; text-align: left; font-size: 13px; color: var(--muted); background: var(--alt); }
+  .t td { padding: 14px 16px; border-top: 1px solid var(--line-soft); vertical-align: top; }
+  .check-name { font-weight: 700; }
+  .check-how { font-size: 13px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+  .res { display: inline-block; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+  .res.ok { background: #e3f4ee; color: #0b5d4d; }
+  .res.warn { background: #fef3c7; color: #92400e; }
+  .res.fail { background: #fee2e2; color: #991b1b; }
+  .res.info { background: #eef2ff; color: #3730a3; }
+  .res.todo { background: #f3f4f6; color: #4b5563; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  figure.art { margin: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+  figure.art iframe { display: block; width: 100%; aspect-ratio: 4 / 3; border: 0; background: #fff; }
+  figure.art .empty { aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 14px; background: var(--alt); }
+  figure.art figcaption { padding: 12px 14px; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.6; }
+  details.raw { border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; font-size: 14px; }
+  details.raw summary { font-weight: 600; }
+  pre.code { margin: 12px 0 0; padding: 14px; background: var(--ink); color: #e5e7eb; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-all; }
+  .retest { background: var(--brand-light); border: 1px solid var(--brand-border); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+  .retest input { height: 46px; padding: 0 14px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 15px; font-family: var(--mono); background: #fff; width: 100%; }
+  .btn-brand { height: 46px; padding: 0 22px; border: 0; border-radius: 10px; background: var(--brand); color: #fff; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; }
+  .btn-brand[disabled] { opacity: 0.6; cursor: progress; }
+  .retest-results { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+  .retest-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+  .status { padding: 28px 16px; text-align: center; color: var(--muted); }
+  @media (max-width: 640px) {
+    .wrap { padding-left: 16px; padding-right: 16px; }
+    .model-title { font-size: 24px; }
+    .t { font-size: 13px; }
+    .t th, .t td { padding: 10px 8px; }
+    .check-how { display: none; }
+    .tabs { gap: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="inner">
+    <div class="left">
+      <a class="brand" href="/" aria-label="TokenRocks 首页">
+        <span class="brand-mark" aria-hidden="true">T</span>
+        <span class="brand-name">TokenRocks</span>
+      </a>
+      <nav class="main-nav" aria-label="主导航">
+        <a class="optional" href="/#features">产品</a>
+        <a href="/pricing" aria-current="page">模型</a>
+        <a class="optional" href="/#plans">价格</a>
+        <a href="/guide/">文档</a>
+      </nav>
+    </div>
+    <div class="header-actions">
+      <a class="link-btn" href="/sign-in">登录</a>
+      <a class="btn-dark" href="/sign-up">免费开始</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section style="background: var(--alt); border-bottom: 1px solid var(--line);">
+    <div class="wrap" style="padding-top: 32px; display: flex; flex-direction: column; gap: 22px;">
+      <nav class="crumb" aria-label="面包屑"><a href="/pricing">模型</a> <span aria-hidden="true">/</span> <span id="crumb-name"></span></nav>
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px;">
+        <div style="display: flex; flex-direction: column; gap: 8px; min-width: 0;">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+            <h1 class="model-title" id="model-name">加载中…</h1>
+            <span class="chip-vendor" id="model-vendor" hidden></span>
+          </div>
+          <p class="sub" id="model-desc"></p>
+        </div>
+        <button type="button" class="btn-outline" id="copy-name">复制模型名</button>
+      </div>
+      <div class="cards" id="price-cards"></div>
+      <div role="tablist" aria-label="模型信息" class="tabs">
+        <button type="button" role="tab" class="tab" id="tab-test" aria-controls="panel-test" aria-selected="true">实测</button>
+        <button type="button" role="tab" class="tab" id="tab-price" aria-controls="panel-price" aria-selected="false">价格明细</button>
+        <button type="button" role="tab" class="tab" id="tab-code" aria-controls="panel-code" aria-selected="false">接入示例</button>
+      </div>
+    </div>
+  </section>
+
+  <section role="tabpanel" id="panel-test" aria-labelledby="tab-test" class="wrap panel">
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 10px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <h2 class="h2">实测报告</h2>
+        <p class="sub" id="test-meta">正在读取实测数据…</p>
+      </div>
+      <a href="/guide/" style="font-size: 14px; color: var(--brand); text-decoration: none;">怎么接入 →</a>
+    </div>
+    <div class="table-wrap">
+      <table class="t">
+        <thead><tr><th scope="col">检测项</th><th scope="col" style="width: 190px;">特价线路</th><th scope="col" style="width: 190px;">企业满血线路</th></tr></thead>
+        <tbody id="test-rows"><tr><td colspan="3" class="status">加载中…</td></tr></tbody>
+      </table>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <h3 class="h3">鹈鹕测试</h3>
+        <p class="sub">同一句提示词，每条线路各跑一次，交回什么就原样展示什么：静态 SVG 显示静态图，带脚本的 HTML 在沙箱里整页运行。提示词：<code id="pelican-prompt" style="font-size: 13px; background: #fff; border: 1px solid var(--line); padding: 1px 6px; border-radius: 4px; overflow-wrap: anywhere;"></code></p>
+      </div>
+      <div class="gallery" id="gallery"></div>
+    </div>
+    <div id="raw-box"></div>
+
+    <form class="retest" id="retest-form" autocomplete="off">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <h3 class="h3">用你自己的密钥复测</h3>
+        <p class="sub" style="color: var(--text-2);">在你的浏览器里跑三项：输入 token 计数、max_tokens 是否生效、会话是否串联，大约几分钱，从你的余额扣。密钥属于哪个分组就测哪条线路，只在本页使用，不会保存。</p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;">
+        <div style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 6px;">
+          <label for="retest-key" style="font-size: 14px; font-weight: 600;">API 密钥</label>
+          <input id="retest-key" type="password" placeholder="sk-…" spellcheck="false">
+        </div>
+        <button type="submit" class="btn-brand" id="retest-btn">开始复测</button>
+      </div>
+      <div class="retest-results" id="retest-results" aria-live="polite"></div>
+    </form>
+  </section>
+
+  <section role="tabpanel" id="panel-price" aria-labelledby="tab-price" class="wrap panel" hidden>
+    <h2 class="h2">价格明细</h2>
+    <div class="table-wrap">
+      <table class="t" id="price-table"></table>
+    </div>
+    <p class="sub" style="font-size: 13px;">按实际用量扣费，余额不过期。密钥分组用 auto 时，会自动选最便宜的可用线路。</p>
+  </section>
+
+  <section role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="wrap panel" hidden>
+    <h2 class="h2">接入示例</h2>
+    <p class="sub" id="code-intro"></p>
+    <div id="code-blocks" style="display: flex; flex-direction: column; gap: 16px;"></div>
+    <a href="/guide/" style="font-size: 14px; color: var(--brand); text-decoration: none;">在 Claude Code、Cherry Studio 等工具里怎么填 →</a>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="inner">
+    <div class="col"><span class="title" style="font-size: 16px;">TokenRocks</span><span>大模型 API 平台</span></div>
+    <div class="col"><span class="title">产品</span><a href="/pricing">模型与价格</a><a href="/#plans">线路方案</a><a href="/dashboard">控制台</a></div>
+    <div class="col"><span class="title">资源</span><a href="/guide/">使用指南</a><a href="https://github.com/cutebug0523/tokenrocks-new-api">GitHub 开源</a></div>
+    <div class="col"><span class="title">联系</span><span>微信 cutebug0523</span></div>
+  </div>
+</footer>
+
+<script src="/_s/prices.js"></script>
+<script src="/_s/model.js"></script>
+</body>
+</html>

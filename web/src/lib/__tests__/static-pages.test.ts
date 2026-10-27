@@ -69,3 +69,22 @@ describe('openStaticPage', () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 })
+
+describe('rememberSignedInName', () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it('leaves the display name, or the username without one, and clears it on sign-out', async () => {
+    const { rememberSignedInName, SIGNED_IN_NAME_KEY } = await loadStaticPages()
+
+    rememberSignedInName({ username: 'noah', display_name: '诺亚' })
+    expect(localStorage.getItem(SIGNED_IN_NAME_KEY)).toBe('诺亚')
+
+    rememberSignedInName({ username: 'noah', display_name: '' })
+    expect(localStorage.getItem(SIGNED_IN_NAME_KEY)).toBe('noah')
+
+    rememberSignedInName(null)
+    expect(localStorage.getItem(SIGNED_IN_NAME_KEY)).toBeNull()
+  })
+})

@@ -26,8 +26,12 @@ import { applyFaviconToDom } from '@/lib/dom-utils'
 import '@/lib/dayjs'
 import { initializeFrontendCache } from '@/lib/frontend-cache'
 import { createAppQueryClient } from '@/lib/query-client'
-import { markFirstRouteResolved } from '@/lib/static-pages'
+import {
+  markFirstRouteResolved,
+  rememberSignedInName,
+} from '@/lib/static-pages'
 import { readCachedStatus, statusQueryOptions } from '@/lib/status-query'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
@@ -62,6 +66,13 @@ const router = createRouter({
 const stopWatchingFirstRoute = router.subscribe('onResolved', () => {
   markFirstRouteResolved()
   stopWatchingFirstRoute()
+})
+
+// The static pages show the signed-in name in their header.
+useAuthStore.subscribe((state, previous) => {
+  if (state.auth.user !== previous.auth.user) {
+    rememberSignedInName(state.auth.user)
+  }
 })
 
 // Register the router instance for type safety

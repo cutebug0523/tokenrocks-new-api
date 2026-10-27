@@ -46,3 +46,28 @@ export function openStaticPage(
   // Keep the router pending while the browser loads the static document.
   return new Promise<never>(() => {})
 }
+
+/**
+ * The static pages cannot see who is signed in (the user only lives in this
+ * app's memory), so the console leaves the display name for their header.
+ * Whether anyone is signed in is still decided by the `new_api_has_session`
+ * cookie, which expires together with the login session.
+ */
+export const SIGNED_IN_NAME_KEY = 'tokenrocks_signed_in_name'
+
+export function rememberSignedInName(
+  user: { username: string; display_name?: string } | null
+): void {
+  try {
+    if (user) {
+      localStorage.setItem(
+        SIGNED_IN_NAME_KEY,
+        user.display_name || user.username
+      )
+    } else {
+      localStorage.removeItem(SIGNED_IN_NAME_KEY)
+    }
+  } catch {
+    // Blocked storage only costs the static header the name.
+  }
+}

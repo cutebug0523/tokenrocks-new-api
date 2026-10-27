@@ -194,3 +194,9 @@ pre {
     padding: 9px 14px;
   }
 }
+.link-btn.signed-in {
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

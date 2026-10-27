@@ -11,7 +11,7 @@
     value: { label: '特价线路', short: '特价', match: '特价', note: '价格最低，个别上游附带固定提示词' },
     enterprise: { label: '企业满血线路', short: '企业满血', match: '满血', note: '官方原版模型，稳定优先' }
   }
-  TR.VENDOR_ORDER = ['Anthropic', 'OpenAI', 'DeepSeek', '阿里巴巴', 'Google']
+  TR.VENDOR_ORDER = ['Anthropic', 'OpenAI', 'xAI', 'DeepSeek', '月之暗面', '智谱', '阿里巴巴', 'Google']
   TR.PELICAN_PROMPT = 'Generate an SVG of a pelican riding a bicycle'
 
   // 用 DOM API 拼节点，接口里的文字一律走 textContent

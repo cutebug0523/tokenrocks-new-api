@@ -24,7 +24,8 @@ BASE = 'https://tokenrocks.ai'
 OUT = '/var/www/tokenrocks-site/_s/tests'
 KEYS_FILE = '/opt/tokenrocks-tests/keys.json'
 PROMPT = 'Generate an SVG of a pelican riding a bicycle'
-MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'gpt-6.1-sol', 'gpt-6-astra', 'deepseek-v4.1-flash', 'qwen3.8-max']
+MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'gpt-6.1-sol', 'gpt-6-astra', 'grok-4.7', 'deepseek-v4.1-flash', 'qwen3.8-max',
+          'kimi-k3.1-pro', 'glm-5.3', 'glm-5.3-flash']
 TIERS = {'value': '特价', 'enterprise': '满血'}
 MAX_ART_BYTES = 300 * 1024
 HKT = timezone(timedelta(hours=8))
@@ -177,11 +178,13 @@ def check_max_tokens_and_input(model, fmt, vendor, key):
 def check_session(model, fmt, vendor, key):
     path = '/v1/messages' if fmt == 'anthropic' else '/v1/chat/completions'
     word = 'ZEBRA-%d' % random.randint(1000, 9999)
-    # Claude 关不掉思考，effort 调到 low，免得思考把回答的 token 吃光
-    first = post(path, key, fmt, body_for(model, fmt, vendor, 'Remember this code word for later: %s. Reply with just OK.' % word, 300, False, effort='low'), 120)
+    # Claude 关不掉思考，effort 调到 low，免得思考把回答的 token 吃光；
+    # 其他思考模型调不了 effort（Grok 回一句 OK 都要想近千 token），只能把上限放宽
+    limit = 400 if fmt == 'anthropic' else 2000
+    first = post(path, key, fmt, body_for(model, fmt, vendor, 'Remember this code word for later: %s. Reply with just OK.' % word, limit, False, effort='low'), 120)
     if first['status'] != 200:
         return failed(first)
-    ask = post(path, key, fmt, body_for(model, fmt, vendor, 'What code word did I ask you to remember earlier? If you have no record of one, reply exactly UNKNOWN.', 400, False, effort='low'), 120)
+    ask = post(path, key, fmt, body_for(model, fmt, vendor, 'What code word did I ask you to remember earlier? If you have no record of one, reply exactly UNKNOWN.', limit, False, effort='low'), 120)
     if ask['status'] != 200:
         return failed(ask)
     answer = reply_text(fmt, ask['json'])

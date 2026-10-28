@@ -1,10 +1,21 @@
 // 每页右下角的「加站长微信」卡片：桌面默认展开，手机默认收成按钮；收起状态记在 localStorage。
+// 官网静态页和控制台（web/index.html）共用；样式在 wechat.css，由这里加载，加载完才显示，避免闪出没排版的卡片。
+// 控制台引用时带 data-place="side"：收成右边缘中间的竖条，每次都从收起开始，免得挡住表格、翻页和输入框。
 // 页面里任何 href="#wechat" 的链接都会打开它。脚本没加载时，页脚的微信号文字还在。
 ;(function () {
   var ID = 'cutebug0523'
   var KEY = 'tokenrocks_wechat_closed'
+  var side = !!document.currentScript && document.currentScript.getAttribute('data-place') === 'side'
   var wrap = document.createElement('div')
-  wrap.className = 'wx'
+  wrap.className = side ? 'wx wx-side' : 'wx'
+  wrap.hidden = true
+  var css = document.createElement('link')
+  css.rel = 'stylesheet'
+  css.href = '/_s/wechat.css'
+  css.onload = function () {
+    wrap.hidden = false
+  }
+  document.head.appendChild(css)
   wrap.innerHTML =
     '<aside class="wx-card" id="wx-card" aria-label="加站长微信">' +
     '<button type="button" class="wx-close" aria-label="收起">×</button>' +
@@ -22,15 +33,15 @@
   document.body.appendChild(wrap)
 
   var pill = wrap.querySelector('.wx-pill')
-  var closed = window.matchMedia('(max-width: 767px)').matches
+  var closed = side || window.matchMedia('(max-width: 767px)').matches
   try {
     var saved = localStorage.getItem(KEY)
-    if (saved !== null) closed = saved === '1'
+    if (!side && saved !== null) closed = saved === '1'
   } catch (e) {}
   function setOpen(open, remember) {
     wrap.classList.toggle('open', open)
     pill.setAttribute('aria-expanded', open ? 'true' : 'false')
-    if (!remember) return
+    if (!remember || side) return
     try {
       localStorage.setItem(KEY, open ? '0' : '1')
     } catch (e) {}

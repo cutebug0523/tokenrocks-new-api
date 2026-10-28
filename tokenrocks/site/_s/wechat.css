@@ -1,0 +1,198 @@
+/* 右下角「加站长微信」卡片（_s/wechat.js 生成并加载本文件）。官网静态页和控制台共用，所以不依赖 site.css 的变量。z-index 低于控制台弹窗的 50。 */
+.wx {
+  --wx-brand: #0e7c66;
+  --wx-brand-dark: #0b5d4d;
+  --wx-border: #d1e7e1;
+  --wx-tint: #f0faf7;
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #0b1220;
+}
+.wx[hidden] {
+  display: none;
+}
+.wx,
+.wx * {
+  box-sizing: border-box;
+}
+.wx-card {
+  display: none;
+  position: relative;
+  width: 248px;
+  padding: 18px 18px 16px;
+  background: #fff;
+  border: 1px solid var(--wx-border);
+  border-top: 4px solid var(--wx-brand);
+  border-radius: 14px;
+  box-shadow: 0 24px 48px -20px rgba(11, 18, 32, 0.35);
+  text-align: center;
+}
+.wx.open .wx-card {
+  display: block;
+}
+.wx.open .wx-pill {
+  display: none;
+}
+.wx-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: #6b7280;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.wx-close:hover {
+  background: #f6f7f9;
+  color: #0b1220;
+}
+.wx-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--wx-brand-dark);
+}
+.wx-text {
+  margin: 6px 0 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #374151;
+  text-align: left;
+}
+.wx-qr {
+  display: block;
+  width: 168px;
+  height: 168px;
+  margin: 0 auto;
+}
+.wx-hint {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #6b7280;
+}
+.wx-mobile {
+  display: none;
+}
+.wx-id {
+  margin-top: 10px;
+  padding: 7px 8px 7px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: var(--wx-tint);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #4b5563;
+  white-space: nowrap;
+}
+.wx-id b {
+  font-family: 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 13px;
+  color: #0b1220;
+  margin-right: auto;
+}
+.wx-copy {
+  border: 1px solid var(--wx-border);
+  background: #fff;
+  color: var(--wx-brand-dark);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.wx-open {
+  margin-top: 10px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--wx-brand);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+}
+.wx-open:hover {
+  color: #fff;
+  background: var(--wx-brand-dark);
+}
+.wx-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--wx-brand);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 12px 28px -10px rgba(14, 124, 102, 0.6);
+  cursor: pointer;
+}
+.wx-pill:hover {
+  background: var(--wx-brand-dark);
+}
+/* 控制台：右边缘中间的竖条，展开的卡片也贴着右边中间 */
+.wx.wx-side {
+  right: 0;
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.wx-side .wx-card {
+  margin-right: 12px;
+}
+.wx-side .wx-pill {
+  writing-mode: vertical-rl;
+  min-height: 0;
+  width: 36px;
+  padding: 14px 0;
+  gap: 6px;
+  border-radius: 10px 0 0 10px;
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+@media (max-width: 767px) {
+  .wx {
+    right: 12px;
+    bottom: 12px;
+  }
+  .wx.open {
+    left: 12px;
+  }
+  .wx-card {
+    width: auto;
+    max-width: 360px;
+    margin-left: auto;
+  }
+  .wx-desk {
+    display: none;
+  }
+  .wx-hint.wx-mobile {
+    display: block;
+  }
+  .wx-open.wx-mobile {
+    display: flex;
+  }
+}
+@media print {
+  .wx {
+    display: none;
+  }
+}

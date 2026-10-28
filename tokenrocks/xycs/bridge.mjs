@@ -8,6 +8,7 @@
 //   node bridge.mjs report [日期]    按会话列出：买家消息、草稿、易店和店主的实际回复
 //   node bridge.mjs eval <cases.jsonl> [结果.jsonl]   用老对话和对抗题测话术
 //   node bridge.mjs stats [起始日期]  问过的人下单率，按回复风格 A/B、店主回过、只有易店回分开算
+//   node bridge.mjs funnel [起始日期] 每个商品的浏览 → 想要 → 咨询 → 下单（浏览、想要来自每天一次的商品快照）
 //   node bridge.mjs selftest
 // 只用 Node 自带模块。浏览器用 --remote-debugging-pipe 控制，不开调试端口。
 //
@@ -611,6 +612,32 @@ async function runBrowser() {
       send('Runtime.releaseObject', { objectId: proto.objectId }, sessionId).catch(() => {})
     }
   }
+  // 闲鱼的 mtop 接口：在页面里带登录态发，签名是 md5(_m_h5_tk 前半段&时间&appKey&data)；token 过期时回包会换新 cookie，重试一次
+  const mtop = async (api, data, retry = true) => {
+    const { cookies } = await send('Storage.getCookies')
+    const tk = (cookies.find((c) => c.name === '_m_h5_tk')?.value || '').split('_')[0]
+    const body = JSON.stringify(data)
+    const t = Date.now()
+    const sign = crypto.createHash('md5').update(`${tk}&${t}&34839810&${body}`).digest('hex')
+    const url = `https://h5api.m.goofish.com/h5/${api}/1.0/?jsv=2.7.2&appKey=34839810&t=${t}&sign=${sign}&v=1.0&type=originaljson&accountSite=xianyu&dataType=json&timeout=20000&api=${api}&sessionOption=AutoLoginOnly`
+    const init = { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: `data=${encodeURIComponent(body)}` }
+    const { result } = await send('Runtime.evaluate', { expression: `fetch(${JSON.stringify(url)}, ${JSON.stringify(init)}).then((r) => r.text())`, awaitPromise: true, returnByValue: true }, sessionId)
+    const r = JSON.parse(result.value)
+    if (String(r.ret?.[0]).startsWith('SUCCESS')) return r.data
+    if (retry && /TOKEN/.test(r.ret)) return mtop(api, data, false)
+    throw new Error(`${api} ${r.ret}`)
+  }
+  // 商品快照：每天（北京时间）第一次跑到这里时，给每个在售商品记一次浏览、想要、标题、主图，写 data/items-<日期>.jsonl。
+  // 详情接口每调一次浏览就 +1（店主自己看也算），所以一天只拍一次，funnel 报表里扣掉
+  let snapTried = ''
+  const snapshot = async () => {
+    const { cardList = [] } = await mtop('mtop.idle.web.xyh.item.list', { needGroupInfo: false, pageNumber: 1, userId: MY_ID, pageSize: 20 }) // 一页最多 20 个，店里在售的没这么多
+    for (const { cardData: c } of cardList) {
+      const { itemDO: d = {}, trackParams: tp = {} } = await mtop('mtop.taobao.idle.pc.detail', { itemId: c.id })
+      append('items', { at: Date.now(), id: c.id, title: d.title, pic: tp.mainPic || c.detailParams?.picUrl, browse: d.browseCnt, want: d.wantCnt, status: d.itemStatusStr })
+    }
+    log('商品快照', cardList.length, '个')
+  }
   await send('Page.navigate', { url: IM_URL }, sessionId)
   log('已打开', IM_URL)
   let tick = 0
@@ -632,6 +659,11 @@ async function runBrowser() {
       }
       fs.writeFileSync(path.join(DATA, 'ctl-result.json'), JSON.stringify(result))
       log('手动发送', JSON.stringify(result).slice(0, 160))
+    }
+    // 失败不在当天重试（重试会多刷浏览），重启服务会再试一次
+    if (loggedIn && snapTried !== day() && !fs.existsSync(path.join(DATA, `items-${day()}.jsonl`))) {
+      snapTried = day()
+      snapshot().catch((err) => log('商品快照失败', err.message))
     }
     const quiet = Date.now() - lastFrameAt
     if (!loggedIn && Date.now() - startedAt > 45000) {
@@ -682,22 +714,26 @@ function report(date = day()) {
   }
 }
 
+// data/<kind>-<日期>.jsonl 里 from 那天起的所有行
+function readLogs(kind, from, dir = DATA) {
+  return fs.readdirSync(dir).filter((f) => f.startsWith(`${kind}-`) && f.endsWith('.jsonl') && f.slice(kind.length + 1, kind.length + 11) >= from).sort()
+    .flatMap((f) => fs.readFileSync(path.join(dir, f), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)))
+}
+
+function bySid(events) {
+  const out = new Map()
+  for (const e of events) (out.get(e.sid) || out.set(e.sid, []).get(e.sid)).push(e)
+  for (const es of out.values()) es.sort((a, b) => a.ts - b.ts)
+  return out
+}
+
 // 问过的人下单率：每个会话看下单前买家有没有发过文字、谁回过，分组算下单率。测试号剔除
 function stats(from = '0000-00-00') {
-  const conv = new Map()
-  for (const f of fs.readdirSync(DATA).filter((x) => /^events-.*\.jsonl$/.test(x) && x.slice(7, 17) >= from).sort()) {
-    for (const line of fs.readFileSync(path.join(DATA, f), 'utf8').split('\n')) {
-      if (!line) continue
-      const e = JSON.parse(line)
-      if (!conv.has(e.sid)) conv.set(e.sid, [])
-      conv.get(e.sid).push(e)
-    }
-  }
+  const conv = bySid(readLogs('events', from))
   const groups = { 机器人回过·A: [], 机器人回过·B: [], 店主回过: [], 只有易店回: [] }
   let silent = 0
   let silentRefund = 0
   for (const [sid, es] of conv) {
-    es.sort((a, b) => a.ts - b.ts)
     const buyerId = es.find((e) => e.who === 'buyer')?.sender
     if (!buyerId || TEST_BUYERS.has(buyerId)) continue
     const orderAt = es.find((e) => e.who === 'buyer' && e.text.includes('我已拍下'))?.ts ?? Infinity
@@ -721,6 +757,49 @@ function stats(from = '0000-00-00') {
     console.log(`${k.padEnd(8)} 问过 ${String(v.length).padStart(3)} 人，下单 ${String(n).padStart(3)}（${v.length ? Math.round((n / v.length) * 100) : 0}%），退款 ${v.filter((x) => x.refund).length}`)
   }
   console.log(`没问直接拍 ${silent} 单，其中退款 ${silentRefund}`)
+}
+
+// 商品漏斗：浏览 → 想要 → 咨询 → 下单。区间是 from 那天起第一次快照到最新一次快照：
+// 浏览、想要是两次快照的差（浏览扣掉中间每次快照自己算的那 1 次），咨询、下单是同一段时间里这个商品的聊天
+function funnel(from = '0000-00-00', dir = DATA) {
+  const snaps = new Map()
+  for (const r of readLogs('items', from, dir)) (snaps.get(r.id) || snaps.set(r.id, []).get(r.id)).push(r)
+  const chats = bySid(readLogs('events', from, dir))
+  const rows = []
+  for (const [id, rs] of snaps) {
+    const [a, z] = [rs[0], rs.at(-1)]
+    const row = { id, title: z.title, days: rs.length - 1, views: z.browse - a.browse - (rs.length - 1), wants: z.want - a.want, asked: 0, askedPaid: 0, orders: 0, refunds: 0, total: z, changed: [] }
+    for (let i = 1; i < rs.length; i++) {
+      if (rs[i].title !== rs[i - 1].title) row.changed.push(`${day(rs[i].at).slice(5)} 前改了标题`)
+      if (rs[i].pic !== rs[i - 1].pic) row.changed.push(`${day(rs[i].at).slice(5)} 前换了主图`)
+    }
+    for (const [sid, all] of chats) {
+      if ((all.find((e) => e.itemId)?.itemId || convs.get(sid)?.itemId) !== id) continue
+      const es = all.filter((e) => e.ts >= a.at && e.ts < z.at)
+      const buyerId = all.find((e) => e.who === 'buyer')?.sender
+      if (!es.length || !buyerId || TEST_BUYERS.has(buyerId)) continue
+      const orderAt = es.find((e) => e.who === 'buyer' && e.text.includes('我已拍下'))?.ts ?? Infinity
+      const asked = es.some((e) => e.who === 'buyer' && e.contentType === 1 && e.ts < orderAt)
+      const paid = es.filter((e) => e.who === 'buyer' && e.text.includes('我已付款')).length
+      row.asked += asked
+      row.askedPaid += asked && paid > 0
+      row.orders += paid
+      row.refunds += es.filter((e) => e.text.includes('退款成功')).length
+    }
+    rows.push(row)
+  }
+  if (dir !== DATA) return rows // selftest 传临时目录，只要算出来的数
+  const pct = (n, d) => (d > 0 ? `${((n / d) * 100).toFixed(1)}%` : '-')
+  console.log(`商品漏斗：${from} 起。浏览、想要按每天 0 点后的快照算差，咨询、下单按同一段时间的聊天算（测试号剔除）\n`)
+  for (const r of rows.sort((x, y) => y.views - x.views)) {
+    console.log(`== ${r.title}（${r.id}）  闲鱼累计：浏览 ${r.total.browse}，想要 ${r.total.want}`)
+    if (!r.days) {
+      console.log('   只有一次快照，明天 0 点后再拍一次才有区间数据')
+      continue
+    }
+    console.log(`   ${r.days} 天：浏览 ${r.views} → 想要 ${r.wants}（${pct(r.wants, r.views)}）  咨询 ${r.asked}（${pct(r.asked, r.views)}）  下单 ${r.orders}（${pct(r.orders, r.views)}），其中问过再下单 ${r.askedPaid}/${r.asked}  退款 ${r.refunds}`)
+    if (r.changed.length) console.log(`   ${r.changed.join('；')}`)
+  }
 }
 
 // 用整理好的老对话和对抗题测话术：每行 {name, paid, order, item, history:[{who,text,ago?}], buyer:[...], actual:[{who,text}], tr?:[...]}
@@ -792,6 +871,14 @@ function selftest() {
   record(b, { id: 'a', ts: 1000, who: 'buyer', text: '在吗', sid: 's1', nick: '甲' })
   record(b, { id: 'c', ts: 3 * 86400000, who: 'owner', text: '在的', sid: 's2' })
   assert(b.timeline.length === 3 && b.codes.length === 1 && b.ownerAt === 3 * 86400000, '档案去重、记兑换码和接手时间')
+  // 漏斗：3 次快照，浏览差 30 扣掉后两次快照自己的 2 次；会话 q 问过再下单，会话 r 没问直接下单，窗口外的不算
+  const tmp = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'xycs-'))
+  const D = 86400000
+  fs.writeFileSync(path.join(tmp, 'items-2026-10-29.jsonl'), [0, 1, 2].map((i) => JSON.stringify({ at: i * D, id: '9', title: i < 2 ? '旧' : '新', pic: 'p', browse: 100 + i * 15, want: 10 + i })).join('\n'))
+  const ev = (sid, ts, who, text, contentType = 1) => JSON.stringify({ sid, ts, who, text, contentType, itemId: '9', sender: who === 'buyer' ? `u${sid}` : MY_ID })
+  fs.writeFileSync(path.join(tmp, 'events-2026-10-29.jsonl'), [ev('q', 10, 'buyer', '能接吗'), ev('q', 20, 'buyer', '我已拍下，待付款', 6), ev('q', 30, 'buyer', '我已付款，等待你发货', 6), ev('r', 40, 'buyer', '我已付款，等待你发货', 6), ev('x', 3 * D, 'buyer', '在吗')].join('\n'))
+  const [f] = funnel('0000-00-00', tmp)
+  assert(f.views === 28 && f.wants === 2 && f.asked === 1 && f.askedPaid === 1 && f.orders === 2 && f.changed.length === 1, '商品漏斗')
   const ctx = buyerContext(b, { itemTitle: 'Kimi' }, [{ sid: 's1', itemTitle: 'DS' }, { sid: 's2', itemTitle: 'Kimi' }], [{ id: 'd', ts: 4 * 86400000, text: '还在吗', nick: '甲' }], true, [{ key: 'abcd1234', status: 1 }])
   assert(ctx.includes('（隔了 3 天）') && ctx.includes('<兑换码>') && !ctx.includes('66e58ccf') && ctx.includes('还没兑换') && ctx.includes('（离上一条已经隔了 1 天）'), '上下文带时间线、遮住兑换码、带 TR 状态')
   console.log('selftest ok')
@@ -804,4 +891,5 @@ else if (cmd === 'replay') await replay(arg)
 else if (cmd === 'eval') await evaluate(arg, process.argv[4])
 else if (cmd === 'report') report(arg)
 else if (cmd === 'stats') stats(arg)
+else if (cmd === 'funnel') funnel(arg)
 else await runBrowser()

@@ -195,10 +195,15 @@ pre {
   }
 }
 .link-btn.signed-in {
-  max-width: 12em;
+  max-width: 8em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .link-btn.signed-in {
+    max-width: 5em;
+  }
 }
 
 /* 右下角「加站长微信」（_s/wechat.js 生成） */

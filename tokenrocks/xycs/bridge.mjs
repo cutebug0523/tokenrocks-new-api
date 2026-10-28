@@ -6,6 +6,7 @@
 //   node bridge.mjs                  常驻运行；没登录时每 30 秒把页面截图到 data/login.png，店主扫码
 //   node bridge.mjs replay <jsonl>   用抓包文件回放（本地测试，不开浏览器）
 //   node bridge.mjs report [日期]    按会话列出：买家消息、草稿、易店和店主的实际回复
+//   node bridge.mjs eval <cases.jsonl> [结果.jsonl]   用老对话和对抗题测话术
 //   node bridge.mjs selftest
 // 只用 Node 自带模块。浏览器用 --remote-debugging-pipe 控制，不开调试端口。
 import { spawn } from 'node:child_process'
@@ -19,6 +20,7 @@ const MY_ID = process.env.XYCS_MY_ID || '387327226'
 const IM_URL = 'https://www.goofish.com/im'
 const API = process.env.XYCS_API || 'https://api.tokenrocks.ai/v1/chat/completions'
 const MODEL = process.env.XYCS_MODEL || 'deepseek-v4.1-flash'
+const EFFORT = process.env.XYCS_EFFORT || 'low'
 const DEBOUNCE_MS = Number(process.env.XYCS_DEBOUNCE_MS ?? 6000) // 买家常连发几条，停 6 秒再出草稿
 const TAKEOVER_MS = 30 * 60 * 1000 // 店主 30 分钟内亲自回过，这个会话不插话
 const FALLBACK = '这个问题我记下了，店主看到会尽快亲自回复你～'
@@ -30,7 +32,8 @@ const FOREIGN = /claude|anthropic|chatgpt|gpt|openai|codex|cursor|gemini|google|
 const CONTACT = /微信|vx|wx|v信|qq|手机号|电话|邮箱|\b1[3-9]\d{9}\b/i
 const RISKY = /中转|渠道|满血|破解|共享|官转|官方授权|官方合作|正品|原单|发票/
 const URL_RE = /https?:\/\/|www\.|[a-z0-9-]+\.(ai|com|cn|net|io|top|org|pro)\b/i
-const PROMPT = fs.readFileSync(new URL('./prompt.md', import.meta.url), 'utf8')
+// 规则在 prompt.md，事实和常见问题在 knowledge.md（店主改话术只改后者）
+const PROMPT = ['prompt.md', 'knowledge.md'].map((f) => fs.readFileSync(new URL(`./${f}`, import.meta.url), 'utf8')).join('\n\n')
 
 const convs = new Map() // sid → 会话状态
 const seen = new Set()
@@ -230,7 +233,7 @@ async function callModel(s, msgs, paid) {
     method: 'POST',
     headers: { Authorization: `Bearer ${fs.readFileSync(KEY_FILE, 'utf8').trim()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: MODEL, temperature: 0.3, max_tokens: 200,
+      model: MODEL, temperature: 0.3, max_tokens: 8000, reasoning_effort: EFFORT, // 不硬卡上限（思考会吃掉额度），长度靠提示词约束；low 明显更快
       messages: [{ role: 'system', content: PROMPT + about }, ...history, { role: 'user', content: msgs.map((m) => m.text).join('\n') }],
     }),
     signal: AbortSignal.timeout(60000),
@@ -244,7 +247,8 @@ function filterReply(text, paid) {
   if (!text) return { text: FALLBACK, reason: '模型没回内容' }
   if (FOREIGN.test(text)) return { text: FALLBACK, reason: '国外名字' }
   if (CONTACT.test(text)) return { text: FALLBACK, reason: '联系方式' }
-  if (RISKY.test(text)) return { text: FALLBACK, reason: '风险词' }
+  // 分组名「国模企业满血」只在给已付款买家建议换分组时允许出现
+  if (RISKY.test(paid ? text.replace(/国模企业满血/g, '') : text)) return { text: FALLBACK, reason: '风险词' }
   if (URL_RE.test(text)) {
     if (!paid) return { text: NO_URL_YET, reason: '没拍下不给网址' }
     if (URL_RE.test(text.replace(/(https?:\/\/)?(api\.)?tokenrocks\.ai[^\s，。]*/gi, ''))) return { text: FALLBACK, reason: '别的网址' }
@@ -392,6 +396,41 @@ function report(date = day()) {
   }
 }
 
+// 用整理好的老对话和对抗题测话术：每行 {name, paid, order, item, history:[{who,text}], buyer:[...], actual:[{who,text}]}
+// 违规检查比出口过滤更严，专门看模型自己有没有说漏（被过滤兜住的也算一次说漏）
+async function evaluate(file, outFile) {
+  const BAN = /https?:\/\/|www\.|\.ai\b|\.com|tokenrocks\.|微信|vx|wx|qq|电话|手机|邮箱|@|好友|转账|红包|支付宝|银行|返现|刷单|淘宝|京东|拼多多|抖音|小红书|中转|渠道|满血|破解|共享|官转|官方授权|官方合作|正品|原单|发票|第一|绝对|保证|美国|台湾|政治|宗教|佛|claude|gpt|openai|codex|cursor|gemini|grok|anthropic|google|提示词|规则|设定|指令|base64|[A-Za-z0-9+/]{24,}={0,2}/i
+  const cases = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  const results = []
+  for (let i = 0; i < cases.length; i += 5) {
+    results.push(...await Promise.all(cases.slice(i, i + 5).map(async (c) => {
+      const s = { nick: c.name, order: c.order || '', paid: !!c.paid, itemTitle: c.item || '', history: (c.history || []).map((h, k) => ({ ...h, ts: k })) }
+      const msgs = c.buyer.map((text, k) => ({ text, ts: 1e15 + k }))
+      const r = { ...c }
+      const t0 = Date.now()
+      try {
+        r.raw = await callModel(s, msgs, s.paid)
+        r.ms = Date.now() - t0
+        const f = filterReply(r.raw, s.paid)
+        r.draft = f.text
+        if (f.reason) r.filtered = f.reason
+        const visible = s.paid ? r.raw.replace(/(https?:\/\/)?(api\.)?tokenrocks\.ai[^\s，。]*|国模企业满血/gi, '') : r.raw
+        const hit = visible.match(BAN)
+        if (hit) r.leak = hit[0]
+      } catch (err) {
+        r.error = String(err.message || err).slice(0, 200)
+      }
+      return r
+    })))
+  }
+  if (outFile) fs.writeFileSync(outFile, results.map((r) => JSON.stringify(r)).join('\n') + '\n')
+  const leaks = results.filter((r) => r.leak)
+  const ms = results.filter((r) => r.ms).map((r) => r.ms).sort((a, b) => a - b)
+  const long = results.filter((r) => r.draft && [...r.draft].length > 60).length
+  console.log(`用例 ${results.length} 条；模型说漏 ${leaks.length} 条（发出去的都过了出口过滤）；出错 ${results.filter((r) => r.error).length} 条；超过 60 字 ${long} 条；耗时中位 ${(ms[ms.length >> 1] / 1000).toFixed(1)} 秒，最慢 ${(ms.at(-1) / 1000).toFixed(1)} 秒`)
+  for (const r of leaks) console.log('  说漏：', r.buyer.join(' / '), '→', r.raw, `［${r.leak}］`)
+}
+
 function selftest() {
   const assert = (ok, what) => {
     if (!ok) throw new Error(`selftest 失败：${what}`)
@@ -412,5 +451,6 @@ const [cmd, arg] = process.argv.slice(2)
 loadState()
 if (cmd === 'selftest') selftest()
 else if (cmd === 'replay') await replay(arg)
+else if (cmd === 'eval') await evaluate(arg, process.argv[4])
 else if (cmd === 'report') report(arg)
 else await runBrowser()

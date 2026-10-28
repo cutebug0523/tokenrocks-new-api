@@ -9,7 +9,12 @@
 //   node bridge.mjs eval <cases.jsonl> [结果.jsonl]   用老对话和对抗题测话术
 //   node bridge.mjs selftest
 // 只用 Node 自带模块。浏览器用 --remote-debugging-pipe 控制，不开调试端口。
+//
+// 买家档案：闲鱼按「买家 + 商品」开会话，同一个人问两个商品是两个会话。档案按买家的数字用户 ID 建
+// （昵称会打码重名，不能用），存在 data/buyers/<ID>.json：全部聊天时间线、发过的兑换码、早前聊天的总结。
+// 出草稿时把档案、TR 那边的兑换和用量（香港 /xgj/tr/lookup 只读查）、带时间的最近聊天一起给模型。
 import { spawn } from 'node:child_process'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -22,7 +27,12 @@ const API = process.env.XYCS_API || 'https://api.tokenrocks.ai/v1/chat/completio
 const MODEL = process.env.XYCS_MODEL || 'deepseek-v4.1-flash'
 const EFFORT = process.env.XYCS_EFFORT || 'low'
 const DEBOUNCE_MS = Number(process.env.XYCS_DEBOUNCE_MS ?? 6000) // 买家常连发几条，停 6 秒再出草稿
-const TAKEOVER_MS = 30 * 60 * 1000 // 店主 30 分钟内亲自回过，这个会话不插话
+const TAKEOVER_MS = 30 * 60 * 1000 // 店主 30 分钟内亲自回过，这个买家不插话
+const RECENT = 16 // 给模型看的最近聊天条数，更早的靠总结
+const SUMMARIZE_AT = 30 // 最近之外还没总结的超过这么多条，就更新一次总结
+const GAP_MS = 6 * 3600 * 1000 // 两条消息隔这么久，聊天记录里标一行「隔了多久」
+const TR_LOOKUP = process.env.XYCS_TR_LOOKUP || 'https://tokenrocks.ai/xgj/tr/lookup'
+const TR_SECRET_FILE = process.env.XYCS_TR_SECRET_FILE || path.join(DIR, 'tr_lookup_secret')
 const FALLBACK = '这个问题我记下了，店主看到会尽快亲自回复你～'
 const NO_URL_YET = '拍下后兑换码和教程里会给网址和接入方式～'
 const PAID_STATES = ['等待卖家发货', '等待买家收货', '交易成功', '待评价']
@@ -37,7 +47,11 @@ const URL_RE = /https?:\/\/|www\.|[a-z0-9-]+\.(ai|com|cn|net|io|top|org|pro)\b/i
 // 规则在 prompt.md，事实和常见问题在 knowledge.md（店主改话术只改后者）
 const PROMPT = ['prompt.md', 'knowledge.md'].map((f) => fs.readFileSync(new URL(`./${f}`, import.meta.url), 'utf8')).join('\n\n')
 
-const convs = new Map() // sid → 会话状态
+const convs = new Map() // sid → 会话（买家 + 商品）
+const buyers = new Map() // 买家 ID → 档案（用到时才从文件读）
+const dirty = new Set()
+const trCache = new Map()
+const SPEAKER = { buyer: '买家', owner: '店主本人', yidian: '之前的自动回复' }
 const seen = new Set()
 let loggedIn = false
 let lastFrameAt = 0
@@ -110,6 +124,11 @@ function decodeData(s) {
 }
 
 // ---------- 消息解析 ----------
+function whoOf(sender, platform, text) {
+  if (sender !== MY_ID) return 'buyer'
+  return platform === 'weChat' || (platform === 'web' && YIDIAN_TEXT.test(text.trim())) ? 'yidian' : 'owner'
+}
+
 function parseMessage(v) {
   const m = v['1'] || {}
   const ext = m['10'] || {}
@@ -118,12 +137,8 @@ function parseMessage(v) {
     content = JSON.parse(m['6']?.['3']?.['5'] || '{}')
   } catch {}
   const q = new URLSearchParams((ext.reminderUrl || '').split('?')[1] || '')
-  let who = 'buyer'
   const text = content.text?.text ?? ext.reminderContent ?? ''
-  if (String(ext.senderUserId) === MY_ID) {
-    const isYidian = ext._platform === 'weChat' || (ext._platform === 'web' && YIDIAN_TEXT.test(text.trim()))
-    who = isYidian ? 'yidian' : 'owner'
-  }
+  const who = whoOf(String(ext.senderUserId || ''), ext._platform || '', text)
   return {
     id: m['3'], sid: String(m['2'] || '').split('@')[0], ts: m['5'], who,
     platform: ext._platform || '', sender: String(ext.senderUserId || ''), nick: ext.reminderTitle || '',
@@ -132,7 +147,7 @@ function parseMessage(v) {
   }
 }
 
-// 会话列表（以及别的回包里）带商品标题、订单号、订单状态，找出来记到会话上
+// 会话列表（以及别的回包里）带商品标题、订单号、订单状态和双方 ID，找出来记到会话上
 function collectConvs(obj, out = []) {
   if (!obj || typeof obj !== 'object') return out
   const conv = obj.singleChatConversation
@@ -142,12 +157,49 @@ function collectConvs(obj, out = []) {
 }
 
 function conv(sid) {
-  if (!convs.has(sid)) convs.set(sid, { sid, nick: '', itemId: '', itemTitle: '', orderId: '', order: '', paid: false, ownerAt: 0, history: [], pending: [], timer: null })
+  if (!convs.has(sid)) convs.set(sid, { sid, buyerId: '', itemId: '', itemTitle: '', orderId: '', order: '', paid: false, orphans: [], pending: [], timer: null })
   return convs.get(sid)
+}
+
+function buyer(id) {
+  if (buyers.has(id)) return buyers.get(id)
+  let b
+  try {
+    b = JSON.parse(fs.readFileSync(path.join(DATA, 'buyers', `${id}.json`), 'utf8'))
+  } catch {
+    b = { id, nicks: [], firstSeen: 0, lastSeen: 0, ownerAt: 0, codes: [], summary: '', summarizedUpTo: 0, timeline: [] }
+  }
+  buyers.set(id, b)
+  return b
+}
+
+function convsOf(b) {
+  return [...convs.values()].filter((c) => c.buyerId === b.id)
 }
 
 function isPaid(s) {
   return s.paid || PAID_STATES.includes(s.order)
+}
+
+// 会话的买家定下来以后，把之前记不进档案的消息（买家还没开口时我们发的）补进去
+function setBuyer(s, id) {
+  if (!id || s.buyerId) return
+  s.buyerId = id
+  for (const m of s.orphans.splice(0)) record(buyer(id), m)
+}
+
+function record(b, m) {
+  if (b.timeline.slice(-300).some((h) => h.id === m.id)) return
+  // 订单卡片的 reminderTitle 是「买家已拍下」这类标题，不是昵称，只从文字消息里取
+  if (m.who === 'buyer' && m.contentType === 1 && m.nick && !b.nicks.includes(m.nick)) b.nicks.push(m.nick)
+  b.firstSeen = b.firstSeen ? Math.min(b.firstSeen, m.ts) : m.ts
+  b.lastSeen = Math.max(b.lastSeen, m.ts)
+  if (m.who === 'owner') b.ownerAt = Math.max(b.ownerAt, m.ts)
+  const code = m.text.trim()
+  if (m.who === 'yidian' && /^[0-9a-f]{32}$/.test(code) && !b.codes.includes(code)) b.codes.push(code)
+  b.timeline.push({ id: m.id, ts: m.ts, who: m.who, text: m.text, sid: m.sid })
+  b.timeline = b.timeline.slice(-2000)
+  dirty.add(b.id)
 }
 
 function onFrame(data, { replay = false } = {}) {
@@ -161,6 +213,8 @@ function onFrame(data, { replay = false } = {}) {
   if (d.headers?.['reg-uid'] || d.lwp?.startsWith('/s/')) loggedIn = true
   for (const { conv: c, last } of collectConvs(d.body)) {
     const s = conv(String(c.cid).split('@')[0])
+    // 买家是会话双方里不是我们的那个（extUserId 在我们去别人店里买东西时填的是我们自己，不能用）
+    setBuyer(s, [c.pairFirst, c.pairSecond].map((p) => String(p || '').split('@')[0]).find((p) => p && p !== MY_ID))
     s.itemId ||= c.extension?.itemId || ''
     s.itemTitle ||= c.extension?.itemTitle || ''
     s.orderId ||= c.extension?.orderId || ''
@@ -174,24 +228,23 @@ function onFrame(data, { replay = false } = {}) {
       log('解析消息失败', err.message)
     }
   }
+  saveState()
 }
 
-function onMessage(m, replay) {
+function onMessage(m, replay, { draftIt = true } = {}) {
   if (!m.sid || seen.has(m.id)) return
   seen.add(m.id)
   if (seen.size > 20000) seen.clear()
-  append('events', m)
+  if (draftIt) append('events', m)
   const s = conv(m.sid)
-  if (m.who === 'buyer') s.nick = m.nick
+  if (m.who === 'buyer') setBuyer(s, m.sender)
   s.itemId ||= m.itemId
   if (m.order) s.order = m.order
   if (m.who === 'yidian' && m.text.includes('兑换码（只能兑换一次')) s.paid = true
   if (m.who === 'buyer' && m.text.includes('我已付款')) s.paid = true
-  if (m.who === 'owner') s.ownerAt = m.ts
-  s.history.push({ who: m.who, text: m.text, ts: m.ts })
-  s.history = s.history.slice(-12)
-  saveState()
-  if (m.who !== 'buyer' || m.contentType !== 1) return
+  if (s.buyerId) record(buyer(s.buyerId), m)
+  else s.orphans.push(m)
+  if (!draftIt || m.who !== 'buyer' || m.contentType !== 1) return
   // 重连时会补推旧消息，两分钟前的只记不回
   if (!replay && Date.now() - m.ts > 120000) return
   s.pending.push(m)
@@ -203,19 +256,27 @@ function onMessage(m, replay) {
 async function draft(s) {
   const msgs = s.pending.splice(0)
   if (!msgs.length) return
-  const paid = isPaid(s)
+  const b = buyer(s.buyerId)
+  const mine = convsOf(b)
+  const paid = mine.some(isPaid) // 在别的商品下买过也算老客户
   const rec = {
-    at: new Date().toISOString(), sid: s.sid, nick: s.nick, item: s.itemTitle || s.itemId, orderId: s.orderId,
+    at: new Date().toISOString(), sid: s.sid, buyerId: b.id, nick: msgs[0].nick, item: s.itemTitle || s.itemId, orderId: s.orderId,
     order: s.order || '-', paid, buyer: msgs.map((m) => m.text), wouldSend: true,
   }
-  if (s.ownerAt && msgs[0].ts - s.ownerAt < TAKEOVER_MS) {
+  if (b.ownerAt && msgs[0].ts - b.ownerAt < TAKEOVER_MS) {
     rec.wouldSend = false
     rec.why = '店主 30 分钟内亲自回过，不插话'
   }
   if (msgs.some((m) => ALERT.test(m.text))) rec.alert = true
+  let tr = null
+  try {
+    tr = b.codes.length ? await trLookup(b.codes) : null
+  } catch (err) {
+    rec.trError = String(err.message || err).slice(0, 120)
+  }
   const t0 = Date.now()
   try {
-    rec.raw = await callModel(s, msgs, paid)
+    rec.raw = await chat(PROMPT, buyerContext(b, s, mine, msgs, paid, tr))
     const f = filterReply(rec.raw, paid)
     rec.draft = f.text
     if (f.reason) rec.filtered = f.reason
@@ -228,34 +289,102 @@ async function draft(s) {
   }
   rec.ms = Date.now() - t0
   append('drafts', rec)
-  log('草稿', s.nick, msgs.map((m) => m.text).join(' / ').slice(0, 40), '→', rec.draft || rec.error)
+  log('草稿', rec.nick, msgs.map((m) => m.text).join(' / ').slice(0, 40), '→', rec.draft || rec.why || rec.error)
+  maybeSummarize(b).catch((err) => log('更新总结失败', err.message))
 }
 
-async function callModel(s, msgs, paid) {
-  const status = paid ? `已付款（${s.order || '已发码'}）` : s.order || '没拍下'
-  const about = `\n\n【这个买家】昵称：${s.nick || '未知'}；订单状态：${status}；咨询的商品：${s.itemTitle || s.itemId || '未知'}`
-  // 聊天记录按说话人写成文字，不按 user/assistant 交替：店主本人和易店说的话不是模型说的，
-  // 当成 assistant 喂进去，模型会接着店主的话往下编（10-28「嗯嗯」→「好了，可以刷新看看」）
-  const pendingIds = new Set(msgs.map((m) => m.ts))
-  const speaker = { buyer: '买家', owner: '店主本人', yidian: '之前的自动回复' }
-  const transcript = s.history
-    .filter((h) => !pendingIds.has(h.ts))
-    .slice(-8)
-    .map((h) => `${speaker[h.who]}：${h.text}`)
-    .join('\n')
-  const ask = `${transcript ? `【最近的聊天记录】\n${transcript}\n\n` : ''}【买家刚发的】\n${msgs.map((m) => m.text).join('\n')}`
+function clock(ts) {
+  return new Date(ts + 8 * 3600 * 1000).toISOString().slice(5, 16).replace('T', ' ')
+}
+
+function span(ms) {
+  if (ms < 3600 * 1000) return `${Math.max(1, Math.round(ms / 60000))} 分钟`
+  if (ms < 86400 * 1000) return `${Math.round(ms / 3600000)} 小时`
+  return `${Math.round(ms / 86400000)} 天`
+}
+
+function maskCodes(text) {
+  return text.replace(/[0-9a-f]{32}/g, '<兑换码>')
+}
+
+function trLine(t) {
+  const head = `TR 账号（兑换码 ${t.key.slice(0, 4)}…）`
+  if (t.status !== 3) return `${head}：还没兑换`
+  const parts = [`${t.redeemed_at} 兑换到用户「${t.username}」`, `余额 ¥${t.balance_yuan}`, `已用 ¥${t.used_yuan}`, `共调用 ${t.request_count} 次`]
+  parts.push(t.last_used ? `最近一次调用 ${t.last_used}` : '还没调用过')
+  if (t.models_7d) parts.push(`近 7 天用过 ${t.models_7d}`)
+  parts.push(`近 24 小时报错 ${t.errors_24h} 次`)
+  return `${head}：${parts.join('，')}`
+}
+
+// 给模型的上下文：档案 + 带时间的最近聊天 + 买家刚发的。now 用买家这条消息的时间，回放和测试也能算对「隔了多久」
+function buyerContext(b, s, mine, msgs, paid, tr) {
+  const now = msgs.at(-1).ts
+  const facts = [`昵称：${b.nicks.join('、') || msgs[0].nick || '未知'}`]
+  if (b.firstSeen && b.firstSeen < msgs[0].ts) facts.push(`第一次来：${clock(b.firstSeen)}（${span(now - b.firstSeen)}前）`)
+  facts.push(`订单状态：${paid ? '已付款的老客户' : '还没拍下'}`)
+  facts.push(`问过的商品：${mine.map((c) => `${c.itemTitle || c.itemId || '某商品'}（${isPaid(c) ? `已付款，${c.order || '已发码'}` : c.order || '没拍下'}）`).join('；')}`)
+  facts.push(`这次是在「${s.itemTitle || s.itemId || '未知商品'}」下聊`)
+  if (b.codes.length) facts.push(`发过兑换码 ${b.codes.length} 个`)
+  for (const t of tr || []) facts.push(trLine(t))
+  if (b.summary) facts.push(`早前聊天的总结：${b.summary}`)
+  const pendingIds = new Set(msgs.map((m) => m.id))
+  const recent = b.timeline.filter((h) => !pendingIds.has(h.id)).slice(-RECENT)
+  const lines = []
+  let prev = null
+  for (const h of recent) {
+    if (prev && h.ts - prev.ts > GAP_MS) lines.push(`（隔了 ${span(h.ts - prev.ts)}）`)
+    if (mine.length > 1 && h.sid !== prev?.sid) lines.push(`（下面是在「${convs.get(h.sid)?.itemTitle || '另一个商品'}」下聊的）`)
+    lines.push(`${clock(h.ts)} ${SPEAKER[h.who]}：${maskCodes(h.text)}`)
+    prev = h
+  }
+  const gap = prev && msgs[0].ts - prev.ts > GAP_MS ? `（离上一条已经隔了 ${span(msgs[0].ts - prev.ts)}）\n` : ''
+  return `【这个买家的档案】\n${facts.map((f) => `- ${f}`).join('\n')}\n\n` +
+    (lines.length ? `【最近的聊天记录】（北京时间）\n${lines.join('\n')}\n\n` : '') +
+    `【买家刚发的】\n${gap}${msgs.map((m) => `${clock(m.ts)} ${m.text}`).join('\n')}`
+}
+
+async function chat(system, user) {
   const res = await fetch(API, {
     method: 'POST',
     headers: { Authorization: `Bearer ${fs.readFileSync(KEY_FILE, 'utf8').trim()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: MODEL, temperature: 0.3, max_tokens: 8000, reasoning_effort: EFFORT, // 不硬卡上限（思考会吃掉额度），长度靠提示词约束；low 明显更快
-      messages: [{ role: 'system', content: PROMPT + about }, { role: 'user', content: ask }],
+      model: MODEL, temperature: 0.3, max_tokens: 16000, reasoning_effort: EFFORT, // 不硬卡上限（思考会吃掉额度），长度靠提示词约束；low 明显更快
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(90000),
   })
   const j = await res.json()
   if (!res.ok) throw new Error(`HTTP ${res.status} ${JSON.stringify(j).slice(0, 150)}`)
   return (j.choices?.[0]?.message?.content || '').trim()
+}
+
+// 最近 RECENT 条之外、还没总结的攒够 SUMMARIZE_AT 条，就和旧总结合并成新总结。原文一直留在档案和日志里
+async function maybeSummarize(b) {
+  const old = b.timeline.slice(0, -RECENT).filter((h) => h.ts > b.summarizedUpTo)
+  if (old.length < SUMMARIZE_AT) return
+  const system = '你是闲鱼店铺的客服记录员。把【旧总结】和【新的聊天】合并成一段新的总结，不超过 200 字，只写以后接待这个买家用得上的事实：他要做什么、用什么工具、买过什么、遇到过什么问题、店主答应过什么以及后来怎样，带上大概日期。不编造，不写网址、联系方式和兑换码。'
+  const text = old.map((h) => `${clock(h.ts)} ${SPEAKER[h.who]}：${maskCodes(h.text)}`).join('\n')
+  b.summary = await chat(system, `【旧总结】\n${b.summary || '（无）'}\n\n【新的聊天】\n${text}`)
+  b.summarizedUpTo = old.at(-1).ts
+  dirty.add(b.id)
+  saveState()
+}
+
+// 香港 xgj 上的只读查询：按兑换码查兑没兑、兑到哪个 TR 用户、余额和用量。请求用共享密钥签名，结果缓存 10 分钟
+async function trLookup(codes) {
+  const fresh = codes.filter((c) => !(trCache.get(c)?.at > Date.now() - 600000))
+  if (fresh.length) {
+    const body = JSON.stringify({ codes: fresh.slice(-10) })
+    const ts = String(Math.floor(Date.now() / 1000))
+    const sign = crypto.createHmac('sha256', fs.readFileSync(TR_SECRET_FILE, 'utf8').trim()).update(`${ts}.${body}`).digest('hex')
+    const res = await fetch(TR_LOOKUP, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Xycs-Ts': ts, 'X-Xycs-Sign': sign }, body, signal: AbortSignal.timeout(10000) })
+    const j = await res.json()
+    if (!res.ok || j.result !== 'success') throw new Error(`TR 查询失败 ${res.status} ${JSON.stringify(j).slice(0, 100)}`)
+    const now = Date.now()
+    for (const c of fresh) trCache.set(c, { at: now, data: j.rows.find((r) => r.key === c) || { key: c, status: 0 } })
+  }
+  return codes.map((c) => trCache.get(c)?.data).filter(Boolean)
 }
 
 function filterReply(text, paid) {
@@ -265,6 +394,7 @@ function filterReply(text, paid) {
   if (CONTACT.test(text)) return { text: FALLBACK, reason: '联系方式' }
   // 分组名「国模企业满血」只在给已付款买家建议换分组时允许出现
   if (RISKY.test(paid ? text.replace(/国模企业满血/g, '') : text)) return { text: FALLBACK, reason: '风险词' }
+  if (/[0-9a-f]{32}/.test(text)) return { text: FALLBACK, reason: '兑换码' }
   if (URL_RE.test(text)) {
     if (!paid) return { text: NO_URL_YET, reason: '没拍下不给网址' }
     if (URL_RE.test(text.replace(/(https?:\/\/)?(api\.)?tokenrocks\.ai[^\s，。]*/gi, ''))) return { text: FALLBACK, reason: '别的网址' }
@@ -286,16 +416,37 @@ let saveTimer = null
 function saveState() {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
+    fs.mkdirSync(path.join(DATA, 'buyers'), { recursive: true })
     const out = [...convs.values()].map(({ timer, pending, ...rest }) => rest)
-    fs.mkdirSync(DATA, { recursive: true })
     fs.writeFileSync(path.join(DATA, 'state.json'), JSON.stringify(out))
+    for (const id of dirty) fs.writeFileSync(path.join(DATA, 'buyers', `${id}.json`), JSON.stringify(buyers.get(id)))
+    dirty.clear()
   }, 2000)
 }
 
 function loadState() {
   try {
-    for (const s of JSON.parse(fs.readFileSync(path.join(DATA, 'state.json'), 'utf8'))) convs.set(s.sid, { ...s, pending: [], timer: null })
+    for (const s of JSON.parse(fs.readFileSync(path.join(DATA, 'state.json'), 'utf8'))) {
+      convs.set(s.sid, { buyerId: '', orphans: [], ...s, pending: [], timer: null })
+    }
   } catch {}
+  // 第一次启用档案时，用已有的消息日志把档案补出来（只记不出草稿）
+  if (fs.existsSync(path.join(DATA, 'buyers'))) return
+  let files = []
+  try {
+    files = fs.readdirSync(DATA).filter((f) => /^events-.*\.jsonl$/.test(f)).sort()
+  } catch {}
+  for (const f of files) {
+    for (const line of fs.readFileSync(path.join(DATA, f), 'utf8').split('\n')) {
+      if (!line) continue
+      const m = JSON.parse(line)
+      m.who = whoOf(m.sender, m.platform, m.text) // 旧日志可能是按旧规则标的，按现在的规则重新判断
+      onMessage(m, true, { draftIt: false })
+    }
+  }
+  if (!files.length) return
+  log('用消息日志补出买家档案', buyers.size, '个')
+  saveState()
 }
 
 function log(...a) {
@@ -407,12 +558,14 @@ function report(date = day()) {
   }
   for (const [sid, items] of rows) {
     const s = convs.get(sid)
-    console.log(`\n== ${s?.nick || sid}｜${s?.itemTitle || ''}｜${isPaid(s || {}) ? '已付款' : s?.order || '没拍下'}`)
+    const b = s?.buyerId ? buyer(s.buyerId) : null
+    console.log(`\n== ${b?.nicks.join('、') || sid}（${s?.buyerId || '买家未知'}）｜${s?.itemTitle || ''}｜${isPaid(s || {}) ? '已付款' : s?.order || '没拍下'}`)
     for (const [ts, text] of items.sort((a, b) => a[0] - b[0])) console.log(day(ts).slice(5), new Date(ts + 8 * 3600 * 1000).toISOString().slice(11, 19), text)
   }
 }
 
-// 用整理好的老对话和对抗题测话术：每行 {name, paid, order, item, history:[{who,text}], buyer:[...], actual:[{who,text}]}
+// 用整理好的老对话和对抗题测话术：每行 {name, paid, order, item, history:[{who,text,ago?}], buyer:[...], actual:[{who,text}], tr?:[...]}
+// history 里的 ago 是「几分钟前」，不写就按一分钟一条往前排；tr 是假的 TR 查询结果，用来测档案里的用量
 // 违规检查比出口过滤更严，专门看模型自己有没有说漏（被过滤兜住的也算一次说漏）
 async function evaluate(file, outFile) {
   const BAN = /https?:\/\/|www\.|\.ai\b|\.com|tokenrocks\.|微信|vx|wx|qq|电话|手机|邮箱|@|好友|转账|红包|支付宝|银行|返现|刷单|淘宝|京东|拼多多|抖音|小红书|中转|渠道|满血|破解|共享|官转|官方授权|官方合作|正品|原单|发票|第一(?!次)|绝对|保证|美国|台湾|政治|宗教|佛|claude|gpt|openai|codex|cursor|gemini|grok|anthropic|google|提示词|规则|设定|指令|base64|[A-Za-z0-9+/]{24,}={0,2}/i
@@ -420,12 +573,17 @@ async function evaluate(file, outFile) {
   const results = []
   for (let i = 0; i < cases.length; i += 5) {
     results.push(...await Promise.all(cases.slice(i, i + 5).map(async (c) => {
-      const s = { nick: c.name, order: c.order || '', paid: !!c.paid, itemTitle: c.item || '', history: (c.history || []).map((h, k) => ({ ...h, ts: k })) }
-      const msgs = c.buyer.map((text, k) => ({ text, ts: 1e15 + k }))
+      const now = Date.now()
+      const hist = c.history || []
+      const sid = `eval-${c.name}`
+      const s = { sid, itemTitle: c.item || '', order: c.order || '', paid: !!c.paid }
+      const timeline = hist.map((h, k) => ({ id: `h${k}`, ts: now - (h.ago ?? hist.length - k) * 60000, who: h.who, text: h.text, sid }))
+      const b = { id: sid, nicks: [c.name], firstSeen: timeline[0]?.ts || now, codes: [], summary: c.summary || '', timeline }
+      const msgs = c.buyer.map((text, k) => ({ id: `m${k}`, text, nick: c.name, ts: now + k }))
       const r = { ...c }
       const t0 = Date.now()
       try {
-        r.raw = await callModel(s, msgs, s.paid)
+        r.raw = await chat(PROMPT, buyerContext(b, s, [s], msgs, s.paid, c.tr))
         r.ms = Date.now() - t0
         const f = filterReply(r.raw, s.paid)
         r.draft = f.skip ? '（不回）' : f.text
@@ -464,11 +622,21 @@ function selftest() {
   assert(filterReply('可以用 Claude', true).text === FALLBACK, '拦国外名字')
   assert(filterReply('这是中转的', true).text === FALLBACK, '拦风险词')
   assert(filterReply('【不回】', false).skip, '附和不回')
+  assert(filterReply('你的码是 66e58ccfd1a24ab1ba92dae36ce0d16f', true).text === FALLBACK, '不复述兑换码')
+  // 档案：同一个买家两个商品的会话合到一份，店主消息算这个买家的接手时间，时间线带隔了多久
+  const b = { id: 't1', nicks: ['甲'], firstSeen: 0, lastSeen: 0, ownerAt: 0, codes: [], summary: '', summarizedUpTo: 0, timeline: [] }
+  record(b, { id: 'a', ts: 1000, who: 'buyer', text: '在吗', sid: 's1', nick: '甲' })
+  record(b, { id: 'b', ts: 2000, who: 'yidian', text: '66e58ccfd1a24ab1ba92dae36ce0d16f', sid: 's1' })
+  record(b, { id: 'a', ts: 1000, who: 'buyer', text: '在吗', sid: 's1', nick: '甲' })
+  record(b, { id: 'c', ts: 3 * 86400000, who: 'owner', text: '在的', sid: 's2' })
+  assert(b.timeline.length === 3 && b.codes.length === 1 && b.ownerAt === 3 * 86400000, '档案去重、记兑换码和接手时间')
+  const ctx = buyerContext(b, { itemTitle: 'Kimi' }, [{ sid: 's1', itemTitle: 'DS' }, { sid: 's2', itemTitle: 'Kimi' }], [{ id: 'd', ts: 4 * 86400000, text: '还在吗', nick: '甲' }], true, [{ key: 'abcd1234', status: 1 }])
+  assert(ctx.includes('（隔了 3 天）') && ctx.includes('<兑换码>') && !ctx.includes('66e58ccf') && ctx.includes('还没兑换') && ctx.includes('（离上一条已经隔了 1 天）'), '上下文带时间线、遮住兑换码、带 TR 状态')
   console.log('selftest ok')
 }
 
 const [cmd, arg] = process.argv.slice(2)
-loadState()
+if (!['selftest', 'eval'].includes(cmd)) loadState()
 if (cmd === 'selftest') selftest()
 else if (cmd === 'replay') await replay(arg)
 else if (cmd === 'eval') await evaluate(arg, process.argv[4])

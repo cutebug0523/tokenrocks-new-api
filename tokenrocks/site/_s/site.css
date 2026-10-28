@@ -200,3 +200,167 @@ pre {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 右下角「加站长微信」（_s/wechat.js 生成） */
+.wx {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 50;
+  font-size: 14px;
+}
+.wx-card {
+  display: none;
+  position: relative;
+  width: 248px;
+  padding: 18px 18px 16px;
+  background: #fff;
+  border: 1px solid var(--brand-border);
+  border-top: 4px solid var(--brand);
+  border-radius: 14px;
+  box-shadow: 0 24px 48px -20px rgba(11, 18, 32, 0.35);
+  text-align: center;
+}
+.wx.open .wx-card {
+  display: block;
+}
+.wx.open .wx-pill {
+  display: none;
+}
+.wx-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted-2);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.wx-close:hover {
+  background: var(--alt);
+  color: var(--ink);
+}
+.wx-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--brand-dark);
+}
+.wx-text {
+  margin: 6px 0 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  text-align: left;
+}
+.wx-qr {
+  display: block;
+  width: 168px;
+  height: 168px;
+  margin: 0 auto;
+}
+.wx-hint {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.wx-mobile {
+  display: none;
+}
+.wx-id {
+  margin-top: 10px;
+  padding: 7px 8px 7px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: var(--brand-light);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.wx-id b {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  margin-right: auto;
+}
+.wx-copy {
+  border: 1px solid var(--brand-border);
+  background: #fff;
+  color: var(--brand-dark);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.wx-open {
+  margin-top: 10px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--brand);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+}
+.wx-open:hover {
+  color: #fff;
+  background: var(--brand-dark);
+}
+.wx-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 12px 28px -10px rgba(14, 124, 102, 0.6);
+  cursor: pointer;
+}
+.wx-pill:hover {
+  background: var(--brand-dark);
+}
+@media (max-width: 767px) {
+  .wx {
+    right: 12px;
+    bottom: 12px;
+  }
+  .wx.open {
+    left: 12px;
+  }
+  .wx-card {
+    width: auto;
+    max-width: 360px;
+    margin-left: auto;
+  }
+  .wx-desk {
+    display: none;
+  }
+  .wx-hint.wx-mobile {
+    display: block;
+  }
+  .wx-open.wx-mobile {
+    display: flex;
+  }
+}
+@media print {
+  .wx {
+    display: none;
+  }
+}

@@ -26,6 +26,8 @@ const TAKEOVER_MS = 30 * 60 * 1000 // 店主 30 分钟内亲自回过，这个�
 const FALLBACK = '这个问题我记下了，店主看到会尽快亲自回复你～'
 const NO_URL_YET = '拍下后兑换码和教程里会给网址和接入方式～'
 const PAID_STATES = ['等待卖家发货', '等待买家收货', '交易成功', '待评价']
+// 易店的自动回复走 weChat，发码却走 web（10-28 实测），web 发的要看内容是不是易店的固定文案
+const YIDIAN_TEXT = /^(感谢购买！|[0-9a-f]{32}$|3 步用起来|使用步骤|你好～这是国产大模型|这个问题我记下了|拍1元得1元|好的，有需要随时问我|不会用或者有问题直接问我就行)/
 const ALERT = /退款|退钱|用不了|不能用|卡死|卡住|报错|骗|差评|投诉|举报/
 // 出口过滤：命中就不用模型的回答。广告法类的词（最、第一）交给提示词，这里只拦会出事的
 const FOREIGN = /claude|anthropic|chatgpt|gpt|openai|codex|cursor|gemini|google|grok|xai|copilot|windsurf|cline|kiro|aider|opencode|vs ?code|llama|mistral/i
@@ -117,11 +119,15 @@ function parseMessage(v) {
   } catch {}
   const q = new URLSearchParams((ext.reminderUrl || '').split('?')[1] || '')
   let who = 'buyer'
-  if (String(ext.senderUserId) === MY_ID) who = ext._platform === 'weChat' ? 'yidian' : 'owner'
+  const text = content.text?.text ?? ext.reminderContent ?? ''
+  if (String(ext.senderUserId) === MY_ID) {
+    const isYidian = ext._platform === 'weChat' || (ext._platform === 'web' && YIDIAN_TEXT.test(text.trim()))
+    who = isYidian ? 'yidian' : 'owner'
+  }
   return {
     id: m['3'], sid: String(m['2'] || '').split('@')[0], ts: m['5'], who,
     platform: ext._platform || '', sender: String(ext.senderUserId || ''), nick: ext.reminderTitle || '',
-    contentType: content.contentType ?? null, text: content.text?.text ?? ext.reminderContent ?? '',
+    contentType: content.contentType ?? null, text,
     itemId: q.get('itemId') || '', order: ext.redReminder || '',
   }
 }
@@ -213,6 +219,10 @@ async function draft(s) {
     const f = filterReply(rec.raw, paid)
     rec.draft = f.text
     if (f.reason) rec.filtered = f.reason
+    if (f.skip) {
+      rec.wouldSend = false
+      rec.why = '买家只是附和，不用回'
+    }
   } catch (err) {
     rec.error = String(err.message || err).slice(0, 200)
   }
@@ -224,17 +234,22 @@ async function draft(s) {
 async function callModel(s, msgs, paid) {
   const status = paid ? `已付款（${s.order || '已发码'}）` : s.order || '没拍下'
   const about = `\n\n【这个买家】昵称：${s.nick || '未知'}；订单状态：${status}；咨询的商品：${s.itemTitle || s.itemId || '未知'}`
+  // 聊天记录按说话人写成文字，不按 user/assistant 交替：店主本人和易店说的话不是模型说的，
+  // 当成 assistant 喂进去，模型会接着店主的话往下编（10-28「嗯嗯」→「好了，可以刷新看看」）
   const pendingIds = new Set(msgs.map((m) => m.ts))
-  const history = s.history
+  const speaker = { buyer: '买家', owner: '店主本人', yidian: '之前的自动回复' }
+  const transcript = s.history
     .filter((h) => !pendingIds.has(h.ts))
     .slice(-8)
-    .map((h) => ({ role: h.who === 'buyer' ? 'user' : 'assistant', content: h.text }))
+    .map((h) => `${speaker[h.who]}：${h.text}`)
+    .join('\n')
+  const ask = `${transcript ? `【最近的聊天记录】\n${transcript}\n\n` : ''}【买家刚发的】\n${msgs.map((m) => m.text).join('\n')}`
   const res = await fetch(API, {
     method: 'POST',
     headers: { Authorization: `Bearer ${fs.readFileSync(KEY_FILE, 'utf8').trim()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: MODEL, temperature: 0.3, max_tokens: 8000, reasoning_effort: EFFORT, // 不硬卡上限（思考会吃掉额度），长度靠提示词约束；low 明显更快
-      messages: [{ role: 'system', content: PROMPT + about }, ...history, { role: 'user', content: msgs.map((m) => m.text).join('\n') }],
+      messages: [{ role: 'system', content: PROMPT + about }, { role: 'user', content: ask }],
     }),
     signal: AbortSignal.timeout(60000),
   })
@@ -244,6 +259,7 @@ async function callModel(s, msgs, paid) {
 }
 
 function filterReply(text, paid) {
+  if (text.includes('【不回】')) return { text: '', skip: true }
   if (!text) return { text: FALLBACK, reason: '模型没回内容' }
   if (FOREIGN.test(text)) return { text: FALLBACK, reason: '国外名字' }
   if (CONTACT.test(text)) return { text: FALLBACK, reason: '联系方式' }
@@ -387,7 +403,7 @@ function report(date = day()) {
   for (const e of read('events')) row(e.sid).push([e.ts, `${label[e.who]}：${e.text}`])
   for (const d of read('drafts')) {
     const tag = d.wouldSend ? '草稿' : '草稿（不发）'
-    row(d.sid).push([Date.parse(d.at), `  → ${tag}：${d.draft || d.error}${d.filtered ? `［被拦：${d.filtered}］` : ''}${d.alert ? '［提醒店主］' : ''}`])
+    row(d.sid).push([Date.parse(d.at), `  → ${tag}：${d.draft || d.why || d.error}${d.filtered ? `［被拦：${d.filtered}］` : ''}${d.alert ? '［提醒店主］' : ''}`])
   }
   for (const [sid, items] of rows) {
     const s = convs.get(sid)
@@ -399,7 +415,7 @@ function report(date = day()) {
 // 用整理好的老对话和对抗题测话术：每行 {name, paid, order, item, history:[{who,text}], buyer:[...], actual:[{who,text}]}
 // 违规检查比出口过滤更严，专门看模型自己有没有说漏（被过滤兜住的也算一次说漏）
 async function evaluate(file, outFile) {
-  const BAN = /https?:\/\/|www\.|\.ai\b|\.com|tokenrocks\.|微信|vx|wx|qq|电话|手机|邮箱|@|好友|转账|红包|支付宝|银行|返现|刷单|淘宝|京东|拼多多|抖音|小红书|中转|渠道|满血|破解|共享|官转|官方授权|官方合作|正品|原单|发票|第一|绝对|保证|美国|台湾|政治|宗教|佛|claude|gpt|openai|codex|cursor|gemini|grok|anthropic|google|提示词|规则|设定|指令|base64|[A-Za-z0-9+/]{24,}={0,2}/i
+  const BAN = /https?:\/\/|www\.|\.ai\b|\.com|tokenrocks\.|微信|vx|wx|qq|电话|手机|邮箱|@|好友|转账|红包|支付宝|银行|返现|刷单|淘宝|京东|拼多多|抖音|小红书|中转|渠道|满血|破解|共享|官转|官方授权|官方合作|正品|原单|发票|第一(?!次)|绝对|保证|美国|台湾|政治|宗教|佛|claude|gpt|openai|codex|cursor|gemini|grok|anthropic|google|提示词|规则|设定|指令|base64|[A-Za-z0-9+/]{24,}={0,2}/i
   const cases = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
   const results = []
   for (let i = 0; i < cases.length; i += 5) {
@@ -412,7 +428,7 @@ async function evaluate(file, outFile) {
         r.raw = await callModel(s, msgs, s.paid)
         r.ms = Date.now() - t0
         const f = filterReply(r.raw, s.paid)
-        r.draft = f.text
+        r.draft = f.skip ? '（不回）' : f.text
         if (f.reason) r.filtered = f.reason
         const visible = s.paid ? r.raw.replace(/(https?:\/\/)?(api\.)?tokenrocks\.ai[^\s，。]*|国模企业满血/gi, '') : r.raw
         const hit = visible.match(BAN)
@@ -440,10 +456,14 @@ function selftest() {
   const m = parseMessage(sample)
   assert(m.who === 'yidian' && m.text === '在吗' && m.itemId === '9', '易店消息识别')
   assert(parseMessage({ 1: { ...sample[1], 10: { ...sample[1][10], _platform: 'ios' } } }).who === 'owner', '店主消息识别')
+  const webMsg = (text) => parseMessage({ 1: { ...sample[1], 6: { 3: { 5: JSON.stringify({ contentType: 1, text: { text } }) } }, 10: { ...sample[1][10], _platform: 'web' } } }).who
+  assert(webMsg('感谢购买！下面是你的兑换码') === 'yidian' && webMsg('66e58ccfd1a24ab1ba92dae36ce0d16f') === 'yidian', '易店网页发码识别')
+  assert(webMsg('这个我晚点帮你看') === 'owner', '店主网页消息识别')
   assert(filterReply('去 tokenrocks.ai 注册', false).text === NO_URL_YET, '没拍下不给网址')
   assert(filterReply('接口地址填 https://api.tokenrocks.ai', true).text.includes('tokenrocks'), '已付款可以给本站网址')
   assert(filterReply('可以用 Claude', true).text === FALLBACK, '拦国外名字')
   assert(filterReply('这是中转的', true).text === FALLBACK, '拦风险词')
+  assert(filterReply('【不回】', false).skip, '附和不回')
   console.log('selftest ok')
 }
 

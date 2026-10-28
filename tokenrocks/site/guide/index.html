@@ -153,16 +153,16 @@
 
     <section id="tiers" aria-labelledby="tiers-title">
       <h2 id="tiers-title">选择线路</h2>
-      <p>API 密钥的分组决定走哪条线路、按什么折扣计费。价格都是相对官方价打折，每个模型的具体价格见<a href="/pricing">模型与价格</a>（划线价就是官方价）。</p>
+      <p>API 密钥的分组决定走哪条线路、按什么折扣计费。价格都是相对官方价打折，<b>同一个分组里不同模型的折扣可能不同</b>，每个模型的具体价格见<a href="/pricing">模型与价格</a>（划线价就是官方价）。</p>
       <div class="table-wrap">
         <table class="doc-table">
           <thead><tr><th scope="col">分组</th><th scope="col">包含模型</th><th scope="col">价格</th><th scope="col">适合</th></tr></thead>
           <tbody>
             <tr><td><b>auto（自动）</b></td><td>全部</td><td>按实际走的分组计费</td><td>不知道选什么就用它，按模型自动选最便宜的可用分组</td></tr>
-            <tr><td>国模特价</td><td>DeepSeek、Qwen</td><td>0.5 折</td><td>日常使用、批量任务，性价比最高</td></tr>
-            <tr><td>国模企业满血</td><td>DeepSeek</td><td>3 折</td><td>对稳定性和效果要求高的生产场景</td></tr>
-            <tr><td>国外特价</td><td>Claude、GPT</td><td>Claude 0.6 折，GPT 0.5 折</td><td>个人开发、编码助手，性价比优先</td></tr>
-            <tr><td>国外企业满血</td><td>Claude、GPT</td><td>Claude 3 折，GPT 1.2 折</td><td>团队与生产环境，稳定优先</td></tr>
+            <tr><td>国模特价</td><td>DeepSeek、Qwen、GLM、Kimi</td><td>DeepSeek、Qwen、GLM 0.5 折，GLM Flash 1 折，Kimi 1.5 折</td><td>日常使用、批量任务，性价比最高</td></tr>
+            <tr><td>国模企业满血</td><td>DeepSeek、GLM、Kimi</td><td>3 折</td><td>对稳定性和效果要求高的生产场景</td></tr>
+            <tr><td>国外特价</td><td>Claude、GPT、Grok</td><td>Claude、Grok 0.6 折，GPT 0.5 折</td><td>个人开发、编码助手，性价比优先</td></tr>
+            <tr><td>国外企业满血</td><td>Claude、GPT、Grok</td><td>Claude 3 折，GPT、Grok 1.2 折</td><td>团队与生产环境，稳定优先</td></tr>
             <tr><td>生图</td><td>GPT Image、Nano Banana</td><td>按张计费</td><td>图片生成与改图</td></tr>
           </tbody>
         </table>

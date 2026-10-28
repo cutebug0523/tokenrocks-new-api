@@ -1,0 +1,17 @@
+[Unit]
+Description=闲鱼客服影子模式（只读消息、写回复草稿，不发消息）
+Requires=xycs-xvfb.service
+After=xycs-xvfb.service network-online.target
+
+[Service]
+User=xycs
+Environment=HOME=/opt/xianyu-cs
+Environment=DISPLAY=:99
+Environment=XYCS_DIR=/opt/xianyu-cs
+ExecStart=/usr/bin/node /opt/xianyu-cs/app/bridge.mjs
+Restart=always
+RestartSec=10
+MemoryMax=1500M
+
+[Install]
+WantedBy=multi-user.target

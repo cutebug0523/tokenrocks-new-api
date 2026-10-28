@@ -365,7 +365,12 @@ async function sendText(sid, buyerId, text) {
     acks.delete(mid)
     throw new Error(`发送失败：${r}`)
   }
-  return ack
+  const res = await ack
+  // 自己发的消息服务端不会再推回这个页面（10-29 实测），确认成功后直接记进日志和档案
+  if (res.code === 200 && res.body?.messageId) {
+    onMessage({ id: res.body.messageId, sid, ts: res.body.createAt || Date.now(), who: 'bot', platform: 'web', sender: MY_ID, nick: '', contentType: 1, text, itemId: '', order: '' }, false)
+  }
+  return res
 }
 
 function takeBotEcho(sid, text) {
@@ -613,6 +618,20 @@ async function runBrowser() {
     if (loggedIn && tick++ % 10 === 0) {
       const { cookies } = await send('Storage.getCookies')
       fs.writeFileSync(cookieFile, JSON.stringify(cookies), { mode: 0o600 })
+    }
+    // 手动发一条：root 往 $XYCS_DIR/ctl/send.json 写 {sid, buyerId, text}，这里发出去，结果写到 data/ctl-result.json
+    const ctl = path.join(DIR, 'ctl', 'send.json')
+    if (loggedIn && fs.existsSync(ctl)) {
+      let result
+      try {
+        const c = JSON.parse(fs.readFileSync(ctl, 'utf8'))
+        fs.unlinkSync(ctl)
+        result = { at: new Date().toISOString(), ...c, ...(await sendText(String(c.sid), String(c.buyerId), String(c.text))) }
+      } catch (err) {
+        result = { at: new Date().toISOString(), error: String(err.message || err) }
+      }
+      fs.writeFileSync(path.join(DATA, 'ctl-result.json'), JSON.stringify(result))
+      log('手动发送', JSON.stringify(result).slice(0, 160))
     }
     const quiet = Date.now() - lastFrameAt
     if (!loggedIn && Date.now() - startedAt > 45000) {

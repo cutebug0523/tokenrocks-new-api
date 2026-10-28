@@ -9,8 +9,8 @@
 - 密钥：$XGJ_DIR/app.json（{"app_key","app_secret"}，权限 600）
 - 自检：python3 server.py --selftest
 - 另有 /xgj/tr/lookup：给杭州的闲鱼客服按兑换码只读查 TR（兑没兑、余额、用量）。请求要带 X-Xycs-Ts 和
-  X-Xycs-Sign = hmac_sha256(密钥, "时间戳.body")，密钥在 $XGJ_DIR/xycs_secret（600）。数据来自 root 的
-  定时任务 /usr/local/bin/tr-codes-dump 每 2 分钟导出的 data/tr-codes.json；这里只验签、按码取数，碰不到数据库。
+  X-Xycs-Sign = hmac_sha256(密钥, "时间戳.body")，密钥在 $XGJ_DIR/xycs_secret（600）。真正的查询由
+  /usr/local/bin/tr-buyer-lookup 做（sudo 只放行这一个脚本），这里只验签、校验兑换码格式、转发结果。
 只用标准库。日志不打印密钥。
 """
 import hashlib
@@ -18,6 +18,7 @@ import hmac
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -126,14 +127,11 @@ class Handler(BaseHTTPRequestHandler):
             codes = None
         if not (isinstance(codes, list) and 1 <= len(codes) <= 10 and all(isinstance(c, str) and re.fullmatch(r"[0-9a-f]{32}", c) for c in codes)):
             return self._reply(400, {"result": "fail", "msg": "codes 要是 1～10 个 32 位兑换码"})
-        try:
-            with open(os.path.join(DIR, "data", "tr-codes.json")) as f:
-                dump = json.load(f)
-        except (OSError, ValueError):
-            return self._reply(503, {"result": "fail", "msg": "还没有导出数据"})
-        wanted = set(codes)
-        rows = [r for r in dump["rows"] if r["key"] in wanted]
-        self._reply(200, {"result": "success", "as_of": dump["as_of"], "rows": rows})
+        r = subprocess.run(["sudo", "-n", "/usr/local/bin/tr-buyer-lookup", *codes], capture_output=True, text=True, timeout=15)
+        if r.returncode != 0:
+            sys.stdout.write(f"tr lookup failed: {r.stderr.strip()[:200]}\n")
+            return self._reply(502, {"result": "fail", "msg": "查询失败"})
+        self._reply(200, {"result": "success", "rows": json.loads(r.stdout)})
 
     def log_message(self, fmt, *args):
         sys.stdout.write(f"{datetime.now(CST):%m-%d %H:%M:%S} {self.headers.get('X-Real-IP') or self.client_address[0]} {fmt % args}\n")

@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
-"""把闲鱼兑换码的兑换和用量情况导出成文件，给闲鱼客服（杭州 xycs）经 xgj 的 /xgj/tr/lookup 按码读取。
+"""按兑换码只读查 TR：兑没兑、兑到哪个用户、余额和用量。闲鱼客服（杭州 xycs）经 xgj 的 /xgj/tr/lookup 调用。
 
-装在香港 /usr/local/bin/tr-codes-dump（root，755），/etc/cron.d/tr-codes-dump 每 2 分钟跑一次。
-不收任何外部输入：只导名字以「闲鱼」开头的兑换码，SQL 固定，在只读事务里跑。
-结果原子写到 /opt/xgj/data/tr-codes.json（归 xgj，640）：{"as_of": 时间戳, "rows": [...]}。
+装在香港 /usr/local/bin/tr-buyer-lookup（root，755）。xgj 用户通过 /etc/sudoers.d/xgj-tr-lookup 只能 sudo 执行这一个脚本
+（店主 10-28 授权）。只接受 1～10 个 32 位小写十六进制兑换码，SQL 是固定的，在只读事务里跑，写不了任何东西。
+用法：tr-buyer-lookup <码> [<码>...]，输出 JSON 数组。
 """
-import json
-import os
+import re
 import subprocess
 import sys
-import time
 
-OUT = "/opt/xgj/data/tr-codes.json"
 YUAN = 71428.571  # 额度 / 元（500000 额度 = 1 美元，汇率按 7）
+
+codes = sys.argv[1:]
+if not 1 <= len(codes) <= 10 or not all(re.fullmatch(r"[0-9a-f]{32}", c) for c in codes):
+    sys.exit("codes must be 1-10 lowercase 32-hex redemption codes")
 
 recent = "l.user_id = u.id AND l.created_at > extract(epoch FROM now())::bigint"
 sql = f"""
 BEGIN READ ONLY;
-SELECT coalesce(json_agg(x), '[]') FROM (
+SELECT coalesce(jsonb_agg(x), '[]'::jsonb) FROM (  -- jsonb 输出是单行，json_agg 多行时会带换行
   SELECT r.key, r.status,
     to_char(to_timestamp(nullif(r.redeemed_time, 0)) AT TIME ZONE 'Asia/Shanghai', 'MM-DD HH24:MI') AS redeemed_at,
     u.username, round(u.quota / {YUAN}, 2) AS balance_yuan, round(u.used_quota / {YUAN}, 2) AS used_yuan, u.request_count,
@@ -25,21 +26,15 @@ SELECT coalesce(json_agg(x), '[]') FROM (
     (SELECT count(*) FROM logs l WHERE {recent} - 86400 AND l.type = 5) AS errors_24h,
     (SELECT string_agg(DISTINCT l.model_name, ',') FROM logs l WHERE {recent} - 7 * 86400 AND l.type = 2) AS models_7d
   FROM redemptions r LEFT JOIN users u ON u.id = r.used_user_id
-  WHERE r.name LIKE '闲鱼%'
+  WHERE r.key IN ({",".join(f"'{c}'" for c in codes)})
 ) x;
 COMMIT;
 """
 r = subprocess.run(
     ["docker", "compose", "exec", "-T", "postgres", "psql", "-U", "root", "-d", "new-api", "-At", "-v", "ON_ERROR_STOP=1"],
-    input=sql, cwd="/opt/new-api", capture_output=True, text=True, timeout=30,
+    input=sql, cwd="/opt/new-api", capture_output=True, text=True, timeout=10,
 )
 rows = next((line for line in r.stdout.splitlines() if line.startswith("[")), None)
 if r.returncode != 0 or rows is None:
     sys.exit(f"query failed: {r.stderr.strip()[:200]}")
-tmp = OUT + ".tmp"
-with open(tmp, "w") as f:
-    json.dump({"as_of": int(time.time()), "rows": json.loads(rows)}, f, ensure_ascii=False)
-xgj = __import__("pwd").getpwnam("xgj")
-os.chown(tmp, xgj.pw_uid, xgj.pw_gid)
-os.chmod(tmp, 0o640)
-os.replace(tmp, OUT)
+print(rows)

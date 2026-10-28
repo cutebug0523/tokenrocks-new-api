@@ -341,7 +341,8 @@ function buyerContext(b, s, mine, msgs, paid, tr) {
   const gap = prev && msgs[0].ts - prev.ts > GAP_MS ? `（离上一条已经隔了 ${span(msgs[0].ts - prev.ts)}）\n` : ''
   return `【这个买家的档案】\n${facts.map((f) => `- ${f}`).join('\n')}\n\n` +
     (lines.length ? `【最近的聊天记录】（北京时间）\n${lines.join('\n')}\n\n` : '') +
-    `【买家刚发的】\n${gap}${msgs.map((m) => `${clock(m.ts)} ${m.text}`).join('\n')}`
+    `【买家刚发的】\n${gap}${msgs.map((m) => `${clock(m.ts)} ${m.text}`).join('\n')}\n\n` +
+    '请直接写发给这位买家的回复（或者只输出【不回】）。'
 }
 
 async function chat(system, user) {

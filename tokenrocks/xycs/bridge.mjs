@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // 闲鱼客服影子模式：开一个 Chrome 停在闲鱼网页版消息页，只读它收到的消息推送，
-// 给买家消息生成回复草稿写进日志。不往闲鱼发任何消息（这个文件里没有发送的代码）。
+// 给买家消息生成回复草稿写进日志。默认只出草稿不发；XYCS_MODE=live 才用页面已登录的连接把草稿发出去（见 sendText）。
 //
 // 服务器上：/opt/xianyu-cs，systemd 服务 xycs，虚拟屏幕由 xycs-xvfb 提供（:99）。
 //   node bridge.mjs                  常驻运行；没登录时每 30 秒把页面截图到 data/login.png，店主扫码
 //   node bridge.mjs replay <jsonl>   用抓包文件回放（本地测试，不开浏览器）
 //   node bridge.mjs report [日期]    按会话列出：买家消息、草稿、易店和店主的实际回复
 //   node bridge.mjs eval <cases.jsonl> [结果.jsonl]   用老对话和对抗题测话术
+//   node bridge.mjs stats [起始日期]  问过的人下单率，按回复风格 A/B、店主回过、只有易店回分开算
 //   node bridge.mjs selftest
 // 只用 Node 自带模块。浏览器用 --remote-debugging-pipe 控制，不开调试端口。
 //
@@ -27,6 +28,18 @@ const API = process.env.XYCS_API || 'https://api.tokenrocks.ai/v1/chat/completio
 const MODEL = process.env.XYCS_MODEL || 'deepseek-v4.1-flash'
 const EFFORT = process.env.XYCS_EFFORT || 'low'
 const DEBOUNCE_MS = Number(process.env.XYCS_DEBOUNCE_MS ?? 6000) // 买家常连发几条，停 6 秒再出草稿
+// 上线发消息：XYCS_MODE=live 才真发；XYCS_LIVE_ONLY 填买家 ID（逗号分隔）时只对这些人真发；
+// $XYCS_DIR/PAUSE 文件存在就全部停发（急停）；每天最多发 MAX_SENDS 条
+const LIVE = process.env.XYCS_MODE === 'live'
+const LIVE_ONLY = new Set((process.env.XYCS_LIVE_ONLY || '').split(',').map((x) => x.trim()).filter(Boolean))
+const MAX_SENDS = Number(process.env.XYCS_MAX_SENDS_PER_DAY || 300)
+const TEST_BUYERS = new Set((process.env.XYCS_TEST_BUYERS || '2117568250').split(',')) // 店主员工的测试号，统计时剔除
+// A/B：按会话 ID 末位单双分两种回复风格，看问过的人下单率差多少（10-29 店主要验证：是回得不好，还是问的人本来就难成交）
+const STYLE = {
+  A: '【回复风格】越短越好，一句话说完，不展开解释，不主动给保证。买家犹豫、要你保证什么，就说 1 块钱先试，不好用退了就是。',
+  B: '【回复风格】认真回答买家问的每一点，给出具体信息，但仍然最多两句话、60 个字以内。',
+}
+const styleOf = (sid) => (Number(String(sid).slice(-1)) % 2 === 0 ? 'A' : 'B')
 const TAKEOVER_MS = 30 * 60 * 1000 // 店主 30 分钟内亲自回过，这个买家不插话
 const RECENT = 16 // 给模型看的最近聊天条数，更早的靠总结
 const SUMMARIZE_AT = 30 // 最近之外还没总结的超过这么多条，就更新一次总结
@@ -52,7 +65,11 @@ const convs = new Map() // sid → 会话（买家 + 商品）
 const buyers = new Map() // 买家 ID → 档案（用到时才从文件读）
 const dirty = new Set()
 const trCache = new Map()
-const SPEAKER = { buyer: '买家', owner: '店主本人', yidian: '之前的自动回复' }
+const SPEAKER = { buyer: '买家', owner: '店主本人', yidian: '之前的自动回复', bot: '你之前回的' }
+const botSent = new Map() // sid → 刚发出去的文字，推送回来时认出是自己发的，不当成店主接手
+const acks = new Map() // 发送请求的 mid → 等服务端确认
+let sendFrame = null // 页面连上后才有：用页面自己的连接发一帧
+let sentCount = { day: '', n: 0 }
 const seen = new Set()
 let loggedIn = false
 let lastFrameAt = 0
@@ -211,6 +228,10 @@ function onFrame(data, { replay = false } = {}) {
     return
   }
   lastFrameAt = Date.now()
+  if (d.headers?.mid && acks.has(d.headers.mid)) {
+    acks.get(d.headers.mid)({ code: d.code, body: d.body })
+    acks.delete(d.headers.mid)
+  }
   if (d.headers?.['reg-uid'] || d.lwp?.startsWith('/s/')) loggedIn = true
   for (const { conv: c, last } of collectConvs(d.body)) {
     const s = conv(String(c.cid).split('@')[0])
@@ -236,6 +257,7 @@ function onMessage(m, replay, { draftIt = true } = {}) {
   if (!m.sid || seen.has(m.id)) return
   seen.add(m.id)
   if (seen.size > 20000) seen.clear()
+  if (m.sender === MY_ID && takeBotEcho(m.sid, m.text)) m.who = 'bot'
   if (draftIt) append('events', m)
   const s = conv(m.sid)
   if (m.who === 'buyer') setBuyer(s, m.sender)
@@ -262,7 +284,7 @@ async function draft(s) {
   const paid = mine.some(isPaid) // 在别的商品下买过也算老客户
   const rec = {
     at: new Date().toISOString(), sid: s.sid, buyerId: b.id, nick: msgs[0].nick, item: s.itemTitle || s.itemId, orderId: s.orderId,
-    order: s.order || '-', paid, buyer: msgs.map((m) => m.text), wouldSend: true,
+    order: s.order || '-', paid, buyer: msgs.map((m) => m.text), wouldSend: true, style: styleOf(s.sid),
   }
   if (b.ownerAt && msgs[0].ts - b.ownerAt < TAKEOVER_MS) {
     rec.wouldSend = false
@@ -277,7 +299,7 @@ async function draft(s) {
   }
   const t0 = Date.now()
   try {
-    rec.raw = await chat(PROMPT, buyerContext(b, s, mine, msgs, paid, tr))
+    rec.raw = await chat(`${PROMPT}\n\n${STYLE[rec.style]}`, buyerContext(b, s, mine, msgs, paid, tr))
     const f = filterReply(rec.raw, paid)
     rec.draft = f.text
     if (f.reason) rec.filtered = f.reason
@@ -289,9 +311,69 @@ async function draft(s) {
     rec.error = String(err.message || err).slice(0, 200)
   }
   rec.ms = Date.now() - t0
+  if (LIVE && (!LIVE_ONLY.size || LIVE_ONLY.has(b.id)) && rec.wouldSend && rec.draft && !rec.error) await deliver(rec, s, b, msgs)
   append('drafts', rec)
   log('草稿', rec.nick, msgs.map((m) => m.text).join(' / ').slice(0, 40), '→', rec.draft || rec.why || rec.error)
   maybeSummarize(b).catch((err) => log('更新总结失败', err.message))
+}
+
+async function deliver(rec, s, b, msgs) {
+  if (sentCount.day !== day()) sentCount = { day: day(), n: 0 }
+  if (fs.existsSync(path.join(DIR, 'PAUSE'))) rec.sendSkip = '急停中'
+  else if (b.ownerAt >= msgs[0].ts) rec.sendSkip = '出草稿期间店主亲自回了'
+  else if (sentCount.n >= MAX_SENDS) rec.sendSkip = '今天发送数到上限'
+  if (rec.sendSkip) return
+  try {
+    const ack = await sendText(s.sid, b.id, rec.draft)
+    rec.sent = ack.code === 200
+    rec.ack = ack.code
+    if (rec.sent) sentCount.n++
+  } catch (err) {
+    rec.sent = false
+    rec.sendError = String(err.message || err).slice(0, 160)
+  }
+}
+
+// 用页面已经登录的那条连接发一条文字，等服务端确认。格式和开源项目 XianyuAutoAgent 的 send_msg 一样
+async function sendText(sid, buyerId, text) {
+  if (!sendFrame) throw new Error('页面还没连上')
+  const mid = `${Math.floor(Math.random() * 1000)}${Date.now()} 0`
+  const data = Buffer.from(JSON.stringify({ contentType: 1, text: { text } })).toString('base64')
+  const frame = JSON.stringify({
+    lwp: '/r/MessageSend/sendByReceiverScope',
+    headers: { mid },
+    body: [
+      {
+        uuid: `-${Date.now()}1`, cid: `${sid}@goofish`, conversationType: 1,
+        content: { contentType: 101, custom: { type: 1, data } },
+        redPointPolicy: 0, extension: { extJson: '{}' }, ctx: { appVersion: '1.0', platform: 'web' }, mtags: {}, msgReadStatusSetting: 1,
+      },
+      { actualReceivers: [`${buyerId}@goofish`, `${MY_ID}@goofish`] },
+    ],
+  })
+  const ack = new Promise((resolve) => {
+    acks.set(mid, resolve)
+    setTimeout(() => {
+      if (acks.delete(mid)) resolve({ code: 'timeout' })
+    }, 15000)
+  })
+  const mine = botSent.get(sid) || []
+  mine.push({ text: text.trim(), at: Date.now() })
+  botSent.set(sid, mine.slice(-5))
+  const r = await sendFrame(frame)
+  if (r !== 'ok') {
+    acks.delete(mid)
+    throw new Error(`发送失败：${r}`)
+  }
+  return ack
+}
+
+function takeBotEcho(sid, text) {
+  const mine = botSent.get(sid) || []
+  const at = mine.findIndex((x) => x.text === text.trim() && Date.now() - x.at < 180000)
+  if (at < 0) return false
+  mine.splice(at, 1)
+  return true
 }
 
 function clock(ts) {
@@ -442,7 +524,7 @@ function loadState() {
     for (const line of fs.readFileSync(path.join(DATA, f), 'utf8').split('\n')) {
       if (!line) continue
       const m = JSON.parse(line)
-      m.who = whoOf(m.sender, m.platform, m.text) // 旧日志可能是按旧规则标的，按现在的规则重新判断
+      if (m.who !== 'bot') m.who = whoOf(m.sender, m.platform, m.text) // 旧日志可能是按旧规则标的，按现在的规则重新判断
       onMessage(m, true, { draftIt: false })
     }
   }
@@ -509,6 +591,21 @@ async function runBrowser() {
   const { sessionId } = await send('Target.attachToTarget', { targetId: page.targetId, flatten: true })
   await send('Network.enable', {}, sessionId)
   await send('Page.enable', {}, sessionId)
+  // 不改页面、不另建连接：在页面的对象里找到已经连上的闲鱼消息 WebSocket，用它发
+  sendFrame = async (frame) => {
+    const { result: proto } = await send('Runtime.evaluate', { expression: 'WebSocket.prototype' }, sessionId)
+    const { objects } = await send('Runtime.queryObjects', { prototypeObjectId: proto.objectId }, sessionId)
+    try {
+      const { result } = await send('Runtime.callFunctionOn', {
+        objectId: objects.objectId, returnByValue: true, arguments: [{ value: frame }],
+        functionDeclaration: 'function (f) { const ws = this.find((w) => String(w.url).includes("wss-goofish") && w.readyState === 1); if (!ws) return "no-ws"; ws.send(f); return "ok" }',
+      }, sessionId)
+      return result.value
+    } finally {
+      send('Runtime.releaseObject', { objectId: objects.objectId }, sessionId).catch(() => {})
+      send('Runtime.releaseObject', { objectId: proto.objectId }, sessionId).catch(() => {})
+    }
+  }
   await send('Page.navigate', { url: IM_URL }, sessionId)
   log('已打开', IM_URL)
   let tick = 0
@@ -552,10 +649,10 @@ function report(date = day()) {
   }
   const rows = new Map()
   const row = (sid) => rows.get(sid) || rows.set(sid, []).get(sid)
-  const label = { buyer: '买家', yidian: '易店', owner: '店主' }
+  const label = { buyer: '买家', yidian: '易店', owner: '店主', bot: '机器人' }
   for (const e of read('events')) row(e.sid).push([e.ts, `${label[e.who]}：${e.text}`])
   for (const d of read('drafts')) {
-    const tag = d.wouldSend ? '草稿' : '草稿（不发）'
+    const tag = d.sent ? `已发·${d.style}` : d.sendSkip || d.sendError ? `没发（${d.sendSkip || d.sendError}）` : d.wouldSend ? `草稿·${d.style}` : '草稿（不发）'
     row(d.sid).push([Date.parse(d.at), `  → ${tag}：${d.draft || d.why || d.error}${d.filtered ? `［被拦：${d.filtered}］` : ''}${d.alert ? '［提醒店主］' : ''}`])
   }
   for (const [sid, items] of rows) {
@@ -564,6 +661,47 @@ function report(date = day()) {
     console.log(`\n== ${b?.nicks.join('、') || sid}（${s?.buyerId || '买家未知'}）｜${s?.itemTitle || ''}｜${isPaid(s || {}) ? '已付款' : s?.order || '没拍下'}`)
     for (const [ts, text] of items.sort((a, b) => a[0] - b[0])) console.log(day(ts).slice(5), new Date(ts + 8 * 3600 * 1000).toISOString().slice(11, 19), text)
   }
+}
+
+// 问过的人下单率：每个会话看下单前买家有没有发过文字、谁回过，分组算下单率。测试号剔除
+function stats(from = '0000-00-00') {
+  const conv = new Map()
+  for (const f of fs.readdirSync(DATA).filter((x) => /^events-.*\.jsonl$/.test(x) && x.slice(7, 17) >= from).sort()) {
+    for (const line of fs.readFileSync(path.join(DATA, f), 'utf8').split('\n')) {
+      if (!line) continue
+      const e = JSON.parse(line)
+      if (!conv.has(e.sid)) conv.set(e.sid, [])
+      conv.get(e.sid).push(e)
+    }
+  }
+  const groups = { 机器人回过·A: [], 机器人回过·B: [], 店主回过: [], 只有易店回: [] }
+  let silent = 0
+  let silentRefund = 0
+  for (const [sid, es] of conv) {
+    es.sort((a, b) => a.ts - b.ts)
+    const buyerId = es.find((e) => e.who === 'buyer')?.sender
+    if (!buyerId || TEST_BUYERS.has(buyerId)) continue
+    const orderAt = es.find((e) => e.who === 'buyer' && e.text.includes('我已拍下'))?.ts ?? Infinity
+    const before = es.filter((e) => e.ts < orderAt)
+    const asked = before.some((e) => e.who === 'buyer' && e.contentType === 1)
+    const paid = es.some((e) => e.who === 'buyer' && e.text.includes('我已付款'))
+    const refund = es.some((e) => e.text.includes('退款成功'))
+    if (!asked) {
+      if (paid) silent++
+      if (paid && refund) silentRefund++
+      continue
+    }
+    let key = '只有易店回'
+    if (before.some((e) => e.who === 'owner')) key = '店主回过'
+    else if (before.some((e) => e.who === 'bot')) key = `机器人回过·${styleOf(sid)}`
+    groups[key].push({ paid, refund })
+  }
+  console.log(`统计范围：${from} 起`)
+  for (const [k, v] of Object.entries(groups)) {
+    const n = v.filter((x) => x.paid).length
+    console.log(`${k.padEnd(8)} 问过 ${String(v.length).padStart(3)} 人，下单 ${String(n).padStart(3)}（${v.length ? Math.round((n / v.length) * 100) : 0}%），退款 ${v.filter((x) => x.refund).length}`)
+  }
+  console.log(`没问直接拍 ${silent} 单，其中退款 ${silentRefund}`)
 }
 
 // 用整理好的老对话和对抗题测话术：每行 {name, paid, order, item, history:[{who,text,ago?}], buyer:[...], actual:[{who,text}], tr?:[...]}
@@ -624,6 +762,9 @@ function selftest() {
   assert(filterReply('可以用 Claude', true).text === FALLBACK, '拦国外名字')
   assert(filterReply('这是中转的', true).text === FALLBACK, '拦风险词')
   assert(filterReply('【不回】', false).skip, '附和不回')
+  botSent.set('s9', [{ text: '在的～', at: Date.now() }])
+  assert(takeBotEcho('s9', ' 在的～ ') && !takeBotEcho('s9', '在的～'), '认出机器人自己发的，只认一次')
+  assert(styleOf('68566585316') === 'A' && styleOf('68452500763') === 'B', '按会话 ID 单双分风格')
   assert(filterReply('你的码是 66e58ccfd1a24ab1ba92dae36ce0d16f', true).text === FALLBACK, '不复述兑换码')
   // 档案：同一个买家两个商品的会话合到一份，店主消息算这个买家的接手时间，时间线带隔了多久
   const b = { id: 't1', nicks: ['甲'], firstSeen: 0, lastSeen: 0, ownerAt: 0, codes: [], summary: '', summarizedUpTo: 0, timeline: [] }
@@ -638,9 +779,10 @@ function selftest() {
 }
 
 const [cmd, arg] = process.argv.slice(2)
-if (!['selftest', 'eval'].includes(cmd)) loadState()
+if (!['selftest', 'eval', 'stats'].includes(cmd)) loadState()
 if (cmd === 'selftest') selftest()
 else if (cmd === 'replay') await replay(arg)
 else if (cmd === 'eval') await evaluate(arg, process.argv[4])
 else if (cmd === 'report') report(arg)
+else if (cmd === 'stats') stats(arg)
 else await runBrowser()

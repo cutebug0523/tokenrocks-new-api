@@ -80,14 +80,17 @@ type GroupRatioBadgeProps = {
 export function GroupRatioBadge(props: GroupRatioBadgeProps) {
   const { t } = useTranslation()
 
-  if (props.ratio === undefined || props.ratio === null || props.ratio === '') {
+  // TokenRocks: a group's ratio is only its default. Per-model overrides
+  // (group_model_ratio) price some models in the same group higher, so a
+  // "0.05x" next to the group reads as a discount every model gets. Only the
+  // auto group's label is shown; the group description names each discount.
+  if (typeof props.ratio !== 'string' || props.ratio === '') {
     return null
   }
 
   return (
     <GroupMultiplierBadge
-      ratio={typeof props.ratio === 'number' ? props.ratio : undefined}
-      label={typeof props.ratio === 'number' ? undefined : t('Auto')}
+      label={t('Auto')}
       className={cn(
         props.isAuto &&
           'overflow-visible rounded-md border-primary/30 bg-primary/10 text-primary'

@@ -43,9 +43,8 @@ export function ApiKeyGroupCell(props: ApiKeyGroupCellProps) {
   const isMobile = useMediaQuery('(max-width: 640px)')
 
   const group = props.group?.trim() || ''
+  // TokenRocks: no group ratio here, see GroupRatioBadge.
   if (group !== 'auto') {
-    const ratio =
-      group && typeof props.ratio === 'number' ? props.ratio : undefined
     return (
       <TruncatedCell
         className={isMobile ? 'w-full' : 'max-w-50'}
@@ -55,7 +54,6 @@ export function ApiKeyGroupCell(props: ApiKeyGroupCellProps) {
       >
         <GroupBadge
           group={group}
-          ratio={ratio}
           ratioLabel={group ? undefined : t('Inherited')}
           type='text'
           className='px-0'

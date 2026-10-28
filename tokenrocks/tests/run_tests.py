@@ -25,7 +25,7 @@ OUT = '/var/www/tokenrocks-site/_s/tests'
 KEYS_FILE = '/opt/tokenrocks-tests/keys.json'
 PROMPT = 'Generate an SVG of a pelican riding a bicycle'
 MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'gpt-6.1-sol', 'gpt-6-astra', 'grok-4.7', 'deepseek-v4.1-flash', 'qwen3.8-max',
-          'kimi-k3.1-pro', 'glm-5.3', 'glm-5.3-flash']
+          'qwen3.8-flash', 'kimi-k3.1-pro', 'glm-5.3', 'glm-5.3-flash']
 TIERS = {'value': '特价', 'enterprise': '满血'}
 MAX_ART_BYTES = 300 * 1024
 HKT = timezone(timedelta(hours=8))

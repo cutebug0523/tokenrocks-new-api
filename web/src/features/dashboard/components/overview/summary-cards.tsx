@@ -36,6 +36,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { StatCard } from '../ui/stat-card'
+import { DailyCheckinButton } from './daily-checkin-button'
 
 const SUMMARY_SPARKLINE_BUCKETS = 12
 
@@ -347,10 +348,16 @@ export function SummaryCards() {
             </div>
           </div>
 
-          <Button className='justify-between' render={<Link to='/wallet' />}>
-            <span>{t('Wallet')}</span>
-            <ArrowRight data-icon='inline-end' />
-          </Button>
+          <div className='flex flex-wrap gap-2'>
+            <DailyCheckinButton />
+            <Button
+              className='min-w-28 flex-1 justify-between'
+              render={<Link to='/wallet' />}
+            >
+              <span>{t('Wallet')}</span>
+              <ArrowRight data-icon='inline-end' />
+            </Button>
+          </div>
         </div>
       </div>
     </div>

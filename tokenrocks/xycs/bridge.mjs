@@ -53,7 +53,7 @@ const PAID_STATES = ['等待卖家发货', '等待买家收货', '交易成功',
 // 易店的自动回复走 weChat，发码却走 web（10-28 实测），web 发的要看内容是不是易店的固定文案
 const YIDIAN_TEXT = /^(感谢购买！|[0-9a-f]{32}$|3 步用起来|使用步骤|你好～这是国产大模型|这个问题我记下了|拍1元得1元|好的，有需要随时问我|不会用或者有问题直接问我就行)/
 // 提醒店主：投诉退款类要及时处理，进货代理类是要亲自聊的大客户
-const ALERT = /退款|退钱|用不了|不能用|卡死|卡住|报错|骗|差评|投诉|举报|进货|代理|批发|分销|对接|渠道商|大量|长期合作/
+const ALERT = /退款|退钱|用不了|不能用|卡死|卡住|报错|骗|差评|投诉|举报|进货|代理|批发|分销|对接|渠道商|长期合作/ // 不含「大量」：买家问「多大量」多半是问 1 块钱能跑多少
 // 出口过滤：命中就不用模型的回答。广告法类的词（最、第一）交给提示词，这里只拦会出事的
 const FOREIGN = /claude|anthropic|chatgpt|gpt|openai|codex|cursor|gemini|google|grok|xai|copilot|windsurf|cline|kiro|aider|opencode|vs ?code|llama|mistral/i
 const CONTACT = /微信|vx|wx|v信|qq|手机号|电话|邮箱|\b1[3-9]\d{9}\b/i

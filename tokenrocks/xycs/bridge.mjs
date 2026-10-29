@@ -49,6 +49,7 @@ const TR_LOOKUP = process.env.XYCS_TR_LOOKUP || 'https://tokenrocks.ai/xgj/tr/lo
 const TR_SECRET_FILE = process.env.XYCS_TR_SECRET_FILE || path.join(DIR, 'tr_lookup_secret')
 const FALLBACK = '这个问题我记下了，店主看到会尽快亲自回复你～'
 const NO_URL_YET = '拍下后兑换码和教程里会给网址和接入方式～'
+const OPENER = '在的～想了解什么直接问就行～' // 买家开口的第一句模型判了【不回】时用（比如只发了个「1」）
 const PAID_STATES = ['等待卖家发货', '等待买家收货', '交易成功', '待评价']
 // 易店的自动回复走 weChat，发码却走 web（10-28 实测），web 发的要看内容是不是易店的固定文案
 const YIDIAN_TEXT = /^(感谢购买！|[0-9a-f]{32}$|3 步用起来|使用步骤|你好～这是国产大模型|这个问题我记下了|拍1元得1元|好的，有需要随时问我|不会用或者有问题直接问我就行)/
@@ -299,23 +300,46 @@ async function draft(s) {
     rec.trError = String(err.message || err).slice(0, 120)
   }
   const t0 = Date.now()
-  try {
-    rec.raw = await chat(`${PROMPT}\n\n${STYLE[rec.style]}`, buyerContext(b, s, mine, msgs, paid, tr))
+  // 模型偶尔超时或上游维护，等一会儿再试一次；还不行就回兜底那句并提醒店主，不让买家干等
+  for (let attempt = 1; attempt <= 2 && rec.raw === undefined; attempt++) {
+    try {
+      rec.raw = await chat(`${PROMPT}\n\n${STYLE[rec.style]}`, buyerContext(b, s, mine, msgs, paid, tr))
+    } catch (err) {
+      rec.error = String(err.message || err).slice(0, 200)
+      if (attempt === 1) await new Promise((r) => setTimeout(r, 8000))
+    }
+  }
+  if (rec.raw !== undefined) {
+    delete rec.error
     const f = filterReply(rec.raw, paid)
     rec.draft = f.text
     if (f.reason) rec.filtered = f.reason
-    if (f.skip) {
+    if (f.skip && !hasReplied(b, s.sid)) {
+      rec.draft = OPENER
+      rec.filtered = '开口第一句不能不回'
+    } else if (f.skip) {
       rec.wouldSend = false
       rec.why = '买家只是附和，不用回'
     }
-  } catch (err) {
-    rec.error = String(err.message || err).slice(0, 200)
+  } else if (lastBotText(b, s.sid) !== FALLBACK) {
+    rec.draft = FALLBACK
+    rec.alert = true
   }
   rec.ms = Date.now() - t0
-  if (LIVE && (!LIVE_ONLY.size || LIVE_ONLY.has(b.id)) && rec.wouldSend && rec.draft && !rec.error) await deliver(rec, s, b, msgs)
+  if (LIVE && (!LIVE_ONLY.size || LIVE_ONLY.has(b.id)) && rec.wouldSend && rec.draft) await deliver(rec, s, b, msgs)
   append('drafts', rec)
   log('草稿', rec.nick, msgs.map((m) => m.text).join(' / ').slice(0, 40), '→', rec.draft || rec.why || rec.error)
   maybeSummarize(b).catch((err) => log('更新总结失败', err.message))
+}
+
+// 这个会话里有没有人（机器人、店主、易店）回过买家
+function hasReplied(b, sid) {
+  return b.timeline.some((h) => h.sid === sid && h.who !== 'buyer')
+}
+
+// 这个会话里机器人最近一次说的话；模型连续失败时，同一句兜底不重复发
+function lastBotText(b, sid) {
+  return b.timeline.findLast((h) => h.sid === sid && h.who === 'bot')?.text
 }
 
 async function deliver(rec, s, b, msgs) {
@@ -871,6 +895,11 @@ function selftest() {
   record(b, { id: 'a', ts: 1000, who: 'buyer', text: '在吗', sid: 's1', nick: '甲' })
   record(b, { id: 'c', ts: 3 * 86400000, who: 'owner', text: '在的', sid: 's2' })
   assert(b.timeline.length === 3 && b.codes.length === 1 && b.ownerAt === 3 * 86400000, '档案去重、记兑换码和接手时间')
+  const b2 = { id: 't2', nicks: [], firstSeen: 0, lastSeen: 0, ownerAt: 0, codes: [], summary: '', summarizedUpTo: 0, timeline: [] }
+  record(b2, { id: 'x', ts: 1, who: 'buyer', text: '1', sid: 's1' })
+  assert(!hasReplied(b2, 's1'), '买家刚开口，还没人回过')
+  record(b2, { id: 'y', ts: 2, who: 'bot', text: FALLBACK, sid: 's1' })
+  assert(hasReplied(b2, 's1') && !hasReplied(b2, 's2') && lastBotText(b2, 's1') === FALLBACK && lastBotText(b2, 's2') === undefined, '有人回过、机器人最近一句')
   // 漏斗：3 次快照，浏览差 30 扣掉后两次快照自己的 2 次；会话 q 问过再下单，会话 r 没问直接下单，窗口外的不算
   const tmp = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'xycs-'))
   const D = 86400000

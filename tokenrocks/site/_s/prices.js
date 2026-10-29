@@ -65,6 +65,22 @@
     return { input: model.model_ratio * 2, output: model.model_ratio * 2 * model.completion_ratio }
   }
 
+  // 缓存价，美元 / 百万 token：read 是缓存命中，write 是缓存写入（和输入同价时为 null，不单列）。
+  // 表达式计费取第一档的 cr、cc 系数；倍率计费是输入价乘 cache_ratio、create_cache_ratio。
+  TR.officialCachePrice = function (model) {
+    var official = TR.officialTokenPrice(model)
+    if (!official) return { read: null, write: null }
+    if (model.billing_mode === 'tiered_expr' && model.billing_expr) {
+      var cr = /\bcr\s*\*\s*([\d.]+)/.exec(model.billing_expr)
+      var cc = /\bcc\s*\*\s*([\d.]+)/.exec(model.billing_expr)
+      return { read: cr ? Number(cr[1]) : null, write: cc && Number(cc[1]) !== official.input ? Number(cc[1]) : null }
+    }
+    return {
+      read: model.cache_ratio != null ? official.input * model.cache_ratio : null,
+      write: model.create_cache_ratio != null && model.create_cache_ratio !== 1 ? official.input * model.create_cache_ratio : null
+    }
+  }
+
   // 按张计费的单价（美元），不是按张计费返回 null
   TR.officialImagePrice = function (model) {
     if (model.billing_expr) {

@@ -60,26 +60,30 @@
 
     var official = TR.officialTokenPrice(model)
     if (!official) return
-    var rows = [['官方价', official.input * TR.USD_TO_CNY, official.output * TR.USD_TO_CNY, '—']]
+    // 每列：表头、官方价（美元 / 百万 token）；缓存价没有就不列
+    var cache = TR.officialCachePrice(model)
+    var cols = [['输入', official.input], ['输出', official.output]]
+    if (cache.read != null) cols.push(['缓存命中', cache.read])
+    if (cache.write != null) cols.push(['缓存写入', cache.write])
+    var rows = [['官方价', 1, '—']]
     ;['value', 'enterprise'].forEach(function (tier) {
       var group = TR.groupForTier(model, tier)
       if (!group) return
       var ratio = TR.ratioFor(pricing, name, group)
       cards.appendChild(el('div', { class: 'card' }, [
         el('div', { class: 'card-head' }, [el('span', { text: TR.TIERS[tier].label }), el('span', { class: 'badge', text: TR.discountLabel(ratio), title: group })]),
-        el('div', { class: 'price-pair' }, [priceBlock('输入 / 百万 token', official.input, ratio), priceBlock('输出 / 百万 token', official.output, ratio)]),
+        el('div', { class: 'price-pair' }, cols.map(function (c) { return priceBlock(c[0] + ' / 百万 token', c[1], ratio) })),
         el('span', { class: 'card-note', text: TR.TIERS[tier].note + '。分组：' + group })
       ]))
-      rows.push([TR.TIERS[tier].label, official.input * TR.USD_TO_CNY * ratio, official.output * TR.USD_TO_CNY * ratio, TR.discountLabel(ratio)])
+      rows.push([TR.TIERS[tier].label, ratio, TR.discountLabel(ratio)])
     })
-    table.appendChild(el('thead', {}, [el('tr', {}, ['线路', '输入 / 百万 token', '输出 / 百万 token', '折扣'].map(function (h) { return el('th', { scope: 'col', text: h }) }))]))
+    var heads = ['线路'].concat(cols.map(function (c) { return c[0] + ' / 百万 token' }), ['折扣'])
+    table.appendChild(el('thead', {}, [el('tr', {}, heads.map(function (h) { return el('th', { scope: 'col', text: h }) }))]))
     table.appendChild(el('tbody', {}, rows.map(function (r) {
-      return el('tr', {}, [
-        el('td', { text: r[0] }),
-        el('td', { class: 'price-big', style: 'font-size: 15px;', text: TR.yuan(r[1]) }),
-        el('td', { class: 'price-big', style: 'font-size: 15px;', text: TR.yuan(r[2]) }),
-        el('td', { text: r[3] })
-      ])
+      return el('tr', {}, [el('td', { text: r[0] })].concat(
+        cols.map(function (c) { return el('td', { class: 'price-big', style: 'font-size: 15px;', text: TR.yuan(c[1] * TR.USD_TO_CNY * r[1]) }) }),
+        [el('td', { text: r[2] })]
+      ))
     })))
   }
 

@@ -28,6 +28,7 @@
         return
       }
       item.official = TR.officialTokenPrice(m)
+      item.cache = TR.officialCachePrice(m)
       if (item.official) textModels.push(item)
     })
     textModels.sort(function (a, b) {
@@ -59,6 +60,7 @@
   }
 
   function priceCell(official, ratio) {
+    if (official == null) return el('td', {}, [el('div', { class: 'num', text: '—' })])
     var cny = official * TR.USD_TO_CNY
     return el('td', {}, [
       el('div', { class: 'num', text: ratio == null ? '—' : TR.yuan(cny * ratio) }),
@@ -77,7 +79,7 @@
     var body = document.getElementById('text-rows')
     body.textContent = ''
     if (!rows.length) {
-      body.appendChild(el('tr', {}, [el('td', { colspan: '5', class: 'status', text: '没有符合条件的模型' })]))
+      body.appendChild(el('tr', {}, [el('td', { colspan: '6', class: 'status', text: '没有符合条件的模型' })]))
       return
     }
     rows.forEach(function (m) {
@@ -98,6 +100,7 @@
           el('td', { class: 'col-vendor', style: 'color: #374151; white-space: nowrap;', text: m.vendor }),
           priceCell(m.official.input, ratio),
           priceCell(m.official.output, ratio),
+          priceCell(m.cache.read, ratio),
           el('td', {}, [badge])
         ])
       )
@@ -155,6 +158,6 @@
     .catch(function () {
       var body = document.getElementById('text-rows')
       body.textContent = ''
-      body.appendChild(el('tr', {}, [el('td', { colspan: '5', class: 'status', text: '价格暂时没加载出来，请刷新重试' })]))
+      body.appendChild(el('tr', {}, [el('td', { colspan: '6', class: 'status', text: '价格暂时没加载出来，请刷新重试' })]))
     })
 })()

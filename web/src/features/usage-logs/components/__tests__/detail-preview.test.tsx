@@ -501,3 +501,45 @@ test.each(['missing schema', 'unsupported expression', 'unknown tier'])(
     )
   }
 )
+
+test.each([
+  {
+    name: 'group ratio',
+    other: { model_ratio: 1, completion_ratio: 5, group_ratio: 0.3 },
+    expected: 'Standard · $0.6 / $3/M',
+  },
+  {
+    name: 'user ratio over group ratio',
+    other: {
+      model_ratio: 1,
+      completion_ratio: 2,
+      group_ratio: 0.3,
+      user_group_ratio: 0.5,
+    },
+    expected: 'Standard · $1 / $2/M',
+  },
+  {
+    name: 'per-call group ratio',
+    other: { model_price: 0.25, group_ratio: 0.4 },
+    expected: 'Per-call · $0.1',
+  },
+])(
+  '$name: detail prices are what the request was charged',
+  ({ other, expected }) => {
+    expect(renderPreview(other, false).textContent).toBe(expected)
+  }
+)
+
+test('user details dialog shows charged prices without the group ratio row', async () => {
+  fireEvent.click(
+    renderPreview(
+      { model_ratio: 1, completion_ratio: 5, group_ratio: 0.3 },
+      false
+    )
+  )
+  const dialog = within(await screen.findByRole('dialog'))
+  expect(dialog.getByText('$0.6/M')).toBeVisible()
+  expect(dialog.getByText('$3/M')).toBeVisible()
+  expect(dialog.queryByText('$2/M')).not.toBeInTheDocument()
+  expect(dialog.queryByText('Group Ratio')).not.toBeInTheDocument()
+})

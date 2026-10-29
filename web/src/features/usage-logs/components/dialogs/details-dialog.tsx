@@ -74,6 +74,7 @@ import {
   getParamOverrideActionLabel,
   parseAuditLine,
   decodeBillingExprB64,
+  getEffectiveGroupRatio,
   getTieredBillingSummary,
   hasAnyCacheTokens,
   isViolationFeeLog,
@@ -182,7 +183,11 @@ function BillingBreakdown(props: {
   const rows: Array<{ label: string; value: string }> = []
   const priceOpts = { digitsLarge: 4, digitsSmall: 6, abbreviate: false }
   const fmtPrice = (usd: number) => formatBillingCurrencyFromUSD(usd, priceOpts)
-  const baseInputUSD = other.model_ratio != null ? other.model_ratio * 2.0 : 0
+  // Model prices are shown as charged (list price × group ratio), so users do
+  // not read the list price as what they paid. The ratio row is admin-only.
+  const groupRatio = getEffectiveGroupRatio(other)
+  const baseInputUSD =
+    other.model_ratio != null ? other.model_ratio * 2.0 * groupRatio : 0
 
   if (isTieredExpr) {
     rows.push({
@@ -199,7 +204,7 @@ function BillingBreakdown(props: {
       for (const entry of tieredSummary.priceEntries) {
         rows.push({
           label: t(entry.shortLabel),
-          value: `${fmtPrice(entry.price)}/${entry.unit ? t(entry.unit) : 'M'}`,
+          value: `${fmtPrice(entry.price * groupRatio)}/${entry.unit ? t(entry.unit) : 'M'}`,
         })
       }
     } else {
@@ -213,7 +218,7 @@ function BillingBreakdown(props: {
     if (other.model_price != null) {
       rows.push({
         label: t('Model Price'),
-        value: fmtPrice(other.model_price),
+        value: fmtPrice(other.model_price * groupRatio),
       })
     }
   } else {
@@ -235,7 +240,7 @@ function BillingBreakdown(props: {
   const userGR = other.user_group_ratio
   const isUserGR = userGR != null && Number.isFinite(userGR) && userGR !== -1
   const effectiveGR = isUserGR ? userGR : other.group_ratio
-  if (effectiveGR != null && Number.isFinite(effectiveGR)) {
+  if (isAdmin && effectiveGR != null && Number.isFinite(effectiveGR)) {
     rows.push({
       label: isUserGR ? t('User Exclusive Ratio') : t('Group Ratio'),
       value: `${formatRatio(effectiveGR)}x`,

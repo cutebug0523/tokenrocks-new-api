@@ -342,6 +342,22 @@ export function hasAnyCacheTokens(
   )
 }
 
+/**
+ * The group ratio the request was billed at: a user-specific ratio wins over
+ * the group's own. Model prices in a log are list prices; the charge is the
+ * list price times this ratio.
+ */
+export function getEffectiveGroupRatio(
+  other: LogOtherData | null | undefined
+): number {
+  const userRatio = other?.user_group_ratio
+  if (userRatio != null && userRatio !== -1 && Number.isFinite(userRatio)) {
+    return userRatio
+  }
+  const ratio = other?.group_ratio
+  return ratio != null && Number.isFinite(ratio) ? ratio : 1
+}
+
 export function getTieredBillingSummary(
   other: LogOtherData | null
 ): TieredBillingSummary | null {

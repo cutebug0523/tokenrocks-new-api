@@ -2,11 +2,14 @@ package model
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
+	relaytypes "github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -114,9 +117,32 @@ func assignDisplayLogIds(logs []*Log, startIdx int) {
 func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
+		logs[i].UpstreamRequestId = ""
+		if logs[i].Type == LogTypeError {
+			logs[i].Content = userFacingErrorContent(logs[i].Content, logs[i].Other)
+		}
 		logs[i].Other = formatLogOtherJSON(logs[i].Other, logOtherVisibilityUser)
 	}
 	assignDisplayLogIds(logs, startIdx)
+}
+
+// userFacingErrorContent shows the log owner the same fixed message the relay
+// response carried (see service.UserFacingError) instead of the upstream's
+// error text. Only errors this gateway raised itself keep their text.
+func userFacingErrorContent(content string, other string) string {
+	var meta struct {
+		ErrorType  string `json:"error_type"`
+		StatusCode int    `json:"status_code"`
+	}
+	_ = common.UnmarshalJsonStr(other, &meta)
+	if meta.ErrorType == string(relaytypes.ErrorTypeNewAPIError) {
+		return content
+	}
+	message := i18n.Translate("", i18n.UpstreamErrorKey(meta.StatusCode))
+	if meta.StatusCode == 0 {
+		return message
+	}
+	return fmt.Sprintf("status_code=%d, %s", meta.StatusCode, message)
 }
 
 // FormatAdminLogs removes root-only diagnostics while retaining operational

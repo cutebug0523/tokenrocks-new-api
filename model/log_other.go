@@ -25,6 +25,16 @@ var legacySensitiveLogOtherKeys = []string{
 	"reject_reason",
 }
 
+// userHiddenLogOtherKeys stay visible to admins but are stripped from the log
+// owner's view: they name the upstream model, or carry the upstream's own
+// error code.
+var userHiddenLogOtherKeys = []string{
+	"upstream_model_name",
+	"is_model_mapped",
+	"response_model",
+	"error_code",
+}
+
 type logOtherVisibility int
 
 const (
@@ -250,7 +260,7 @@ func formatLogOtherJSON(value string, visibility logOtherVisibility) string {
 				changed = true
 			}
 		}
-		for _, key := range legacySensitiveLogOtherKeys {
+		for _, key := range slices.Concat(legacySensitiveLogOtherKeys, userHiddenLogOtherKeys) {
 			if _, exists := values[key]; exists {
 				delete(values, key)
 				changed = true

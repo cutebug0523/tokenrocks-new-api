@@ -40,6 +40,12 @@ relay.group_upstream_saturated: "目前分組上游負載已飽和，請稍後�
 relay.retry_get_channel_failed: "獲取分組 {{.Group}} 下模型 {{.Model}} 的可用管道失敗（retry）：{{.Error}}"
 relay.retry_no_available_channel: "分組 {{.Group}} 下模型 {{.Model}} 的可用管道不存在（retry）"
 relay.access_token_unsupported: "暫不支援使用 access token"
+relay.upstream_bad_request: "上游線路拒絕了這次請求：參數可能不受支援，或者上下文、附件超出了模型的處理範圍。請檢查參數、縮短上下文後重試。"
+relay.upstream_auth: "上游線路暫時驗證失敗，這不是你的金鑰問題。請稍後重試，持續出現請聯絡客服。"
+relay.upstream_not_found: "上游線路暫不支援這個模型或介面，請換個模型或稍後重試。"
+relay.upstream_too_large: "請求內容過大，請縮短上下文、減少工具定義或附件後重試。"
+relay.upstream_rate_limited: "請求過多或線路容量已滿，請降低併發、稍後重試。"
+relay.upstream_unavailable: "上游線路暫時無法使用，請稍後重試。"
 
 # Emails and the name of the token created at registration
 user.default_token_name: "{{.Username}}的初始令牌"

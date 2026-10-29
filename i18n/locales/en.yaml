@@ -39,6 +39,12 @@ relay.group_upstream_saturated: "The upstream of the current group is at capacit
 relay.retry_get_channel_failed: "Failed to get available channel for model {{.Model}} under group {{.Group}} (retry): {{.Error}}"
 relay.retry_no_available_channel: "No available channel for model {{.Model}} under group {{.Group}} (retry)"
 relay.access_token_unsupported: "Access tokens are not supported here"
+relay.upstream_bad_request: "The upstream route rejected this request: a parameter may be unsupported, or the context or attachments exceed what the model can handle. Check the parameters, shorten the context and try again."
+relay.upstream_auth: "The upstream route failed to authenticate. This is not a problem with your key. Try again later, and contact support if it persists."
+relay.upstream_not_found: "The upstream route does not support this model or endpoint right now. Try another model or try again later."
+relay.upstream_too_large: "The request is too large. Shorten the context or remove tool definitions or attachments, then try again."
+relay.upstream_rate_limited: "Too many requests or the route is at capacity. Lower your concurrency and try again later."
+relay.upstream_unavailable: "The upstream route is temporarily unavailable. Try again later."
 
 # Emails and the name of the token created at registration
 user.default_token_name: "{{.Username}}'s initial token"

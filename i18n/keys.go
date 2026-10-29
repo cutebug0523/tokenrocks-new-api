@@ -48,6 +48,14 @@ const (
 	MsgRelayRetryGetChannelFailed        = "relay.retry_get_channel_failed"
 	MsgRelayRetryNoAvailableChannel      = "relay.retry_no_available_channel"
 	MsgRelayAccessTokenUnsupported       = "relay.access_token_unsupported"
+
+	// Upstream errors reach clients as one of these, keyed by status code; see UpstreamErrorKey
+	MsgRelayUpstreamBadRequest  = "relay.upstream_bad_request"
+	MsgRelayUpstreamAuth        = "relay.upstream_auth"
+	MsgRelayUpstreamNotFound    = "relay.upstream_not_found"
+	MsgRelayUpstreamTooLarge    = "relay.upstream_too_large"
+	MsgRelayUpstreamRateLimited = "relay.upstream_rate_limited"
+	MsgRelayUpstreamUnavailable = "relay.upstream_unavailable"
 )
 
 // Emails and the name of the token created at registration, in the
@@ -115,3 +123,22 @@ const (
 	MsgChannelUpstreamUpdateFailedChannels  = "channel.upstream_update_failed_channels"
 	MsgChannelUpstreamUpdateMoreOmitted     = "channel.upstream_update_more_omitted"
 )
+
+// UpstreamErrorKey picks the message a client gets in place of an upstream
+// error, whose own text would name the upstream platform and its routing.
+func UpstreamErrorKey(statusCode int) string {
+	switch statusCode {
+	case 400, 422:
+		return MsgRelayUpstreamBadRequest
+	case 401, 403:
+		return MsgRelayUpstreamAuth
+	case 404:
+		return MsgRelayUpstreamNotFound
+	case 413:
+		return MsgRelayUpstreamTooLarge
+	case 429:
+		return MsgRelayUpstreamRateLimited
+	default:
+		return MsgRelayUpstreamUnavailable
+	}
+}

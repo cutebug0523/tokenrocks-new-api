@@ -1,7 +1,8 @@
 // 弹窗公告：内容就是后台「系统设置 → 系统公告」（/api/notice），为空不弹。
 // 每次打开或刷新页面都弹；控制台从登录、注册这类页面进到别的页面（也就是刚登录完）时再弹一次，登录页本身不弹。
 // 「知道了」、点遮罩、按 Esc 只关这一次；勾了「今日不再弹出」，当天同一条公告不再弹，改了内容当天也会重新弹。
-// 由 wechat.js 加载，所以官网静态页和控制台都有。公告是 Markdown，这里只认段落、换行、**加粗**、# 标题行和网址。
+// 由 wechat.js 加载，所以官网静态页和控制台都有。公告是 Markdown，这里只认段落、换行、**加粗**、# 标题行和网址；
+// sk- 开头的密钥单独成块，带一键复制（手机上长按很难选全）。
 ;(function () {
   var KEY = 'tokenrocks_notice_snooze'
   var AUTH = /^\/(sign-in|sign-up|register|forgot-password|reset|otp|oauth|user\/reset)(\/|$)/
@@ -44,10 +45,35 @@
           line = line.replace(/^#{1,6}\s+/, '')
             .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
             .replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>' })
+            .replace(/\bsk-[A-Za-z0-9]{16,}/g, function (k) { return '<span class="tn-key"><code>' + k + '</code><button type="button" class="tn-copy" data-key="' + k + '">复制</button></span>' })
           return heading ? '<b class="tn-h">' + line + '</b>' : line
         }).join('<br>') + '</p>'
       })
       .join('')
+  }
+
+  function copyKey(btn) {
+    var key = btn.getAttribute('data-key')
+    function done() {
+      btn.textContent = '已复制'
+      setTimeout(function () { btn.textContent = '复制' }, 1500)
+    }
+    // 微信等内置浏览器可能没有 clipboard 接口，退回到选中隐藏文本框再复制
+    function fallback() {
+      var t = document.createElement('textarea')
+      t.value = key
+      t.setAttribute('readonly', '')
+      t.style.cssText = 'position:fixed;top:0;opacity:0'
+      document.body.appendChild(t)
+      t.select()
+      try {
+        document.execCommand('copy')
+      } catch (e) {}
+      t.remove()
+      done()
+    }
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(key).then(done, fallback)
+    else fallback()
   }
 
   function show() {
@@ -63,9 +89,12 @@
         '.tn-mask{position:fixed;inset:0;z-index:2147483000;background:rgba(17,24,39,.5);display:flex;align-items:center;justify-content:center;padding:16px}' +
         '.tn-box{width:min(680px,100%);max-height:86vh;overflow:auto;background:#fff;color:#111827;border-radius:20px;box-shadow:0 24px 72px rgba(0,0,0,.28);padding:36px 40px 28px;font:17px/1.85 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}' +
         '.tn-title{margin:0 0 14px;font-size:26px;font-weight:800;line-height:1.3}' +
-        '.tn-body p{margin:0 0 14px;color:#374151}.tn-body a{color:#0E7C66}.tn-h{display:inline-block;font-size:20px;line-height:1.5;color:#111827}' +
+        '.tn-body{overflow-wrap:anywhere}.tn-body p{margin:0 0 14px;color:#374151}.tn-body a{color:#0E7C66}.tn-h{display:inline-block;font-size:20px;line-height:1.5;color:#111827}' +
         '.tn-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:20px;flex-wrap:wrap}' +
         '.tn-skip{display:flex;align-items:center;gap:8px;font-size:15px;color:#6B7280;cursor:pointer;user-select:none}.tn-skip input{width:18px;height:18px;margin:0;accent-color:#0E7C66;cursor:pointer}' +
+        '.tn-key{display:flex;align-items:center;gap:10px;margin:6px 0;padding:10px 12px;background:#F3F4F6;border:1px solid #E5E7EB;border-radius:10px;font-weight:400}' +
+        '.tn-key code{flex:1;min-width:0;font:600 15px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all;color:#111827}' +
+        '.tn-copy{flex:none;min-height:36px;padding:0 16px;border:0;border-radius:8px;background:#0E7C66;color:#fff;font-size:14px;font-weight:600;cursor:pointer}' +
         '.tn-ok{min-height:48px;padding:0 32px;border:0;border-radius:10px;background:#0E7C66;color:#fff;font-size:17px;font-weight:600;cursor:pointer}' +
         '@media (max-width:640px){.tn-box{padding:28px 22px 22px;font-size:16px}.tn-title{font-size:22px}.tn-h{font-size:18px}.tn-ok{flex:1}}'
       document.head.appendChild(style)
@@ -96,6 +125,8 @@
     }
     ok.addEventListener('click', close)
     mask.addEventListener('click', function (e) {
+      var copyBtn = e.target.closest && e.target.closest('.tn-copy')
+      if (copyBtn) return copyKey(copyBtn)
       if (e.target === mask) close()
     })
     document.addEventListener('keydown', onKey)

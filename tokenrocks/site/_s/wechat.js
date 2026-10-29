@@ -79,4 +79,9 @@
     e.preventDefault()
     setOpen(true, false)
   })
+
+  // 弹窗公告也挂在这里：这是官网每页和控制台都已经加载的唯一脚本，控制台不用重新打包
+  var notice = document.createElement('script')
+  notice.src = '/_s/notice.js'
+  document.body.appendChild(notice)
 })()

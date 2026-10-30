@@ -2,11 +2,16 @@ package channel
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -215,5 +220,94 @@ func TestToWebSocketURL(t *testing.T) {
 		"ws://127.0.0.1:3000/backend-api/codex/responses": "ws://127.0.0.1:3000/backend-api/codex/responses",
 	} {
 		assert.Equal(t, want, toWebSocketURL(input), input)
+	}
+}
+
+func TestDoRequestAbandonsStreamWithoutFirstData(t *testing.T) {
+	service.InitHttpClient()
+	gin.SetMode(gin.TestMode)
+	originalTiers, originalMax := streamFirstDataTimeouts, streamFirstDataTimeoutMax
+	streamFirstDataTimeouts = nil
+	streamFirstDataTimeoutMax = 300 * time.Millisecond
+	t.Cleanup(func() { streamFirstDataTimeouts, streamFirstDataTimeoutMax = originalTiers, originalMax })
+
+	const stalled = 2 * time.Second
+	wait := func(r *http.Request, d time.Duration) {
+		select {
+		case <-time.After(d):
+		case <-r.Context().Done():
+		}
+	}
+	tests := []struct {
+		name     string
+		stream   bool
+		upstream func(w http.ResponseWriter, r *http.Request)
+		wantBody string
+	}{
+		{
+			name:   "no response headers",
+			stream: true,
+			upstream: func(w http.ResponseWriter, r *http.Request) {
+				wait(r, stalled)
+			},
+		},
+		{
+			name:   "headers and keepalives but no data",
+			stream: true,
+			upstream: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, ": keepalive\n\nevent: message_start\n")
+				w.(http.Flusher).Flush()
+				wait(r, stalled)
+			},
+		},
+		{
+			name:   "first data in time is replayed whole",
+			stream: true,
+			upstream: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, ": keepalive\n\ndata: {\"a\":1}\n\n")
+				w.(http.Flusher).Flush()
+				wait(r, 500*time.Millisecond)
+				_, _ = io.WriteString(w, "data: [DONE]\n\n")
+			},
+			wantBody: ": keepalive\n\ndata: {\"a\":1}\n\ndata: [DONE]\n\n",
+		},
+		{
+			name:   "non-stream request is not bounded",
+			stream: false,
+			upstream: func(w http.ResponseWriter, r *http.Request) {
+				wait(r, 500*time.Millisecond)
+				_, _ = io.WriteString(w, `{"ok":true}`)
+			},
+			wantBody: `{"ok":true}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(tt.upstream))
+			defer upstream.Close()
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			req, err := http.NewRequest(http.MethodPost, upstream.URL, strings.NewReader("{}"))
+			require.NoError(t, err)
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}, IsStream: tt.stream, RelayFormat: types.RelayFormatOpenAI, DisablePing: true}
+
+			start := time.Now()
+			resp, err := doRequest(c, req, info)
+			if tt.wantBody == "" {
+				assert.Less(t, time.Since(start), stalled)
+				var apiErr *types.NewAPIError
+				require.ErrorAs(t, err, &apiErr)
+				assert.Equal(t, types.ErrorCodeDoRequestFailed, apiErr.GetErrorCode())
+				assert.Equal(t, http.StatusInternalServerError, apiErr.StatusCode)
+				return
+			}
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantBody, string(body))
+		})
 	}
 }

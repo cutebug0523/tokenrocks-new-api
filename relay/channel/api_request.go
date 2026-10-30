@@ -1,6 +1,9 @@
 package channel
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -486,13 +489,51 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	}
 
 	common2.SetContextKey(c, appconstant.ContextKeyUpstreamRequestOrigin, req.URL.Scheme+"://"+req.URL.Host)
+	// Until a stream's first data line arrives the client has received nothing
+	// but keepalives, so an upstream stalled that long is abandoned and the
+	// attempt fails with a retryable error instead of waiting out the global
+	// header and idle timeouts.
+	firstDataTimeout := streamFirstDataTimeout(info)
+	var firstDataTimer *time.Timer
+	if firstDataTimeout > 0 {
+		ctx, cancel := context.WithCancel(req.Context())
+		req = req.WithContext(ctx)
+		firstDataTimer = time.AfterFunc(firstDataTimeout, cancel)
+		defer firstDataTimer.Stop()
+	}
 	resp, err := relayClient.Do(req)
 	if err != nil {
+		if firstDataTimer != nil && !firstDataTimer.Stop() {
+			return nil, newStreamFirstDataTimeoutError(c, firstDataTimeout)
+		}
 		logger.LogError(c, common2.LogText("do request failed: %s", err.Error()))
 		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))
 	}
 	if resp == nil {
 		return nil, errors.New("resp is nil")
+	}
+	if firstDataTimer != nil && resp.StatusCode == http.StatusOK && strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		// Read ahead to the first data line; the handler replays what was read.
+		body := bufio.NewReader(resp.Body)
+		var head bytes.Buffer
+		for {
+			line, readErr := body.ReadBytes('\n')
+			head.Write(line)
+			if readErr != nil {
+				break
+			}
+			if payload, ok := bytes.CutPrefix(line, []byte("data:")); ok && len(bytes.TrimSpace(payload)) > 0 {
+				break
+			}
+		}
+		if !firstDataTimer.Stop() {
+			_ = resp.Body.Close()
+			return nil, newStreamFirstDataTimeoutError(c, firstDataTimeout)
+		}
+		resp.Body = struct {
+			io.Reader
+			io.Closer
+		}{io.MultiReader(&head, body), resp.Body}
 	}
 	if common2.DebugEnabled {
 		policy := service.NormalizeHTTPTransportPolicy(info.ChannelSetting)
@@ -511,6 +552,51 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	_ = req.Body.Close()
 	_ = c.Request.Body.Close()
 	return resp, nil
+}
+
+// streamFirstDataTimeouts bound the wait for a stream's first data line by
+// estimated prompt tokens, since prefill time grows with the prompt. They were
+// set from first-token times of successful single-attempt streams so that
+// about 0.5% of those would have been retried; larger prompts get
+// streamFirstDataTimeoutMax.
+var streamFirstDataTimeouts = []struct {
+	belowTokens int
+	timeout     time.Duration
+}{
+	{32_000, 90 * time.Second},
+	{128_000, 150 * time.Second},
+	{256_000, 200 * time.Second},
+}
+
+var streamFirstDataTimeoutMax = 300 * time.Second
+
+// streamFirstDataTimeout returns how long a text stream may go without its
+// first data line, or 0 when the request is not bounded this way. Image and
+// audio streams are left alone because their first event can legitimately
+// take minutes.
+func streamFirstDataTimeout(info *common.RelayInfo) time.Duration {
+	if !info.IsStream {
+		return 0
+	}
+	switch info.RelayFormat {
+	case types.RelayFormatOpenAI, types.RelayFormatClaude, types.RelayFormatGemini, types.RelayFormatOpenAIResponses:
+	default:
+		return 0
+	}
+	tokens := info.GetEstimatePromptTokens()
+	for _, tier := range streamFirstDataTimeouts {
+		if tokens < tier.belowTokens {
+			return tier.timeout
+		}
+	}
+	return streamFirstDataTimeoutMax
+}
+
+// newStreamFirstDataTimeoutError is retryable: it keeps the transport error
+// code and its 500 status.
+func newStreamFirstDataTimeoutError(c *gin.Context, timeout time.Duration) *types.NewAPIError {
+	logger.LogWarn(c, common2.LogText("no stream data from upstream within %s, abandoning attempt", timeout))
+	return types.NewError(fmt.Errorf("upstream sent no stream data within %d seconds", int(timeout.Seconds())), types.ErrorCodeDoRequestFailed)
 }
 
 func DoTaskApiRequest(a TaskAdaptor, c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (*http.Response, error) {

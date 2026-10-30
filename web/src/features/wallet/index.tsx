@@ -45,6 +45,7 @@ import {
 import {
   getDefaultPaymentType,
   getMinTopupAmount,
+  getTopupAmountScale,
   dispatchSelectedPayment,
 } from './lib'
 import type {
@@ -84,12 +85,16 @@ export function Wallet(props: WalletProps) {
   const { currency } = useSystemConfig()
   const { topupInfo, presetAmounts, loading: topupLoading } = useTopupInfo()
 
-  // Calculate effective exchange rate - when display type is USD, use rate of 1
-  const effectiveUsdExchangeRate = useMemo(() => {
-    return currency?.quotaDisplayType === 'USD'
-      ? 1
-      : currency?.usdExchangeRate || 1
-  }, [currency?.quotaDisplayType, currency?.usdExchangeRate])
+  const topupAmountScale = useMemo(
+    () =>
+      getTopupAmountScale(
+        currency?.quotaDisplayType,
+        currency?.usdExchangeRate,
+        (status?.price as number) || 1
+      ),
+    [currency?.quotaDisplayType, currency?.usdExchangeRate, status?.price]
+  )
+  const effectiveUsdExchangeRate = topupAmountScale.displayRate
   const {
     amount: paymentAmount,
     calculating,
@@ -315,7 +320,7 @@ export function Wallet(props: WalletProps) {
                   redeeming={redeeming}
                   topupLink={topupInfo?.topup_link}
                   loading={topupLoading}
-                  priceRatio={(status?.price as number) || 1}
+                  priceRatio={topupAmountScale.priceRatio}
                   usdExchangeRate={effectiveUsdExchangeRate}
                   onOpenBilling={() => setBillingDialogOpen(true)}
                   creemProducts={topupInfo?.creem_products}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -170,6 +171,17 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 	})
 }
 
+// EpayTopUpQuota 把易支付订单的 Amount 换成额度。美元显示时 Amount 是美元；
+// 人民币显示时是元（TokenRocks 改动：充 ¥100 到账 ¥100，不再只能按汇率的整数倍充）。
+// ponytail: 按到账那一刻的显示模式和汇率换算，下单后、到账前改这两个设置会算错；要根治得给订单记币种
+func EpayTopUpQuota(amount int64) (int, error) {
+	quota := decimal.NewFromInt(amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeCNY && operation_setting.USDExchangeRate > 0 {
+		quota = quota.Div(decimal.NewFromFloat(operation_setting.USDExchangeRate))
+	}
+	return common.WalletQuotaFromDecimalStrict(quota)
+}
+
 // RechargeEpay 原子完成易支付订单：订单行锁、状态校验、成功更新与用户额度增加
 // 在同一个事务内完成，因此同一订单的并发/重复回调（包括多实例部署下）最多充值一次。
 // alreadyDone=true 表示订单此前已完成，本次为幂等重复回调。
@@ -204,9 +216,7 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 			topUp.PaymentMethod = actualPaymentMethod
 		}
 		var quotaErr error
-		quotaToAdd, quotaErr = common.WalletQuotaFromDecimalStrict(
-			decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
-		)
+		quotaToAdd, quotaErr = EpayTopUpQuota(topUp.Amount)
 		if quotaErr != nil || quotaToAdd <= 0 {
 			return ErrInvalidTopUpQuota
 		}
@@ -480,12 +490,15 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 
 		// 计算应充值额度：
 		// - Stripe 订单：Money 代表经分组倍率换算后的美元数量，直接 * QuotaPerUnit
-		// - 其他订单（如易支付）：Amount 为美元数量，* QuotaPerUnit
+		// - 易支付订单：见 EpayTopUpQuota
+		// - 其他订单：Amount 为美元数量，* QuotaPerUnit
 		var quotaErr error
 		if topUp.PaymentProvider == PaymentProviderStripe {
 			quotaToAdd, quotaErr = common.WalletQuotaFromDecimalStrict(
 				decimal.NewFromFloat(topUp.Money).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),
 			)
+		} else if topUp.PaymentProvider == PaymentProviderEpay {
+			quotaToAdd, quotaErr = EpayTopUpQuota(topUp.Amount)
 		} else {
 			quotaToAdd, quotaErr = common.WalletQuotaFromDecimalStrict(
 				decimal.NewFromInt(topUp.Amount).Mul(decimal.NewFromFloat(common.QuotaPerUnit)),

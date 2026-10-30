@@ -45,7 +45,11 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
-import { formatCurrencyFromUSD } from '@/lib/currency'
+import {
+  formatCurrencyFromUSD,
+  formatLocalCurrencyAmount,
+  getCurrencyDisplay,
+} from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
 
 import { useBillingHistory } from '../../hooks/use-billing-history'
@@ -54,6 +58,7 @@ import {
   getPaymentMethodName,
   formatTimestamp,
 } from '../../lib/billing'
+import { isYuanTopupRecord } from '../../lib/payment'
 
 interface BillingHistoryDialogProps {
   open: boolean
@@ -248,11 +253,20 @@ export function BillingHistoryDialog({
                             {t('Amount')}
                           </Label>
                           <div className='text-sm font-semibold'>
-                            {formatCurrencyFromUSD(record.amount, {
-                              digitsLarge: 2,
-                              digitsSmall: 2,
-                              abbreviate: false,
-                            })}
+                            {isYuanTopupRecord(
+                              record,
+                              getCurrencyDisplay().config.quotaDisplayType
+                            )
+                              ? formatLocalCurrencyAmount(record.amount, {
+                                  digitsLarge: 2,
+                                  digitsSmall: 2,
+                                  abbreviate: false,
+                                })
+                              : formatCurrencyFromUSD(record.amount, {
+                                  digitsLarge: 2,
+                                  digitsSmall: 2,
+                                  abbreviate: false,
+                                })}
                           </div>
                         </div>
                         <div className='space-y-1'>

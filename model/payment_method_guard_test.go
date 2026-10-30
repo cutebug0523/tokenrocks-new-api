@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -214,6 +215,31 @@ func TestRechargeEpayCreditsQuotaExactlyOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, alreadyDone)
 	assert.Equal(t, 2*500000, getUserQuotaForPaymentGuardTest(t, user.Id))
+}
+
+func TestRechargeEpayCreditsYuanAmountInCNYMode(t *testing.T) {
+	truncateTables(t)
+
+	oldQuotaPerUnit := common.QuotaPerUnit
+	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	oldExchangeRate := operation_setting.USDExchangeRate
+	common.QuotaPerUnit = 500000
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeCNY
+	operation_setting.USDExchangeRate = 7
+	t.Cleanup(func() {
+		common.QuotaPerUnit = oldQuotaPerUnit
+		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
+		operation_setting.USDExchangeRate = oldExchangeRate
+	})
+
+	user := insertUserForPaymentGuardTest(t, 502, 0)
+	order := createEpayTestOrder(t, user.Id, "EPAYTESTCNY", PaymentProviderEpay, common.TopUpStatusPending)
+	require.NoError(t, DB.Model(&TopUp{}).Where("id = ?", order.Id).Update("amount", 100).Error)
+
+	_, err := RechargeEpay(order.TradeNo, "alipay", "127.0.0.1")
+	require.NoError(t, err)
+	// ¥100 ÷ 7 × 500000 = 7142857.14，四舍五入
+	assert.Equal(t, 7_142_857, getUserQuotaForPaymentGuardTest(t, user.Id))
 }
 
 func TestRechargeEpayKeepsRedisAndDatabaseCreditInSync(t *testing.T) {

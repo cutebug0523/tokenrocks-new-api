@@ -151,10 +151,16 @@ func GetEpayClient() *epay.Client {
 func getPayMoney(amount int64, group string) float64 {
 	dAmount := decimal.NewFromInt(amount)
 	// 充值金额以“展示类型”为准：
-	// - USD/CNY: 前端传 amount 为金额单位；TOKENS: 前端传 tokens，需要换成 USD 金额
-	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+	// - USD: 前端传 amount 为美元；TOKENS: 前端传 tokens，需要换成 USD 金额
+	// - CNY: 前端传 amount 为元，换成 USD 金额（TokenRocks 改动，见 model.EpayTopUpQuota）
+	switch operation_setting.GetQuotaDisplayType() {
+	case operation_setting.QuotaDisplayTypeTokens:
 		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
 		dAmount = dAmount.Div(dQuotaPerUnit)
+	case operation_setting.QuotaDisplayTypeCNY:
+		if operation_setting.USDExchangeRate > 0 {
+			dAmount = dAmount.Div(decimal.NewFromFloat(operation_setting.USDExchangeRate))
+		}
 	}
 
 	topupGroupRatio := common.GetTopupGroupRatio(group)
@@ -193,14 +199,12 @@ func getMinTopup() int64 {
 }
 
 func getTopUpQuota(amount int64) (int, error) {
-	quota := decimal.NewFromInt(amount)
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		quotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		quota = decimal.NewFromInt(quota.Div(quotaPerUnit).IntPart()).Mul(quotaPerUnit)
-	} else {
-		quota = quota.Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+		quota := decimal.NewFromInt(decimal.NewFromInt(amount).Div(quotaPerUnit).IntPart()).Mul(quotaPerUnit)
+		return common.WalletQuotaFromDecimalStrict(quota)
 	}
-	return common.WalletQuotaFromDecimalStrict(quota)
+	return model.EpayTopUpQuota(amount)
 }
 
 func getMaxTopUpAmount() int64 {
@@ -217,6 +221,9 @@ func getMaxTopUpAmount() int64 {
 			Ceil().
 			Sub(decimal.NewFromInt(1)).
 			IntPart()
+	}
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeCNY && operation_setting.USDExchangeRate > 0 {
+		return maxStoredAmount.Mul(decimal.NewFromFloat(operation_setting.USDExchangeRate)).Floor().IntPart()
 	}
 	return maxStoredAmount.IntPart()
 }
@@ -322,14 +329,16 @@ func RequestEpay(c *gin.Context) {
 		paymentError(c, common.NewMessage("Payment information has not been configured by administrator"))
 		return
 	}
+	money := strconv.FormatFloat(payMoney, 'f', 2, 64)
 	uri, params, err := client.Purchase(&epay.PurchaseArgs{
 		Type:           req.PaymentMethod,
 		ServiceTradeNo: tradeNo,
-		Name:           fmt.Sprintf("TUC%d", req.Amount),
-		Money:          strconv.FormatFloat(payMoney, 'f', 2, 64),
-		Device:         epay.PC,
-		NotifyUrl:      notifyUrl,
-		ReturnUrl:      returnUrl,
+		// TokenRocks：支付平台要求商品名写明卖的是什么，"TUC100" 这种容易被风控
+		Name:      "TokenRocks API额度充值" + money + "元",
+		Money:     money,
+		Device:    epay.PC,
+		NotifyUrl: notifyUrl,
+		ReturnUrl: returnUrl,
 	})
 	if err != nil {
 		logger.LogError(c.Request.Context(), common.LogText("Epay failed to start payment user_id=%d trade_no=%s payment_method=%s amount=%d error=%q", id, tradeNo, req.PaymentMethod, req.Amount, err.Error()))

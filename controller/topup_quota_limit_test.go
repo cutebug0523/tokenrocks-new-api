@@ -21,10 +21,13 @@ import (
 func TestTopUpQuotaValidation(t *testing.T) {
 	oldQuotaPerUnit := common.QuotaPerUnit
 	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	oldExchangeRate := operation_setting.USDExchangeRate
 	common.QuotaPerUnit = 500000
+	operation_setting.USDExchangeRate = 7
 	t.Cleanup(func() {
 		common.QuotaPerUnit = oldQuotaPerUnit
 		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
+		operation_setting.USDExchangeRate = oldExchangeRate
 	})
 
 	testCases := []struct {
@@ -53,6 +56,12 @@ func TestTopUpQuotaValidation(t *testing.T) {
 			wantQuota:   2_147_500_000,
 		},
 		{
+			name:        "yuan amount converts through the exchange rate",
+			displayType: operation_setting.QuotaDisplayTypeCNY,
+			amount:      100,
+			wantQuota:   7_142_857,
+		},
+		{
 			name:        "token amount above legacy int32 range",
 			displayType: operation_setting.QuotaDisplayTypeTokens,
 			amount:      4_294_500_000,
@@ -71,6 +80,24 @@ func TestTopUpQuotaValidation(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantQuota, quota)
 		})
+	}
+}
+
+func TestGetPayMoneyChargesYuanInCNYMode(t *testing.T) {
+	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	oldExchangeRate := operation_setting.USDExchangeRate
+	oldPrice := operation_setting.Price
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeCNY
+	operation_setting.USDExchangeRate = 7
+	operation_setting.Price = 7
+	t.Cleanup(func() {
+		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
+		operation_setting.USDExchangeRate = oldExchangeRate
+		operation_setting.Price = oldPrice
+	})
+
+	for _, amount := range []int64{10, 20, 50, 100, 500, 1000} {
+		assert.InDelta(t, float64(amount), getPayMoney(amount, "default"), 1e-9, "amount %d", amount)
 	}
 }
 

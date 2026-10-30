@@ -24,7 +24,12 @@ import {
   DEFAULT_PAYMENT_TYPE,
   DEFAULT_MIN_TOPUP,
 } from '../constants'
-import type { PaymentMethod, PresetAmount, TopupInfo } from '../types'
+import type {
+  PaymentMethod,
+  PresetAmount,
+  TopupInfo,
+  TopupRecord,
+} from '../types'
 
 // ============================================================================
 // Payment Processing Functions
@@ -190,6 +195,39 @@ export function getMinTopupAmount(topupInfo: TopupInfo | null): number {
   }
 
   return DEFAULT_MIN_TOPUP
+}
+
+/**
+ * How top-up amounts map to the display currency and the price per amount unit.
+ *
+ * TokenRocks: in CNY display mode a top-up amount is already in yuan (the
+ * backend treats it the same way, see model.EpayTopUpQuota), so presets are
+ * not multiplied by the exchange rate and the price is per yuan.
+ */
+export function getTopupAmountScale(
+  quotaDisplayType: string | undefined,
+  usdExchangeRate: number | undefined,
+  price: number
+): { displayRate: number; priceRatio: number } {
+  const rate = usdExchangeRate || 1
+  if (quotaDisplayType === 'CNY') {
+    return { displayRate: 1, priceRatio: price / rate }
+  }
+  if (quotaDisplayType === 'USD') {
+    return { displayRate: 1, priceRatio: price }
+  }
+  return { displayRate: rate, priceRatio: price }
+}
+
+/**
+ * TokenRocks: in CNY display mode an epay record stores its amount in yuan,
+ * not USD (see model.EpayTopUpQuota).
+ */
+export function isYuanTopupRecord(
+  record: Pick<TopupRecord, 'payment_provider'>,
+  quotaDisplayType: string | undefined
+): boolean {
+  return quotaDisplayType === 'CNY' && record.payment_provider === 'epay'
 }
 
 /**

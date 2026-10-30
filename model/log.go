@@ -161,12 +161,20 @@ func FormatRootLogs(logs []*Log) {
 	}
 }
 
+// hideRetriedErrorLogs 用在用户视角的日志查询上（TokenRocks 改动）：同一请求重试后成功了，
+// 前面失败那几次的错误记录不给用户看，免得救回来的请求在使用日志里看着像出错。管理员视角照常全部显示。
+// scopeColumn 是 user_id 或 token_id，把子查询限定在同一个用户或令牌，走索引。
+func hideRetriedErrorLogs(tx *gorm.DB, scopeColumn string, scopeId int) *gorm.DB {
+	return tx.Where("NOT (logs.type = ? AND COALESCE(logs.request_id, '') IN (SELECT retried.request_id FROM logs retried WHERE retried."+scopeColumn+" = ? AND retried.type = ? AND retried.request_id <> ''))",
+		LogTypeError, scopeId, LogTypeConsume)
+}
+
 func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	order := "id desc"
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		order = clickHouseLogOrder("")
 	}
-	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order(order).Limit(common.MaxRecentItems).Find(&logs).Error
+	err = hideRetriedErrorLogs(LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId), "token_id", tokenId).Order(order).Limit(common.MaxRecentItems).Find(&logs).Error
 	formatUserLogs(logs, 0)
 	return logs, err
 }
@@ -616,7 +624,7 @@ func GetAllLogs(filter LogFilter, startIdx int, num int) (logs []*Log, total int
 const logSearchCountLimit = 10000
 
 func GetUserLogs(userId int, filter LogFilter, startIdx int, num int) (logs []*Log, total int64, err error) {
-	tx, err := filter.apply(LOG_DB.Where("logs.user_id = ?", userId))
+	tx, err := filter.apply(hideRetriedErrorLogs(LOG_DB.Where("logs.user_id = ?", userId), "user_id", userId))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -671,7 +679,7 @@ func StreamAllLogs(ctx context.Context, filter LogFilter, role int, fn func(*Log
 // StreamUserLogs is StreamAllLogs for one user's own logs, shaped like the
 // user log list.
 func StreamUserLogs(ctx context.Context, userId int, filter LogFilter, fn func(*Log) error) error {
-	tx, err := filter.apply(LOG_DB.WithContext(ctx).Where("logs.user_id = ?", userId))
+	tx, err := filter.apply(hideRetriedErrorLogs(LOG_DB.WithContext(ctx).Where("logs.user_id = ?", userId), "user_id", userId))
 	if err != nil {
 		return err
 	}

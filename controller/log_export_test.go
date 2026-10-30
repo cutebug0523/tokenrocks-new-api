@@ -50,15 +50,16 @@ func exportedRequestIds(lines []map[string]any) []any {
 	return ids
 }
 
-// seedExportLogs stores logs of two users: three in the last hour and one
-// from 400 days ago.
+// seedExportLogs stores logs of two users: four in the last hour and one
+// from 400 days ago. Request a-1 failed once before it succeeded.
 func seedExportLogs(t *testing.T, mainDB *gorm.DB, logDB *gorm.DB, now int64) {
 	t.Helper()
 	require.NoError(t, mainDB.Create(&model.Channel{Id: 9, Name: "primary"}).Error)
 	logs := []model.Log{
-		{UserId: 1, Username: "alice", CreatedAt: now - 3600, Type: model.LogTypeConsume, ModelName: "gpt-a", ChannelId: 9, Quota: 10, RequestId: "a-1", Other: `{"admin_info":{"use_channel":["9"]}}`},
+		{UserId: 1, Username: "alice", CreatedAt: now - 3601, Type: model.LogTypeError, ModelName: "gpt-a", TokenId: 5, RequestId: "a-1"},
+		{UserId: 1, Username: "alice", CreatedAt: now - 3600, Type: model.LogTypeConsume, ModelName: "gpt-a", ChannelId: 9, TokenId: 5, Quota: 10, RequestId: "a-1", Other: `{"admin_info":{"use_channel":["9"]}}`},
 		{UserId: 2, Username: "bob", CreatedAt: now - 1800, Type: model.LogTypeConsume, ModelName: "gpt-b", ChannelId: 9, Quota: 20, RequestId: "b-1"},
-		{UserId: 1, Username: "alice", CreatedAt: now - 60, Type: model.LogTypeError, ModelName: "gpt-a", RequestId: "a-2"},
+		{UserId: 1, Username: "alice", CreatedAt: now - 60, Type: model.LogTypeError, ModelName: "gpt-a", TokenId: 5, RequestId: "a-2"},
 		{UserId: 1, Username: "alice", CreatedAt: now - 400*24*3600, Type: model.LogTypeConsume, ModelName: "gpt-a", RequestId: "a-old"},
 	}
 	for i := range logs {
@@ -127,10 +128,15 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 
 			listed := callLogHandler(t, GetUserLogs, 1, common.RoleCommonUser, query)[0]
 			require.Equal(t, true, listed["success"])
-			assert.EqualValues(t, 2, listed["data"].(map[string]any)["total"])
+			assert.EqualValues(t, 2, listed["data"].(map[string]any)["total"], "users do not see the failed attempt of a request that later succeeded")
 			listed = callLogHandler(t, GetAllLogs, 3, common.RoleAdminUser, query+"&username=alice")[0]
 			require.Equal(t, true, listed["success"])
-			assert.EqualValues(t, 2, listed["data"].(map[string]any)["total"])
+			assert.EqualValues(t, 3, listed["data"].(map[string]any)["total"], "administrators still see every attempt")
+			byToken, err := model.GetLogByTokenId(5)
+			require.NoError(t, err)
+			require.Len(t, byToken, 2)
+			assert.Equal(t, []string{"a-2", "a-1"}, []string{byToken[0].RequestId, byToken[1].RequestId})
+			assert.Equal(t, model.LogTypeConsume, byToken[1].Type)
 
 			own := callLogHandler(t, ExportUserLogs, 1, common.RoleCommonUser, query)
 			require.Len(t, own, 3)
@@ -141,11 +147,11 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 			assert.NotContains(t, own[1]["other"], "admin_info")
 
 			all := callLogHandler(t, ExportAllLogs, 3, common.RoleAdminUser, query+"&model_name=gpt-%25")
-			require.Len(t, all, 4)
-			assert.Equal(t, []any{"a-2", "b-1", "a-1"}, exportedRequestIds(all))
+			require.Len(t, all, 5)
+			assert.Equal(t, []any{"a-2", "b-1", "a-1", "a-1"}, exportedRequestIds(all))
 			assert.Equal(t, "primary", all[2]["channel_name"])
 			assert.Contains(t, all[2]["other"], "admin_info")
-			assert.Equal(t, true, all[3]["success"])
+			assert.Equal(t, true, all[4]["success"])
 		})
 	}
 }

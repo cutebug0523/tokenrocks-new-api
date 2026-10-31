@@ -4343,7 +4343,7 @@
     "Online": "オンライン",
     "Online payment is not enabled. Please contact the administrator.": "オンライン決済が有効になっていません。管理者にお問い合わせください。",
     "Online top-up succeeded, amount added: {{quota}}, payment amount: {{amount}}": "オンラインチャージが完了しました。追加額：{{quota}}、支払額：{{amount}}",
-    "Online topup is not enabled. Please use redemption code or contact administrator.": "現在は引き換えコードでのチャージのみです。コードの購入はサイト運営者の WeChat（cutebug0523）までご連絡ください。引き換え後すぐに残高へ反映されます。",
+    "Online topup is not enabled. Please use redemption code or contact administrator.": "現在は引き換えコードでのチャージのみです。コードの購入はサイト運営者の WeChat（bbslaoli）までご連絡ください。引き換え後すぐに残高へ反映されます。",
     "Only allow specific email domains": "特定のEメール ドメインのみを許可する",
     "Only available for admins. When enabled, you will receive a summary notification via your selected method when the scheduled model check detects upstream model changes or check failures.": "管理者のみ利用可能です。有効にすると、スケジュールされたモデルチェックでアップストリームモデルの変更やチェック失敗が検出された際に、選択した方法で概要通知を受け取ります。",
     "Only available for exact matching": "完全一致のみ",

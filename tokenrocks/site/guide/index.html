@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>使用指南 · TokenRocks</title>
 <meta name="description" content="TokenRocks 使用指南：注册、创建 API 密钥、接口地址、线路分组、Claude Code 与各类客户端配置、充值与常见问题。">
-<link rel="icon" href="/favicon.ico">
+<link rel="icon" href="/_s/favicon.ico">
 <link rel="stylesheet" href="/_s/site.css">
 <style>
   .doc { max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; gap: 40px; align-items: flex-start; }
@@ -146,7 +146,7 @@
       <h2 id="topup-title">充值</h2>
       <ul>
         <li>目前通过兑换码充值：控制台 →「钱包」→ 在「有兑换码吗？」处粘贴兑换码 → 兑换额度，余额立即到账。</li>
-        <li>购买兑换码或大额充值，请加站长微信 <b>cutebug0523</b>。</li>
+        <li>购买兑换码或大额充值，请加站长微信 <b>bbslaoli</b>。</li>
         <li>余额按实际用量扣减，不过期；一个兑换码只能用一次。</li>
       </ul>
     </section>
@@ -221,13 +221,13 @@ print(reply.choices[0].message.content)</pre>
         <details><summary>报错「额度不足」或「余额不足」</summary><p>到「钱包」用兑换码充值。如果给密钥单独设置了额度上限，也可能是密钥额度用完了，在「API 密钥」页编辑。</p></details>
         <details><summary>报错 401 / 无效的令牌</summary><p>检查密钥是否完整复制（以 sk- 开头）、是否被禁用或过期；接口地址要用 api.tokenrocks.ai，不要填官网页面地址。</p></details>
         <details><summary>回复很慢或超时</summary><p>大模型首字一般需要几秒到十几秒，长回复建议开启流式输出（stream）。特价线路高峰期可能变慢，着急的任务可以换企业满血分组。</p></details>
-        <details><summary>余额会过期吗？可以退款吗？</summary><p>余额不过期。兑换码兑换后不支持退回；如果遇到兑换码无效、扣费异常，请带上截图联系站长微信 cutebug0523。</p></details>
+        <details><summary>余额会过期吗？可以退款吗？</summary><p>余额不过期。兑换码兑换后不支持退回；如果遇到兑换码无效、扣费异常，请带上截图联系站长微信 bbslaoli。</p></details>
         <details><summary>怎么查每次调用花了多少钱？</summary><p>控制台「使用日志」里有每次调用的模型、token 数和扣费金额；「数据看板」可以看按天汇总。</p></details>
       </div>
     </section>
 
     <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 20px; font-size: 15px;">
-      <span style="color: var(--muted-2);">还有问题？加站长微信 cutebug0523</span>
+      <span style="color: var(--muted-2);">还有问题？加站长微信 bbslaoli</span>
       <a href="/pricing" style="text-decoration: none; font-weight: 600;">查看模型与价格 →</a>
     </div>
   </main>
@@ -251,7 +251,7 @@ print(reply.choices[0].message.content)</pre>
     <div class="col"><span class="title" style="font-size: 16px;">TokenRocks</span><span>大模型 API 平台</span></div>
     <div class="col"><span class="title">产品</span><a href="/pricing">模型与价格</a><a href="/#plans">线路方案</a><a href="/dashboard">控制台</a></div>
     <div class="col"><span class="title">资源</span><a href="/guide/">使用指南</a><a href="https://github.com/cutebug0523/tokenrocks-new-api">GitHub 开源</a></div>
-    <div class="col"><span class="title">联系</span><span>微信 cutebug0523</span></div>
+    <div class="col"><span class="title">联系</span><span>微信 bbslaoli</span></div>
   </div>
 </footer>
 
@@ -268,6 +268,6 @@ print(reply.choices[0].message.content)</pre>
     })
   })
 </script>
-<script src="/_s/wechat.js?v=20261029"></script>
+<script src="/_s/wechat.js?v=20261031"></script>
 </body>
 </html>

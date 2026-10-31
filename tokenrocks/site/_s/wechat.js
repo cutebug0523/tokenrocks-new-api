@@ -3,7 +3,7 @@
 // 控制台引用时带 data-place="side"：收成右边缘中间的竖条，每次都从收起开始，免得挡住表格、翻页和输入框。
 // 页面里任何 href="#wechat" 的链接都会打开它。脚本没加载时，页脚的微信号文字还在。
 ;(function () {
-  var ID = 'cutebug0523'
+  var ID = 'bbslaoli'
   var KEY = 'tokenrocks_wechat_closed'
   var side = !!document.currentScript && document.currentScript.getAttribute('data-place') === 'side'
   var wrap = document.createElement('div')
@@ -21,7 +21,7 @@
     '<button type="button" class="wx-close" aria-label="收起">×</button>' +
     '<div class="wx-title">加站长微信</div>' +
     '<p class="wx-text">站长深度接触 AI 四年。充值、企业采购或任何疑问，都可以加我微信。</p>' +
-    '<img class="wx-qr" src="/_s/wechat-qr.png" width="168" height="168" alt="站长微信二维码">' +
+    '<img class="wx-qr" src="/_s/wechat-qr.png?v=20261031" width="168" height="168" alt="站长微信二维码">' +
     '<div class="wx-hint wx-desk">微信扫一扫</div>' +
     '<div class="wx-hint wx-mobile">在微信里打开可长按识别</div>' +
     '<div class="wx-id">微信号 <b>' + ID + '</b><button type="button" class="wx-copy">复制</button></div>' +

@@ -39,12 +39,12 @@ export function SiteOwnerContact() {
         <p className='mt-0.5 flex flex-wrap items-baseline gap-x-2 text-sm'>
           <span className='font-medium'>{t('Site owner WeChat:')}</span>
           <span className='font-mono font-semibold tracking-tight text-emerald-700 dark:text-emerald-300'>
-            cutebug0523
+            bbslaoli
           </span>
         </p>
       </div>
       <CopyButton
-        value='cutebug0523'
+        value='bbslaoli'
         className='text-muted-foreground hover:text-foreground size-8'
         iconClassName='size-4'
         tooltip={t('Copy WeChat ID')}

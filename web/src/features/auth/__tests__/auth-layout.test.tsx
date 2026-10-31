@@ -58,7 +58,7 @@ describe('AuthLayout', () => {
       name: 'An LLM API platform built for teams',
     })
     expect(within(panel).getAllByRole('listitem')).toHaveLength(3)
-    expect(within(panel).getByText('cutebug0523')).toBeInTheDocument()
+    expect(within(panel).getByText('bbslaoli')).toBeInTheDocument()
     expect(
       screen.getByRole('form', { name: 'Sign in form' })
     ).toBeInTheDocument()

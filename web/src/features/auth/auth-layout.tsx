@@ -85,7 +85,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         </div>
         <p className='text-sm opacity-85'>
           {t('Site owner WeChat:')}{' '}
-          <span className='font-mono font-semibold'>cutebug0523</span>
+          <span className='font-mono font-semibold'>bbslaoli</span>
         </p>
       </aside>
       <div className='container flex items-center pt-16 sm:pt-0'>

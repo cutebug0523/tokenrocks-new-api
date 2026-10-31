@@ -4343,7 +4343,7 @@
     "Online": "Trực tuyến",
     "Online payment is not enabled. Please contact the administrator.": "Thanh toán trực tuyến chưa được kích hoạt. Vui lòng liên hệ quản trị viên.",
     "Online top-up succeeded, amount added: {{quota}}, payment amount: {{amount}}": "Nạp tiền trực tuyến thành công, số tiền đã nạp: {{quota}}, số tiền thanh toán: {{amount}}",
-    "Online topup is not enabled. Please use redemption code or contact administrator.": "Hiện chỉ nạp bằng mã đổi thưởng: để mua mã, hãy nhắn WeChat cho chủ trang (cutebug0523). Số dư được cộng ngay sau khi đổi mã.",
+    "Online topup is not enabled. Please use redemption code or contact administrator.": "Hiện chỉ nạp bằng mã đổi thưởng: để mua mã, hãy nhắn WeChat cho chủ trang (bbslaoli). Số dư được cộng ngay sau khi đổi mã.",
     "Only allow specific email domains": "Chỉ cho phép các tên miền email cụ thể",
     "Only available for admins. When enabled, you will receive a summary notification via your selected method when the scheduled model check detects upstream model changes or check failures.": "Chỉ khả dụng cho quản trị viên. Khi bật, bạn sẽ nhận được thông báo tổng hợp qua phương thức đã chọn khi kiểm tra mô hình định kỳ phát hiện thay đổi mô hình nguồn hoặc lỗi kiểm tra.",
     "Only available for exact matching": "Chỉ dùng cho khớp chính xác",

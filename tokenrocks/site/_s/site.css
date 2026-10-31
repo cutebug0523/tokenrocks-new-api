@@ -91,13 +91,8 @@ pre {
   width: 28px;
   height: 28px;
   border-radius: 7px;
-  background: var(--brand);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 15px;
+  background: var(--brand) url(/_s/logo.png) center / cover;
+  font-size: 0;
 }
 .brand-name {
   font-weight: 700;

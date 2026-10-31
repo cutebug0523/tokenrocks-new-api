@@ -37,7 +37,7 @@ describe('site owner contact', () => {
     render(<SiteOwnerContact />)
 
     expect(screen.getByText('Site owner WeChat:')).toBeVisible()
-    expect(screen.getByText('cutebug0523')).toBeVisible()
+    expect(screen.getByText('bbslaoli')).toBeVisible()
     expect(screen.getByText('Questions? Add me on WeChat')).toBeVisible()
   })
 
@@ -47,7 +47,7 @@ describe('site owner contact', () => {
 
     await user.click(screen.getByRole('button', { name: 'Copy WeChat ID' }))
 
-    expect(copyToClipboard).toHaveBeenCalledWith('cutebug0523')
+    expect(copyToClipboard).toHaveBeenCalledWith('bbslaoli')
     expect(await screen.findByRole('button', { name: 'Copied' })).toBeVisible()
   })
 })

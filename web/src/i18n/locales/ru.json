@@ -4343,7 +4343,7 @@
     "Online": "Онлайн",
     "Online payment is not enabled. Please contact the administrator.": "Онлайн-оплата не включена. Пожалуйста, свяжитесь с администратором.",
     "Online top-up succeeded, amount added: {{quota}}, payment amount: {{amount}}": "Онлайн-пополнение выполнено, зачислено: {{quota}}, сумма оплаты: {{amount}}",
-    "Online topup is not enabled. Please use redemption code or contact administrator.": "Сейчас пополнение только кодами: чтобы купить код, напишите владельцу сайта в WeChat (cutebug0523). Баланс зачисляется сразу после активации.",
+    "Online topup is not enabled. Please use redemption code or contact administrator.": "Сейчас пополнение только кодами: чтобы купить код, напишите владельцу сайта в WeChat (bbslaoli). Баланс зачисляется сразу после активации.",
     "Only allow specific email domains": "Разрешить только определенные домены электронной почты",
     "Only available for admins. When enabled, you will receive a summary notification via your selected method when the scheduled model check detects upstream model changes or check failures.": "Доступно только для администраторов. При включении вы будете получать сводное уведомление выбранным способом, когда запланированная проверка моделей обнаружит изменения в вышестоящих моделях или сбои проверки.",
     "Only available for exact matching": "Только при точном совпадении",

@@ -3,6 +3,7 @@ package channel
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -344,11 +345,69 @@ func DoApiRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	if err = ApplyHeaderOverride(info, c, req); err != nil {
 		return nil, err
 	}
-	resp, err := doRequest(c, req, info)
+	resp, err := doRequestWithGzipBody(c, req, info)
 	if err != nil {
 		return nil, fmt.Errorf("do request failed: %w", err)
 	}
 	return resp, nil
+}
+
+// upstreamGzipMinBytes is the request body size from which bodies go upstream
+// gzip-compressed (TokenRocks). The upstream gateway at times reads large
+// bodies at tens of KB/s: a 2 MB request took 85 s uncompressed and 11 s
+// compressed, with the same prompt tokens and cache hits. UPSTREAM_GZIP_MIN_BYTES
+// changes it; 0 or less turns compression off.
+var upstreamGzipMinBytes = int64(common2.GetEnvOrDefault("UPSTREAM_GZIP_MIN_BYTES", 100<<10))
+
+// upstreamGzipRefused holds the hosts that rejected a gzip body and accepted
+// the same body uncompressed; requests to them are no longer compressed.
+// ponytail: kept in memory, so after a restart each such host is tried once more.
+var upstreamGzipRefused sync.Map
+
+// doRequestWithGzipBody sends a large request body gzip-compressed. A 400 or
+// 415 answer may mean the upstream does not decode gzip, so the request is
+// then sent once more uncompressed; if that is accepted, the host is not sent
+// gzip again.
+func doRequestWithGzipBody(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http.Response, error) {
+	if upstreamGzipMinBytes <= 0 || req.Body == nil || req.ContentLength < upstreamGzipMinBytes || req.Header.Get("Content-Encoding") != "" {
+		return doRequest(c, req, info)
+	}
+	if _, refused := upstreamGzipRefused.Load(req.URL.Host); refused {
+		return doRequest(c, req, info)
+	}
+	raw, err := io.ReadAll(req.Body)
+	_ = req.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read request body failed: %w", err)
+	}
+	var compressed bytes.Buffer
+	zw := gzip.NewWriter(&compressed)
+	_, _ = zw.Write(raw) // writes to a bytes.Buffer do not fail
+	_ = zw.Close()
+
+	plain := req.Clone(req.Context())
+	replaceRequestBody(req, compressed.Bytes())
+	req.Header.Set("Content-Encoding", "gzip")
+	resp, err := doRequest(c, req, info)
+	if err != nil || (resp.StatusCode != http.StatusBadRequest && resp.StatusCode != http.StatusUnsupportedMediaType) {
+		return resp, err
+	}
+	_ = resp.Body.Close()
+
+	replaceRequestBody(plain, raw)
+	resp, err = doRequest(c, plain, info)
+	if err == nil && resp.StatusCode != http.StatusBadRequest && resp.StatusCode != http.StatusUnsupportedMediaType {
+		upstreamGzipRefused.Store(plain.URL.Host, true)
+		logger.LogWarn(c, common2.LogText("channel #%d rejected a gzip request body, sending uncompressed bodies to it from now on", info.ChannelId))
+	}
+	return resp, err
+}
+
+// replaceRequestBody makes body the request's body, also for transport retries.
+func replaceRequestBody(req *http.Request, body []byte) {
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
 }
 
 func DoFormRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (*http.Response, error) {

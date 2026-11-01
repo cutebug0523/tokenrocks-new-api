@@ -1,6 +1,7 @@
 package channel
 
 import (
+	"compress/gzip"
 	"context"
 	"io"
 	"net/http"
@@ -308,6 +309,83 @@ func TestDoRequestAbandonsStreamWithoutFirstData(t *testing.T) {
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantBody, string(body))
+		})
+	}
+}
+
+func TestDoRequestWithGzipBody(t *testing.T) {
+	service.InitHttpClient()
+	gin.SetMode(gin.TestMode)
+	originalMin := upstreamGzipMinBytes
+	upstreamGzipMinBytes = 1024
+	t.Cleanup(func() {
+		upstreamGzipMinBytes = originalMin
+		upstreamGzipRefused.Clear()
+	})
+
+	large := `{"messages":"` + strings.Repeat("x", 4096) + `"}`
+	tests := []struct {
+		name          string
+		body          string
+		acceptsGzip   bool
+		badRequest    bool
+		wantEncodings []string
+		wantStatus    int
+		wantRefused   bool
+	}{
+		{name: "small body goes uncompressed", body: `{}`, acceptsGzip: true, wantEncodings: []string{""}, wantStatus: http.StatusOK},
+		{name: "large body goes gzip", body: large, acceptsGzip: true, wantEncodings: []string{"gzip"}, wantStatus: http.StatusOK},
+		{name: "refused gzip falls back and is remembered", body: large, wantEncodings: []string{"gzip", ""}, wantStatus: http.StatusOK, wantRefused: true},
+		{name: "bad request is not blamed on gzip", body: large, acceptsGzip: true, badRequest: true, wantEncodings: []string{"gzip", ""}, wantStatus: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var encodings []string
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				encoding := r.Header.Get("Content-Encoding")
+				encodings = append(encodings, encoding)
+				if encoding == "gzip" && !tt.acceptsGzip {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				body := io.Reader(r.Body)
+				if encoding == "gzip" {
+					zr, err := gzip.NewReader(r.Body)
+					if !assert.NoError(t, err) {
+						return
+					}
+					body = zr
+				}
+				got, err := io.ReadAll(body)
+				assert.NoError(t, err)
+				assert.Equal(t, tt.body, string(got))
+				if tt.badRequest {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				_, _ = io.WriteString(w, `{"ok":true}`)
+			}))
+			defer upstream.Close()
+			send := func() *http.Response {
+				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+				req, err := http.NewRequest(http.MethodPost, upstream.URL, strings.NewReader(tt.body))
+				require.NoError(t, err)
+				resp, err := doRequestWithGzipBody(c, req, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}, DisablePing: true})
+				require.NoError(t, err)
+				_ = resp.Body.Close()
+				return resp
+			}
+
+			assert.Equal(t, tt.wantStatus, send().StatusCode)
+			assert.Equal(t, tt.wantEncodings, encodings)
+			_, refused := upstreamGzipRefused.Load(strings.TrimPrefix(upstream.URL, "http://"))
+			assert.Equal(t, tt.wantRefused, refused)
+			if tt.wantRefused {
+				encodings = nil
+				assert.Equal(t, http.StatusOK, send().StatusCode)
+				assert.Equal(t, []string{""}, encodings, "a host that refused gzip gets uncompressed bodies directly")
+			}
 		})
 	}
 }

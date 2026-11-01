@@ -2,7 +2,7 @@
 // 每次打开或刷新页面都弹；控制台从登录、注册这类页面进到别的页面（也就是刚登录完）时再弹一次，登录页本身不弹。
 // 「知道了」、点遮罩、按 Esc 只关这一次；勾了「今日不再弹出」，当天同一条公告不再弹，改了内容当天也会重新弹。
 // 由 wechat.js 加载，所以官网静态页和控制台都有。公告是 Markdown，这里只认段落、换行、**加粗**、# 标题行和网址；
-// sk- 开头的密钥单独成块，带一键复制（手机上长按很难选全）。
+// sk- 开头的密钥单独成块，带一键复制（手机上长按很难选全）；单独一行的 ![说明](/_s/图片) 显示成图片（比如群二维码），只认本站 /_s/ 下的图。
 ;(function () {
   var KEY = 'tokenrocks_notice_snooze'
   var AUTH = /^\/(sign-in|sign-up|register|forgot-password|reset|otp|oauth|user\/reset)(\/|$)/
@@ -43,6 +43,7 @@
         return '<p>' + block.split('\n').map(function (line) {
           var heading = /^#{1,6}\s+/.test(line)
           line = line.replace(/^#{1,6}\s+/, '')
+            .replace(/^!\[([^\]]*)\]\((\/_s\/[\w.\/-]+)\)$/, '<img class="tn-img" src="$2" alt="$1">')
             .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
             .replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>' })
             .replace(/\bsk-[A-Za-z0-9]{16,}/g, function (k) { return '<span class="tn-key"><code>' + k + '</code><button type="button" class="tn-copy" data-key="' + k + '">复制</button></span>' })
@@ -94,6 +95,7 @@
         '.tn-skip{display:flex;align-items:center;gap:8px;font-size:15px;color:#6B7280;cursor:pointer;user-select:none}.tn-skip input{width:18px;height:18px;margin:0;accent-color:#0E7C66;cursor:pointer}' +
         '.tn-key{display:flex;align-items:center;gap:10px;margin:6px 0;padding:10px 12px;background:#F3F4F6;border:1px solid #E5E7EB;border-radius:10px;font-weight:400}' +
         '.tn-key code{flex:1;min-width:0;font:600 15px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all;color:#111827}' +
+        '.tn-img{display:block;width:180px;height:180px;margin:8px 0 4px;border-radius:8px}' +
         '.tn-copy{flex:none;min-height:36px;padding:0 16px;border:0;border-radius:8px;background:#0E7C66;color:#fff;font-size:14px;font-weight:600;cursor:pointer}' +
         '.tn-ok{min-height:48px;padding:0 32px;border:0;border-radius:10px;background:#0E7C66;color:#fff;font-size:17px;font-weight:600;cursor:pointer}' +
         '@media (max-width:640px){.tn-box{padding:28px 22px 22px;font-size:16px}.tn-title{font-size:22px}.tn-h{font-size:18px}.tn-ok{flex:1}}'
@@ -110,7 +112,7 @@
     document.body.appendChild(mask)
     var ok = mask.querySelector('.tn-ok')
     var skip = mask.querySelector('.tn-skip input')
-    ok.focus()
+    ok.focus({ preventScroll: true })
     function close() {
       if (skip.checked) {
         try {

@@ -3,7 +3,8 @@
 // 给买家消息生成回复草稿写进日志。默认只出草稿不发；XYCS_MODE=live 才用页面已登录的连接把草稿发出去（见 sendText）。
 //
 // 服务器上：/opt/xianyu-cs，systemd 服务 xycs，虚拟屏幕由 xycs-xvfb 提供（:99）。
-//   node bridge.mjs                  常驻运行；没登录时每 30 秒把页面截图到 data/login.png，店主扫码
+//   node bridge.mjs                  常驻运行；没登录时每 30 秒把页面截图到 data/login.png，店主扫码（每 4 分钟重开换新码）；
+//                                    掉登录 3 分钟没自己登回来，往 $XYCS_DIR/notify_url 推一条通知
 //   node bridge.mjs replay <jsonl>   用抓包文件回放（本地测试，不开浏览器）
 //   node bridge.mjs report [日期]    按会话列出：买家消息、草稿、易店和店主的实际回复
 //   node bridge.mjs eval <cases.jsonl> [结果.jsonl]   用老对话和对抗题测话术
@@ -26,7 +27,7 @@ const DIR = process.env.XYCS_DIR || '/opt/xianyu-cs'
 const DATA = path.join(DIR, 'data')
 const KEY_FILE = process.env.XYCS_KEY_FILE || path.join(DIR, 'tr_key')
 const MY_ID = process.env.XYCS_MY_ID || '387327226'
-const IM_URL = 'https://www.goofish.com/im'
+const IM_URL = process.env.XYCS_IM_URL || 'https://www.goofish.com/im' // 本地测试时指到假页面
 const API = process.env.XYCS_API || 'https://api.tokenrocks.ai/v1/chat/completions'
 const MODEL = process.env.XYCS_MODEL || 'deepseek-v4.1-flash'
 const EFFORT = process.env.XYCS_EFFORT || 'low'
@@ -421,20 +422,24 @@ async function sendText(sid, buyerId, text) {
       { actualReceivers: [`${buyerId}@goofish`, `${MY_ID}@goofish`] },
     ],
   })
+  let done
   const ack = new Promise((resolve) => {
+    done = resolve
     acks.set(mid, resolve)
-    setTimeout(() => {
-      if (acks.delete(mid)) resolve({ code: 'timeout' })
-    }, 15000)
   })
   const mine = botSent.get(sid) || []
   mine.push({ text: text.trim(), at: Date.now() })
   botSent.set(sid, mine.slice(-5))
-  const r = await sendFrame(frame)
+  // 页面刚崩了正在重开时，消息连接要几秒才连上：每 5 秒试一次，最多等 1 分钟
+  let r
+  for (let i = 0; i < 12 && (r = await sendFrame(frame).catch((err) => err.message)) !== 'ok'; i++) await new Promise((res) => setTimeout(res, 5000))
   if (r !== 'ok') {
     acks.delete(mid)
     throw new Error(`发送失败：${r}`)
   }
+  setTimeout(() => {
+    if (acks.delete(mid)) done({ code: 'timeout' })
+  }, 15000)
   const res = await ack
   // 自己发的消息服务端不会再推回这个页面（10-29 实测），确认成功后直接记进日志和档案
   if (res.code === 200 && res.body?.messageId) {
@@ -628,6 +633,23 @@ function log(...a) {
   console.log(new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(5, 19).replace('T', ' '), ...a)
 }
 
+// 推到店主手机：$XYCS_DIR/notify_url（600）放推送地址，Bark 的 https://api.day.app/<key> 或 Server酱的 https://sctapi.ftqq.com/<key>.send 都行
+async function notify(title, body) {
+  log('通知店主', title, body)
+  let url
+  try {
+    url = fs.readFileSync(path.join(DIR, 'notify_url'), 'utf8').trim()
+  } catch {
+    return log('没配 notify_url，通知没发出去')
+  }
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, body, desp: body, level: 'critical' }), signal: AbortSignal.timeout(10000) })
+    if (!res.ok) log('通知发送失败', res.status)
+  } catch (err) {
+    log('通知发送失败', err.message)
+  }
+}
+
 // ---------- 浏览器（CDP 走管道：fd 3 写命令，fd 4 读回包，消息以 \0 分隔） ----------
 async function runBrowser() {
   const chrome = spawn(process.env.XYCS_CHROME || '/usr/bin/google-chrome', [
@@ -639,12 +661,17 @@ async function runBrowser() {
     process.exit(1)
   })
   const waiting = new Map()
+  const crashes = []
   let seq = 0
   let buf = Buffer.alloc(0)
   const send = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
     const id = ++seq
     waiting.set(id, { resolve, reject })
     chrome.stdio[3].write(JSON.stringify({ id, method, params, sessionId }) + '\0')
+    // 页面崩的那一刻还没回的命令可能永远等不到回包，别让发送一直挂着
+    setTimeout(() => {
+      if (waiting.delete(id)) reject(new Error(`${method} 60 秒没回`))
+    }, 60000)
   })
   chrome.stdio[4].on('data', (chunk) => {
     buf = Buffer.concat([buf, chunk])
@@ -659,8 +686,19 @@ async function runBrowser() {
         else w.resolve(msg.result)
       } else if (msg.method === 'Network.webSocketFrameReceived') {
         onFrame(msg.params.response.payloadData)
-      } else if (msg.method === 'Inspector.targetCrashed' || msg.method === 'Target.detachedFromTarget') {
-        log('页面崩了或断开', msg.method)
+      } else if (msg.method === 'Inspector.targetCrashed') {
+        // 只是渲染进程崩了，Chrome 还在，内存里的登录也还在：原地重开页面。重启 Chrome 就得靠装回 cookie，登录过了一天就装不回（11-01 17:00）
+        crashes.push(Date.now())
+        while (Date.now() - crashes[0] > 3600000) crashes.shift()
+        log('页面崩了，原地重开', `近一小时第 ${crashes.length} 次`)
+        if (crashes.length > 3) process.exit(1)
+        loggedIn = false
+        open().catch((err) => {
+          log('重开失败', err.message)
+          process.exit(1)
+        })
+      } else if (msg.method === 'Target.detachedFromTarget') {
+        log('页面断开')
         process.exit(1)
       }
     }
@@ -680,22 +718,44 @@ async function runBrowser() {
   const { targetInfos } = await send('Target.getTargets')
   const page = targetInfos.find((t) => t.type === 'page')
   const { sessionId } = await send('Target.attachToTarget', { targetId: page.targetId, flatten: true })
+  let navAt = 0
+  const open = () => {
+    navAt = Date.now()
+    return send('Page.navigate', { url: IM_URL }, sessionId)
+  }
   await send('Network.enable', {}, sessionId)
   await send('Page.enable', {}, sessionId)
-  // 不改页面、不另建连接：在页面的对象里找到已经连上的闲鱼消息 WebSocket，用它发
+  // 扫码后闲鱼问「保持登录状态」，8 秒不选就算「不保持」，那样登录只撑一天左右，过后重开页面就得重扫（10-29、11-01 都是）。
+  // 每个页面和登录小窗里都盯着，弹出来就点「保持」：拿到 30 天的免登凭证 havana_lgc2_77，登录过期时页面会自己静默登回去
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: 'setInterval(() => document.querySelector("button.keep-login-confirm-btn.primary")?.click(), 500)' }, sessionId)
+  // 不改页面、不另建连接：在页面的对象里找到已经连上的闲鱼消息 WebSocket，用它发。
+  // 找连接要扫一遍页面内存（queryObjects），每条都扫会把页面扫崩（11-01 00:03、17:00 都崩在发送那一刻），所以找到后一直用它，断了才重找
+  let wsId = null
+  const viaWs = async (frame) => {
+    const { result } = await send('Runtime.callFunctionOn', {
+      objectId: wsId, returnByValue: true, arguments: [{ value: frame }],
+      functionDeclaration: 'function (f) { if (this.readyState !== 1) return "closed"; this.send(f); return "ok" }',
+    }, sessionId)
+    return result.value
+  }
   sendFrame = async (frame) => {
+    if (wsId && (await viaWs(frame).catch(() => '')) === 'ok') return 'ok'
+    if (wsId) send('Runtime.releaseObject', { objectId: wsId }, sessionId).catch(() => {})
+    wsId = null
     const { result: proto } = await send('Runtime.evaluate', { expression: 'WebSocket.prototype' }, sessionId)
     const { objects } = await send('Runtime.queryObjects', { prototypeObjectId: proto.objectId }, sessionId)
     try {
       const { result } = await send('Runtime.callFunctionOn', {
-        objectId: objects.objectId, returnByValue: true, arguments: [{ value: frame }],
-        functionDeclaration: 'function (f) { const ws = this.find((w) => String(w.url).includes("wss-goofish") && w.readyState === 1); if (!ws) return "no-ws"; ws.send(f); return "ok" }',
+        objectId: objects.objectId,
+        functionDeclaration: 'function () { return this.find((w) => String(w.url).includes("wss-goofish") && w.readyState === 1) }',
       }, sessionId)
-      return result.value
+      if (!result.objectId) return 'no-ws'
+      wsId = result.objectId
     } finally {
       send('Runtime.releaseObject', { objectId: objects.objectId }, sessionId).catch(() => {})
       send('Runtime.releaseObject', { objectId: proto.objectId }, sessionId).catch(() => {})
     }
+    return viaWs(frame)
   }
   // 闲鱼的 mtop 接口：在页面里带登录态发，签名是 md5(_m_h5_tk 前半段&时间&appKey&data)；token 过期时回包会换新 cookie，重试一次
   const mtop = async (api, data, retry = true) => {
@@ -746,13 +806,19 @@ async function runBrowser() {
     }
     log('搜索名次', RANK_KEYWORDS.length, '个词')
   }
-  await send('Page.navigate', { url: IM_URL }, sessionId)
+  await open()
   log('已打开', IM_URL)
   let tick = 0
-  setInterval(async () => {
+  let keepUntil
+  let outSince = 0
+  let notifiedAt = 0
+  const every30s = async () => {
     if (loggedIn && tick++ % 10 === 0) {
       const { cookies } = await send('Storage.getCookies')
       fs.writeFileSync(cookieFile, JSON.stringify(cookies), { mode: 0o600 })
+      const keep = cookies.find((c) => c.name.startsWith('havana_lgc2_'))?.expires || 0
+      if (keep !== keepUntil) log(keep ? `有免登凭证，到 ${clock(keep * 1000)}` : '没有免登凭证，登录过期就得重新扫码')
+      keepUntil = keep
     }
     // 手动发一条：root 往 $XYCS_DIR/ctl/send.json 写 {sid, buyerId, text}，这里发出去，结果写到 data/ctl-result.json
     const ctl = path.join(DIR, 'ctl', 'send.json')
@@ -793,7 +859,10 @@ async function runBrowser() {
       rank().catch((err) => log('搜索名次失败', err.message))
     }
     const quiet = Date.now() - lastFrameAt
-    if (!loggedIn && Date.now() - startedAt > 45000) {
+    if (!loggedIn && Date.now() - navAt > 240000) {
+      // 二维码几分钟就失效（截到的是「二维码已失效」），每 4 分钟重开一次换新码，也让页面再试一次免登
+      await open()
+    } else if (!loggedIn && Date.now() - startedAt > 45000) {
       // 还没登录：截图给店主扫码
       const { data } = await send('Page.captureScreenshot', { format: 'png' }, sessionId)
       fs.writeFileSync(path.join(DATA, 'login.png'), Buffer.from(data, 'base64'))
@@ -801,10 +870,22 @@ async function runBrowser() {
       // 没推送可能是连接断了，也可能是登录过期：先当没登录，刷新后有推送会再置回来，没有就开始截图
       log('3 分钟没有任何推送，刷新页面')
       loggedIn = false
-      await send('Page.navigate', { url: IM_URL }, sessionId)
+      await open()
     }
-    fs.writeFileSync(path.join(DATA, 'status.json'), JSON.stringify({ loggedIn, lastFrameAt, startedAt, convs: convs.size }))
-  }, 30000)
+    // 掉登录 3 分钟还没自己登回来（免登、重开页面都不管用）才叫店主扫码，没扫就每小时再叫一次
+    if (loggedIn) {
+      if (notifiedAt) notify('闲鱼客服登录恢复了', '买家消息又能自动回了')
+      outSince = notifiedAt = 0
+    } else if (!outSince) {
+      outSince = Date.now()
+    } else if (Date.now() - outSince > 180000 && Date.now() - notifiedAt > 3600000) {
+      notifiedAt = Date.now()
+      notify('闲鱼客服掉登录了，要扫码', `已经 ${span(Date.now() - outSince)} 收不到买家消息，自动登录没成功。二维码在杭州服务器 /opt/xianyu-cs/data/login.png，用闲鱼 App 扫`)
+    }
+    fs.writeFileSync(path.join(DATA, 'status.json'), JSON.stringify({ loggedIn, lastFrameAt, startedAt, convs: convs.size, keepLoginUntil: keepUntil ? keepUntil * 1000 : 0 }))
+  }
+  // 定时检查里一步出错（比如页面正在重开）只记一笔，不能让整个进程退出把登录丢了
+  setInterval(() => every30s().catch((err) => log('定时检查出错', err.message)), 30000)
 }
 
 // ---------- 回放、报告、自检 ----------

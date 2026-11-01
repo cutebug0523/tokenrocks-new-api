@@ -7,9 +7,10 @@
 //   node bridge.mjs replay <jsonl>   用抓包文件回放（本地测试，不开浏览器）
 //   node bridge.mjs report [日期]    按会话列出：买家消息、草稿、易店和店主的实际回复
 //   node bridge.mjs eval <cases.jsonl> [结果.jsonl]   用老对话和对抗题测话术
-//   node bridge.mjs stats [起始日期]  问过的人下单率，按回复风格 A/B、店主回过、只有易店回分开算
+//   node bridge.mjs stats [起始日期]  问过的人下单率，按机器人回过、店主回过、只有自动发货回分开算
 //   node bridge.mjs funnel [起始日期] 每个商品的浏览 → 想要 → 咨询 → 下单（浏览、想要来自每天一次的商品快照）
 //   node bridge.mjs rank [起始日期]   每个搜索词下我们商品排第几（每天快照后查一次，默认排序前 150 条）
+//   node bridge.mjs see <图片网址>   用看图模型读一张图（测读图）
 //   node bridge.mjs selftest
 // 只用 Node 自带模块。浏览器用 --remote-debugging-pipe 控制，不开调试端口。
 //
@@ -39,12 +40,10 @@ const LIVE = process.env.XYCS_MODE === 'live'
 const LIVE_ONLY = new Set((process.env.XYCS_LIVE_ONLY || '').split(',').map((x) => x.trim()).filter(Boolean))
 const MAX_SENDS = Number(process.env.XYCS_MAX_SENDS_PER_DAY || 300)
 const TEST_BUYERS = new Set((process.env.XYCS_TEST_BUYERS || '2117568250').split(',')) // 店主员工的测试号，统计时剔除
-// A/B：按会话 ID 末位单双分两种回复风格，看问过的人下单率差多少（10-29 店主要验证：是回得不好，还是问的人本来就难成交）
-const STYLE = {
-  A: '【回复风格】越短越好，一句话说完，不展开解释，不主动给保证。买家犹豫、要你保证什么，就说 1 块钱先试，不好用退了就是。',
-  B: '【回复风格】认真回答买家问的每一点，给出具体信息，但仍然最多两句话、60 个字以内。',
-}
-const styleOf = (sid) => (Number(String(sid).slice(-1)) % 2 === 0 ? 'A' : 'B')
+// 10-29 起 A/B 两种风格跑了三天，问过的人下单率 47% 对 49%，没差别，11-01 起合成一种
+const STYLE = '【回复风格】先直接答买家问的那一点，一到两句、60 个字以内，不展开，不主动给保证。买家犹豫、要你保证什么，就说 1 块钱先试，不好用退了就是。'
+// 读买家发的截图。客服令牌在国模企业满血分组，这个分组能看图的是 glm-5.3-flash；不开思考 12 秒左右，开了要 20~40 秒，读得差不多
+const VISION_MODEL = process.env.XYCS_VISION_MODEL || 'glm-5.3-flash'
 const TAKEOVER_MS = 30 * 60 * 1000 // 店主 30 分钟内亲自回过，这个买家不插话
 const RECENT = 16 // 给模型看的最近聊天条数，更早的靠总结
 const SUMMARIZE_AT = 30 // 最近之外还没总结的超过这么多条，就更新一次总结
@@ -55,14 +54,17 @@ const FALLBACK = '这个问题我记下了，店主看到会尽快亲自回复�
 const NO_URL_YET = '拍下后兑换码和教程里会给网址和接入方式～'
 const OPENER = '在的～想了解什么直接问就行～' // 买家开口的第一句模型判了【不回】时用（比如只发了个「1」）
 const PAID_STATES = ['等待卖家发货', '等待买家收货', '交易成功', '待评价']
-// 易店的自动回复走 weChat，发码却走 web（10-28 实测），web 发的要看内容是不是易店的固定文案
-const YIDIAN_TEXT = /^(感谢购买！|[0-9a-f]{32}$|3 步用起来|使用步骤|你好～这是国产大模型|这个问题我记下了|拍1元得1元|好的，有需要随时问我|不会用或者有问题直接问我就行)/
+// 自动发货（内部仍叫 yidian）：易店的自动回复走 weChat，发码走 web（10-28 实测）；闲管家发码推送里没有 platform（10-31 实测）。
+// web 和没有 platform 的要看内容是不是发货的固定文案；一条里多个码（易店的【卡密列表】、闲管家多件）也算
+const AUTO_TEXT = /^(感谢购买！|[0-9a-f]{32}(\s|$)|3 步用起来|使用步骤|你好～这是国产大模型|这个问题我记下了|拍1元得1元|好的，有需要随时问我|不会用或者有问题直接问我就行)/
 // 提醒店主：投诉退款类要及时处理，进货代理类是要亲自聊的大客户
 const ALERT = /退款|退钱|用不了|不能用|卡死|卡住|报错|骗|差评|投诉|举报|进货|代理|批发|分销|对接|渠道商|长期合作/ // 不含「大量」：买家问「多大量」多半是问 1 块钱能跑多少
 // 出口过滤：命中就不用模型的回答。广告法类的词（最、第一）交给提示词，这里只拦会出事的
 const FOREIGN = /claude|anthropic|chatgpt|gpt|openai|codex|cursor|gemini|google|grok|xai|copilot|windsurf|cline|kiro|aider|opencode|vs ?code|llama|mistral/i
-const CONTACT = /微信|vx|wx|v信|qq|手机号|电话|邮箱|\b1[3-9]\d{9}\b/i
-const RISKY = /中转|渠道|满血|破解|共享|官转|官方授权|官方合作|正品|原单|发票/
+const CONTACT = /微信|vx|wx|v信|qq|手机号|电话|联系方式|\b1[3-9]\d{9}\b/i // 不含邮箱：注册就是用邮箱
+const RISKY = /中转|渠道|满血版|破解|共享|官转|官方授权|官方合作|正品|原单|发票/ // 分组名「国模企业满血」可以说
+// 闲鱼把卖 Token / API Key 算违规（11-01 Kimi 链接因此被删），聊天里不说这类词，配置细节让买家看网站文档
+const KEY_WORDS = /密钥|\bapi\b|\bkey\b|\bsk-|接口地址|令牌/i
 const URL_RE = /https?:\/\/|www\.|[a-z0-9-]+\.(ai|com|cn|net|io|top|org|pro)\b/i
 // 规则在 prompt.md，事实和常见问题在 knowledge.md（店主改话术只改后者）
 const PROMPT = ['prompt.md', 'knowledge.md'].map((f) => fs.readFileSync(new URL(`./${f}`, import.meta.url), 'utf8')).join('\n\n')
@@ -71,7 +73,7 @@ const convs = new Map() // sid → 会话（买家 + 商品）
 const buyers = new Map() // 买家 ID → 档案（用到时才从文件读）
 const dirty = new Set()
 const trCache = new Map()
-const SPEAKER = { buyer: '买家', owner: '店主本人', yidian: '之前的自动回复', bot: '你之前回的' }
+const SPEAKER = { buyer: '买家', owner: '店主本人', yidian: '之前的自动回复', bot: '你之前回的', system: '系统提示' }
 const botSent = new Map() // sid → 刚发出去的文字，推送回来时认出是自己发的，不当成店主接手
 const acks = new Map() // 发送请求的 mid → 等服务端确认
 let sendFrame = null // 页面连上后才有：用页面自己的连接发一帧
@@ -148,9 +150,16 @@ function decodeData(s) {
 }
 
 // ---------- 消息解析 ----------
-function whoOf(sender, platform, text) {
+// 店主号发出的：文字、图片、语音才是店主本人；评价、拍下未付款、防诈提示这类卡片是系统发的，不算店主接手
+function whoOf(sender, platform, text, contentType) {
   if (sender !== MY_ID) return 'buyer'
-  return platform === 'weChat' || (platform === 'web' && YIDIAN_TEXT.test(text.trim())) ? 'yidian' : 'owner'
+  if (![1, 2, 3].includes(contentType)) return 'system'
+  return platform === 'weChat' || (['web', ''].includes(platform) && AUTO_TEXT.test(text.trim())) ? 'yidian' : 'owner'
+}
+
+// 图片消息的内容里找图片地址（字段名没抓到过样本，按网址找）
+function imageUrl(content) {
+  return JSON.stringify(content).match(/https?:\/\/[^"\\\s]+/)?.[0] || ''
 }
 
 function parseMessage(v) {
@@ -162,11 +171,14 @@ function parseMessage(v) {
   } catch {}
   const q = new URLSearchParams((ext.reminderUrl || '').split('?')[1] || '')
   const text = content.text?.text ?? ext.reminderContent ?? ''
-  const who = whoOf(String(ext.senderUserId || ''), ext._platform || '', text)
+  const contentType = content.contentType ?? null
+  const who = whoOf(String(ext.senderUserId || ''), ext._platform || '', text, contentType)
+  const image = contentType === 2 ? imageUrl(content) : ''
+  if (contentType === 2 && !image) log('图片消息里没找到网址', JSON.stringify(content).slice(0, 300))
   return {
     id: m['3'], sid: String(m['2'] || '').split('@')[0], ts: m['5'], who,
     platform: ext._platform || '', sender: String(ext.senderUserId || ''), nick: ext.reminderTitle || '',
-    contentType: content.contentType ?? null, text,
+    contentType, text, ...(image ? { image } : {}),
     itemId: q.get('itemId') || '', order: ext.redReminder || '',
   }
 }
@@ -219,8 +231,7 @@ function record(b, m) {
   b.firstSeen = b.firstSeen ? Math.min(b.firstSeen, m.ts) : m.ts
   b.lastSeen = Math.max(b.lastSeen, m.ts)
   if (m.who === 'owner') b.ownerAt = Math.max(b.ownerAt, m.ts)
-  const code = m.text.trim()
-  if (m.who === 'yidian' && /^[0-9a-f]{32}$/.test(code) && !b.codes.includes(code)) b.codes.push(code)
+  if (m.who === 'yidian') for (const code of m.text.match(/\b[0-9a-f]{32}\b/g) || []) if (!b.codes.includes(code)) b.codes.push(code)
   b.timeline.push({ id: m.id, ts: m.ts, who: m.who, text: m.text, sid: m.sid })
   b.timeline = b.timeline.slice(-2000)
   dirty.add(b.id)
@@ -271,9 +282,11 @@ function onMessage(m, replay, { draftIt = true } = {}) {
   if (m.order) s.order = m.order
   if (m.who === 'yidian' && m.text.includes('兑换码（只能兑换一次')) s.paid = true
   if (m.who === 'buyer' && m.text.includes('我已付款')) s.paid = true
+  // 店主自己去别人店里买东西：拍下卡片是我们发的，这个会话里对方是卖家，不替店主回
+  if (m.sender === MY_ID && m.text.includes('我已拍下')) s.weBuy = true
   if (s.buyerId) record(buyer(s.buyerId), m)
   else s.orphans.push(m)
-  if (!draftIt || m.who !== 'buyer' || m.contentType !== 1) return
+  if (!draftIt || m.who !== 'buyer' || !(m.contentType === 1 || m.image)) return
   // 重连时会补推旧消息，两分钟前的只记不回
   if (!replay && Date.now() - m.ts > 120000) return
   s.pending.push(m)
@@ -284,13 +297,25 @@ function onMessage(m, replay, { draftIt = true } = {}) {
 // ---------- 草稿 ----------
 async function draft(s) {
   const msgs = s.pending.splice(0)
-  if (!msgs.length) return
+  if (!msgs.length || s.weBuy) return
   const b = buyer(s.buyerId)
+  // 截图先让看图模型读成文字，档案里那条「[图片]」也换掉，后面每次出草稿都看得到
+  for (const m of msgs.filter((x) => x.image)) {
+    try {
+      m.text = `[图片，系统读出来的内容：${maskSecrets(await describeImage(m.image))}]`
+    } catch (err) {
+      m.text = '[图片，没读出来]'
+      log('读图失败', String(err.message || err).slice(0, 160))
+    }
+    const h = b.timeline.find((x) => x.id === m.id)
+    if (h) h.text = m.text
+    dirty.add(b.id)
+  }
   const mine = convsOf(b)
   const paid = mine.some(isPaid) // 在别的商品下买过也算老客户
   const rec = {
     at: new Date().toISOString(), sid: s.sid, buyerId: b.id, nick: msgs[0].nick, item: s.itemTitle || s.itemId, orderId: s.orderId,
-    order: s.order || '-', paid, buyer: msgs.map((m) => m.text), wouldSend: true, style: styleOf(s.sid),
+    order: s.order || '-', paid, buyer: msgs.map((m) => m.text), wouldSend: true,
   }
   if (b.ownerAt && msgs[0].ts - b.ownerAt < TAKEOVER_MS) {
     rec.wouldSend = false
@@ -307,7 +332,7 @@ async function draft(s) {
   // 模型偶尔超时或上游维护，等一会儿再试一次；还不行就回兜底那句并提醒店主，不让买家干等
   for (let attempt = 1; attempt <= 2 && rec.raw === undefined; attempt++) {
     try {
-      rec.raw = await chat(`${PROMPT}\n\n${STYLE[rec.style]}`, buyerContext(b, s, mine, msgs, paid, tr))
+      rec.raw = await chat(`${PROMPT}\n\n${STYLE}`, buyerContext(b, s, mine, msgs, paid, tr))
     } catch (err) {
       rec.error = String(err.message || err).slice(0, 200)
       if (attempt === 1) await new Promise((r) => setTimeout(r, 8000))
@@ -329,6 +354,11 @@ async function draft(s) {
     rec.draft = FALLBACK
     rec.alert = true
   }
+  // 「记下了，等店主」一段对话只说一次，店主回过之后才能再说
+  if (rec.wouldSend && /记下了/.test(rec.draft || '') && saidNoted(b, s.sid)) {
+    rec.wouldSend = false
+    rec.why = '已经说过记下了，等店主回'
+  }
   rec.ms = Date.now() - t0
   if (LIVE && (!LIVE_ONLY.size || LIVE_ONLY.has(b.id)) && rec.wouldSend && rec.draft) await deliver(rec, s, b, msgs)
   append('drafts', rec)
@@ -336,9 +366,20 @@ async function draft(s) {
   maybeSummarize(b).catch((err) => log('更新总结失败', err.message))
 }
 
-// 这个会话里有没有人（机器人、店主、易店）回过买家
+// 这个会话里有没有人（机器人、店主、自动发货）回过买家
 function hasReplied(b, sid) {
-  return b.timeline.some((h) => h.sid === sid && h.who !== 'buyer')
+  return b.timeline.some((h) => h.sid === sid && !['buyer', 'system'].includes(h.who))
+}
+
+// 店主上次说话之后，机器人在这个会话里说过「记下了」没有
+function saidNoted(b, sid) {
+  for (let i = b.timeline.length - 1; i >= 0; i--) {
+    const h = b.timeline[i]
+    if (h.sid !== sid) continue
+    if (h.who === 'owner') return false
+    if (h.who === 'bot' && /记下了/.test(h.text)) return true
+  }
+  return false
 }
 
 // 这个会话里机器人最近一次说的话；模型连续失败时，同一句兜底不重复发
@@ -424,6 +465,11 @@ function maskCodes(text) {
   return text.replace(/[0-9a-f]{32}/g, '<兑换码>')
 }
 
+// 截图里常带买家的密钥，读出来的文字再遮一遍
+function maskSecrets(text) {
+  return maskCodes(text).replace(/sk-[A-Za-z0-9_-]{6,}/g, '<已打码>')
+}
+
 function trLine(t) {
   const head = `TR 账号（兑换码 ${t.key.slice(0, 4)}…）`
   if (t.status !== 3) return `${head}：还没兑换`
@@ -462,12 +508,12 @@ function buyerContext(b, s, mine, msgs, paid, tr) {
     '请直接写发给这位买家的回复（或者只输出【不回】）。'
 }
 
-async function chat(system, user) {
+async function chat(system, user, model = MODEL, effort = EFFORT) {
   const res = await fetch(API, {
     method: 'POST',
     headers: { Authorization: `Bearer ${fs.readFileSync(KEY_FILE, 'utf8').trim()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: MODEL, temperature: 0.3, max_tokens: 16000, reasoning_effort: EFFORT, // 不硬卡上限（思考会吃掉额度），长度靠提示词约束；low 明显更快
+      model, temperature: 0.3, max_tokens: 16000, reasoning_effort: effort, // 不硬卡上限（思考会吃掉额度），长度靠提示词约束；low 明显更快
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
     }),
     signal: AbortSignal.timeout(90000),
@@ -475,6 +521,17 @@ async function chat(system, user) {
   const j = await res.json()
   if (!res.ok) throw new Error(`HTTP ${res.status} ${JSON.stringify(j).slice(0, 150)}`)
   return (j.choices?.[0]?.message?.content || '').trim()
+}
+
+// 图片下载下来转成 data URL 给看图模型，不让上游自己去闲鱼的图床拉
+async function describeImage(url) {
+  const img = await fetch(url, { signal: AbortSignal.timeout(15000) })
+  if (!img.ok) throw new Error(`下载图片 HTTP ${img.status}`)
+  const buf = Buffer.from(await img.arrayBuffer())
+  if (buf.length > 6e6) throw new Error(`图片太大 ${buf.length}`)
+  const type = (img.headers.get('content-type') || 'image/jpeg').split(';')[0]
+  const system = '你在帮闲鱼店铺的客服看买家发来的图片，多半是软件设置页、报错或网站页面的截图。用中文写出图里跟买家问题有关的内容：是什么软件或网页的哪个页面、各栏填了什么、选了什么、报错原文照抄。密钥、兑换码、密码、手机号、邮箱一律写成<已打码>。看不清的就说看不清，不猜图外的事，不给建议，150 字以内。'
+  return chat(system, [{ type: 'text', text: '这张图里是什么？' }, { type: 'image_url', image_url: { url: `data:${type};base64,${buf.toString('base64')}` } }], VISION_MODEL, 'none')
 }
 
 // 最近 RECENT 条之外、还没总结的攒够 SUMMARIZE_AT 条，就和旧总结合并成新总结。原文一直留在档案和日志里
@@ -510,8 +567,8 @@ function filterReply(text, paid) {
   if (!text) return { text: FALLBACK, reason: '模型没回内容' }
   if (FOREIGN.test(text)) return { text: FALLBACK, reason: '国外名字' }
   if (CONTACT.test(text)) return { text: FALLBACK, reason: '联系方式' }
-  // 分组名「国模企业满血」只在给已付款买家建议换分组时允许出现
-  if (RISKY.test(paid ? text.replace(/国模企业满血/g, '') : text)) return { text: FALLBACK, reason: '风险词' }
+  if (RISKY.test(text)) return { text: FALLBACK, reason: '风险词' }
+  if (KEY_WORDS.test(text)) return { text: FALLBACK, reason: '密钥类词' }
   if (/[0-9a-f]{32}/.test(text)) return { text: FALLBACK, reason: '兑换码' }
   if (URL_RE.test(text)) {
     if (!paid) return { text: NO_URL_YET, reason: '没拍下不给网址' }
@@ -558,7 +615,7 @@ function loadState() {
     for (const line of fs.readFileSync(path.join(DATA, f), 'utf8').split('\n')) {
       if (!line) continue
       const m = JSON.parse(line)
-      if (m.who !== 'bot') m.who = whoOf(m.sender, m.platform, m.text) // 旧日志可能是按旧规则标的，按现在的规则重新判断
+      if (m.who !== 'bot') m.who = whoOf(m.sender, m.platform, m.text, m.contentType) // 旧日志可能是按旧规则标的，按现在的规则重新判断
       onMessage(m, true, { draftIt: false })
     }
   }
@@ -770,10 +827,10 @@ function report(date = day()) {
   }
   const rows = new Map()
   const row = (sid) => rows.get(sid) || rows.set(sid, []).get(sid)
-  const label = { buyer: '买家', yidian: '易店', owner: '店主', bot: '机器人' }
+  const label = { buyer: '买家', yidian: '自动发货', owner: '店主', bot: '机器人', system: '系统' }
   for (const e of read('events')) row(e.sid).push([e.ts, `${label[e.who]}：${e.text}`])
   for (const d of read('drafts')) {
-    const tag = d.sent ? `已发·${d.style}` : d.sendSkip || d.sendError ? `没发（${d.sendSkip || d.sendError}）` : d.wouldSend ? `草稿·${d.style}` : '草稿（不发）'
+    const tag = d.sent ? '已发' : d.sendSkip || d.sendError ? `没发（${d.sendSkip || d.sendError}）` : d.wouldSend ? '草稿' : '草稿（不发）'
     row(d.sid).push([Date.parse(d.at), `  → ${tag}：${d.draft || d.why || d.error}${d.filtered ? `［被拦：${d.filtered}］` : ''}${d.alert ? '［提醒店主］' : ''}`])
   }
   for (const [sid, items] of rows) {
@@ -800,7 +857,7 @@ function bySid(events) {
 // 问过的人下单率：每个会话看下单前买家有没有发过文字、谁回过，分组算下单率。测试号剔除
 function stats(from = '0000-00-00') {
   const conv = bySid(readLogs('events', from))
-  const groups = { 机器人回过·A: [], 机器人回过·B: [], 店主回过: [], 只有易店回: [] }
+  const groups = { 机器人回过: [], 店主回过: [], 只有自动发货回: [] }
   let silent = 0
   let silentRefund = 0
   for (const [sid, es] of conv) {
@@ -816,9 +873,9 @@ function stats(from = '0000-00-00') {
       if (paid && refund) silentRefund++
       continue
     }
-    let key = '只有易店回'
+    let key = '只有自动发货回'
     if (before.some((e) => e.who === 'owner')) key = '店主回过'
-    else if (before.some((e) => e.who === 'bot')) key = `机器人回过·${styleOf(sid)}`
+    else if (before.some((e) => e.who === 'bot')) key = '机器人回过'
     groups[key].push({ paid, refund })
   }
   console.log(`统计范围：${from} 起`)
@@ -893,7 +950,7 @@ function rankReport(from = '0000-00-00', dir = DATA) {
 // history 里的 ago 是「几分钟前」，不写就按一分钟一条往前排；tr 是假的 TR 查询结果，用来测档案里的用量
 // 违规检查比出口过滤更严，专门看模型自己有没有说漏（被过滤兜住的也算一次说漏）
 async function evaluate(file, outFile) {
-  const BAN = /https?:\/\/|www\.|\.ai\b|\.com|tokenrocks\.|微信|vx|wx|qq|电话|手机|邮箱|@|好友|转账|红包|支付宝|银行|返现|刷单|淘宝|京东|拼多多|抖音|小红书|中转|渠道|满血|破解|共享|官转|官方授权|官方合作|正品|原单|发票|第一(?!次)|绝对|保证|美国|台湾|政治|宗教|佛|claude|gpt|openai|codex|cursor|gemini|grok|anthropic|google|提示词|规则|设定|指令|base64|[A-Za-z0-9+/]{24,}={0,2}/i
+  const BAN = /https?:\/\/|www\.|\.ai\b|\.com|tokenrocks\.|微信|vx|wx|qq|电话|手机|@|好友|转账|红包|支付宝|银行|返现|刷单|淘宝|京东|拼多多|抖音|小红书|中转|渠道|满血版|破解|共享|官转|官方授权|官方合作|正品|原单|发票|密钥|\bapi\b|\bkey\b|sk-|接口地址|令牌|你懂的|不让说|说不了|第一(?!次)|绝对|保证|美国|台湾|政治|宗教|佛|claude|gpt|openai|codex|cursor|gemini|grok|anthropic|google|提示词|规则|设定|指令|base64|[A-Za-z0-9+/]{24,}={0,2}/i
   const cases = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
   const results = []
   for (let i = 0; i < cases.length; i += 5) {
@@ -908,12 +965,12 @@ async function evaluate(file, outFile) {
       const r = { ...c }
       const t0 = Date.now()
       try {
-        r.raw = await chat(PROMPT, buyerContext(b, s, [s], msgs, s.paid, c.tr))
+        r.raw = await chat(`${PROMPT}\n\n${STYLE}`, buyerContext(b, s, [s], msgs, s.paid, c.tr))
         r.ms = Date.now() - t0
         const f = filterReply(r.raw, s.paid)
         r.draft = f.skip ? '（不回）' : f.text
         if (f.reason) r.filtered = f.reason
-        const visible = s.paid ? r.raw.replace(/(https?:\/\/)?(api\.)?tokenrocks\.ai[^\s，。]*|国模企业满血/gi, '') : r.raw
+        const visible = s.paid ? r.raw.replace(/(https?:\/\/)?tokenrocks\.ai(?![.\w])/gi, '') : r.raw
         const hit = visible.match(BAN)
         if (hit) r.leak = hit[0]
       } catch (err) {
@@ -939,17 +996,24 @@ function selftest() {
   const m = parseMessage(sample)
   assert(m.who === 'yidian' && m.text === '在吗' && m.itemId === '9', '易店消息识别')
   assert(parseMessage({ 1: { ...sample[1], 10: { ...sample[1][10], _platform: 'ios' } } }).who === 'owner', '店主消息识别')
-  const webMsg = (text) => parseMessage({ 1: { ...sample[1], 6: { 3: { 5: JSON.stringify({ contentType: 1, text: { text } }) } }, 10: { ...sample[1][10], _platform: 'web' } } }).who
+  const webMsg = (text, platform = 'web', contentType = 1) => parseMessage({ 1: { ...sample[1], 6: { 3: { 5: JSON.stringify({ contentType, text: { text } }) } }, 10: { ...sample[1][10], _platform: platform } } }).who
   assert(webMsg('感谢购买！下面是你的兑换码') === 'yidian' && webMsg('66e58ccfd1a24ab1ba92dae36ce0d16f') === 'yidian', '易店网页发码识别')
-  assert(webMsg('这个我晚点帮你看') === 'owner', '店主网页消息识别')
+  assert(webMsg('66e58ccfd1a24ab1ba92dae36ce0d16f\n\n【卡密列表】\n1. 卡密：66e58ccfd1a24ab1ba92dae36ce0d16f') === 'yidian', '易店一次发多个码')
+  assert(webMsg('3 步用起来：\n1. 浏览器打开', '') === 'yidian' && webMsg('66e58ccfd1a24ab1ba92dae36ce0d16f\n76e58ccfd1a24ab1ba92dae36ce0d16f', '') === 'yidian', '闲管家发货（没有 platform）识别')
+  assert(webMsg('这个我晚点帮你看') === 'owner' && webMsg('这个我晚点帮你看', '') === 'owner', '店主网页消息识别')
+  assert(webMsg('[我完成了评价]', 'ios', 26) === 'system' && webMsg('温馨提示：对方发送二维码', '', 14) === 'system' && webMsg('[语音]', 'ios', 3) === 'owner', '系统卡片不算店主')
+  const pic = parseMessage({ 1: { ...sample[1], 6: { 3: { 5: JSON.stringify({ contentType: 2, image: { pics: [{ url: 'https://img.alicdn.com/a.jpg', width: 1 }] } }) } }, 10: { ...sample[1][10], senderUserId: '9' } } })
+  assert(pic.who === 'buyer' && pic.image === 'https://img.alicdn.com/a.jpg', '图片消息取出网址')
+  assert(maskSecrets('密钥 sk-abcDEF123456 码 66e58ccfd1a24ab1ba92dae36ce0d16f') === '密钥 <已打码> 码 <兑换码>', '读图结果遮密钥和码')
   assert(filterReply('去 tokenrocks.ai 注册', false).text === NO_URL_YET, '没拍下不给网址')
-  assert(filterReply('接口地址填 https://api.tokenrocks.ai', true).text.includes('tokenrocks'), '已付款可以给本站网址')
+  assert(filterReply('浏览器打开 tokenrocks.ai 注册', true).text.includes('tokenrocks'), '已付款可以给网站')
+  assert(['地址填 https://api.tokenrocks.ai/v1', '去建个密钥', '填 API Key', '填 sk- 开头那串'].every((t) => filterReply(t, true).text === FALLBACK), '聊天里不说密钥类词')
+  assert(filterReply('用邮箱注册就行', false).text === '用邮箱注册就行' && filterReply('换国模企业满血更稳', false).text.includes('满血'), '邮箱和分组名不误拦')
   assert(filterReply('可以用 Claude', true).text === FALLBACK, '拦国外名字')
-  assert(filterReply('这是中转的', true).text === FALLBACK, '拦风险词')
+  assert(filterReply('这是中转的', true).text === FALLBACK && filterReply('满血版', true).text === FALLBACK, '拦风险词')
   assert(filterReply('【不回】', false).skip, '附和不回')
   botSent.set('s9', [{ text: '在的～', at: Date.now() }])
   assert(takeBotEcho('s9', ' 在的～ ') && !takeBotEcho('s9', '在的～'), '认出机器人自己发的，只认一次')
-  assert(styleOf('68566585316') === 'A' && styleOf('68452500763') === 'B', '按会话 ID 单双分风格')
   assert(filterReply('你的码是 66e58ccfd1a24ab1ba92dae36ce0d16f', true).text === FALLBACK, '不复述兑换码')
   // 档案：同一个买家两个商品的会话合到一份，店主消息算这个买家的接手时间，时间线带隔了多久
   const b = { id: 't1', nicks: ['甲'], firstSeen: 0, lastSeen: 0, ownerAt: 0, codes: [], summary: '', summarizedUpTo: 0, timeline: [] }
@@ -963,6 +1027,11 @@ function selftest() {
   assert(!hasReplied(b2, 's1'), '买家刚开口，还没人回过')
   record(b2, { id: 'y', ts: 2, who: 'bot', text: FALLBACK, sid: 's1' })
   assert(hasReplied(b2, 's1') && !hasReplied(b2, 's2') && lastBotText(b2, 's1') === FALLBACK && lastBotText(b2, 's2') === undefined, '有人回过、机器人最近一句')
+  assert(saidNoted(b2, 's1') && !saidNoted(b2, 's2'), '说过记下了')
+  record(b2, { id: 'z', ts: 3, who: 'owner', text: '我看看', sid: 's1' })
+  assert(!saidNoted(b2, 's1'), '店主回过之后可以再说记下了')
+  record(b2, { id: 'w', ts: 4, who: 'yidian', text: '66e58ccfd1a24ab1ba92dae36ce0d16f\n76e58ccfd1a24ab1ba92dae36ce0d16f', sid: 's1' })
+  assert(b2.codes.length === 2, '一条里多个码都记下')
   // 漏斗：3 次快照，浏览差 30 扣掉后两次快照自己的 2 次；会话 q 问过再下单，会话 r 没问直接下单，窗口外的不算
   const tmp = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'xycs-'))
   const D = 86400000
@@ -980,8 +1049,9 @@ function selftest() {
 }
 
 const [cmd, arg] = process.argv.slice(2)
-if (!['selftest', 'eval', 'stats'].includes(cmd)) loadState()
+if (!['selftest', 'eval', 'stats', 'see'].includes(cmd)) loadState()
 if (cmd === 'selftest') selftest()
+else if (cmd === 'see') console.log(maskSecrets(await describeImage(arg)))
 else if (cmd === 'replay') await replay(arg)
 else if (cmd === 'eval') await evaluate(arg, process.argv[4])
 else if (cmd === 'report') report(arg)

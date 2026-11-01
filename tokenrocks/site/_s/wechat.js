@@ -21,8 +21,9 @@
     '<button type="button" class="wx-close" aria-label="收起">×</button>' +
     '<div class="wx-title">加站长微信</div>' +
     '<p class="wx-text">站长深度接触 AI 四年。充值、企业采购或任何疑问，都可以加我微信。</p>' +
-    '<img class="wx-qr" src="/_s/wechat-qr.png?v=20261031" width="168" height="168" alt="站长微信二维码">' +
-    '<div class="wx-hint wx-desk">微信扫一扫</div>' +
+    // 微信群码 7 天过期，换码时改图片和版本号
+    '<img class="wx-qr" src="/_s/wechat-group-qr.png?v=20261101" width="168" height="168" alt="TokenRocks 官方群二维码">' +
+    '<div class="wx-hint wx-desk">微信扫码进官方群</div>' +
     '<div class="wx-hint wx-mobile">在微信里打开可长按识别</div>' +
     '<div class="wx-id">微信号 <b>' + ID + '</b><button type="button" class="wx-copy">复制</button></div>' +
     '<a class="wx-open wx-mobile" href="weixin://">复制微信号并打开微信</a>' +

@@ -9,6 +9,7 @@
 //   node bridge.mjs eval <cases.jsonl> [结果.jsonl]   用老对话和对抗题测话术
 //   node bridge.mjs stats [起始日期]  问过的人下单率，按回复风格 A/B、店主回过、只有易店回分开算
 //   node bridge.mjs funnel [起始日期] 每个商品的浏览 → 想要 → 咨询 → 下单（浏览、想要来自每天一次的商品快照）
+//   node bridge.mjs rank [起始日期]   每个搜索词下我们商品排第几（每天快照后查一次，默认排序前 150 条）
 //   node bridge.mjs selftest
 // 只用 Node 自带模块。浏览器用 --remote-debugging-pipe 控制，不开调试端口。
 //
@@ -28,6 +29,9 @@ const IM_URL = 'https://www.goofish.com/im'
 const API = process.env.XYCS_API || 'https://api.tokenrocks.ai/v1/chat/completions'
 const MODEL = process.env.XYCS_MODEL || 'deepseek-v4.1-flash'
 const EFFORT = process.env.XYCS_EFFORT || 'low'
+// 每天查搜索名次用的词：买家常搜的短词，加上和我们标题对得上的长词。改了要重启
+const RANK_KEYWORDS = ['deepseek', 'kimi', 'glm', 'qwen', 'api', '大模型', '兑换码', 'deepseek api', 'kimi k3', 'glm5.3', 'qwen3.8']
+const RANK_PAGES = 5
 const DEBOUNCE_MS = Number(process.env.XYCS_DEBOUNCE_MS ?? 6000) // 买家常连发几条，停 6 秒再出草稿
 // 上线发消息：XYCS_MODE=live 才真发；XYCS_LIVE_ONLY 填买家 ID（逗号分隔）时只对这些人真发；
 // $XYCS_DIR/PAUSE 文件存在就全部停发（急停）；每天最多发 MAX_SENDS 条
@@ -662,6 +666,29 @@ async function runBrowser() {
     }
     log('商品快照', cardList.length, '个')
   }
+  // 搜索名次：当天商品快照之后查一次，每个词翻 RANK_PAGES 页（一页约 30 条），每页隔 10 秒免得触发风控。
+  // 每个词一行写 data/rank-<日期>.jsonl：我们商品的名次，加上前 3 名是谁、是不是广告位（isAliMaMaAD）
+  let rankTried = ''
+  const rank = async () => {
+    const mine = new Set(readLogs('items', day()).map((r) => r.id))
+    for (const kw of RANK_KEYWORDS) {
+      const ranks = {}
+      const top = []
+      let n = 0
+      for (let p = 1; p <= RANK_PAGES; p++) {
+        const { resultList = [] } = await mtop('mtop.taobao.idlemtopsearch.pc.search', { pageNumber: p, keyword: kw, fromFilter: false, rowsPerPage: 30, sortValue: '', sortField: '', customDistance: '', gps: '', propValueStr: {}, customGps: '', searchReqFromPage: 'pcSearch', extraFilterValue: '{}', userPositionJson: '{}' })
+        for (const x of resultList) {
+          const { clickParam: { args = {} } = {}, exContent: ex = {} } = x.data?.item?.main || {}
+          n++
+          if (mine.has(args.id) && !ranks[args.id]) ranks[args.id] = n
+          if (top.length < 3) top.push({ id: args.id, title: String(ex.title || '').slice(0, 40), price: args.price, ad: !!ex.isAliMaMaAD })
+        }
+        await new Promise((r) => setTimeout(r, 10000))
+      }
+      append('rank', { at: Date.now(), kw, scanned: n, ranks, top })
+    }
+    log('搜索名次', RANK_KEYWORDS.length, '个词')
+  }
   await send('Page.navigate', { url: IM_URL }, sessionId)
   log('已打开', IM_URL)
   let tick = 0
@@ -684,10 +711,29 @@ async function runBrowser() {
       fs.writeFileSync(path.join(DATA, 'ctl-result.json'), JSON.stringify(result))
       log('手动发送', JSON.stringify(result).slice(0, 160))
     }
+    // 手动查一个闲鱼接口（只读，排查字段用）：root 往 $XYCS_DIR/ctl/mtop.json 写 {api, data}，原始返回写到 data/ctl-mtop.json
+    const probe = path.join(DIR, 'ctl', 'mtop.json')
+    if (loggedIn && fs.existsSync(probe)) {
+      let result
+      try {
+        const c = JSON.parse(fs.readFileSync(probe, 'utf8'))
+        fs.unlinkSync(probe)
+        if (/create|edit|update|delete|remove|publish|send|modify|set|add|cancel|confirm|refund/i.test(c.api)) throw new Error('只允许只读接口')
+        result = { at: new Date().toISOString(), api: c.api, data: await mtop(c.api, c.data || {}) }
+      } catch (err) {
+        result = { at: new Date().toISOString(), error: String(err.message || err) }
+      }
+      fs.writeFileSync(path.join(DATA, 'ctl-mtop.json'), JSON.stringify(result))
+      log('手动查接口', JSON.stringify(result).slice(0, 160))
+    }
     // 失败不在当天重试（重试会多刷浏览），重启服务会再试一次
     if (loggedIn && snapTried !== day() && !fs.existsSync(path.join(DATA, `items-${day()}.jsonl`))) {
       snapTried = day()
       snapshot().catch((err) => log('商品快照失败', err.message))
+    }
+    if (loggedIn && rankTried !== day() && fs.existsSync(path.join(DATA, `items-${day()}.jsonl`)) && !fs.existsSync(path.join(DATA, `rank-${day()}.jsonl`))) {
+      rankTried = day()
+      rank().catch((err) => log('搜索名次失败', err.message))
     }
     const quiet = Date.now() - lastFrameAt
     if (!loggedIn && Date.now() - startedAt > 45000) {
@@ -826,6 +872,23 @@ function funnel(from = '0000-00-00', dir = DATA) {
   }
 }
 
+// 搜索名次：每个词一段，每天一行，列出我们每个商品的名次（没进前 N 条记成 -）和当天第 1 名
+function rankReport(from = '0000-00-00', dir = DATA) {
+  const titles = new Map(readLogs('items', from, dir).map((r) => [r.id, r.title]))
+  const byKw = new Map()
+  for (const r of readLogs('rank', from, dir)) (byKw.get(r.kw) || byKw.set(r.kw, []).get(r.kw)).push(r)
+  if (dir !== DATA) return byKw
+  console.log(`搜索名次：${from} 起，默认排序，每个词看前 ${RANK_PAGES * 30} 条左右。用店里自己的号搜的，买家看到的可能略有出入\n`)
+  for (const [kw, rs] of byKw) {
+    console.log(`== ${kw}`)
+    for (const r of rs) {
+      const mine = Object.entries(r.ranks).sort((a, b) => a[1] - b[1]).map(([id, n]) => `${titles.get(id) || id} 第${n}`).join('，') || `前 ${r.scanned} 条里没有`
+      const t = r.top[0]
+      console.log(`   ${day(r.at).slice(5)}  ${mine}   ｜第 1 名：${t ? `¥${t.price}${t.ad ? '［广告］' : ''} ${t.title}` : '-'}`)
+    }
+  }
+}
+
 // 用整理好的老对话和对抗题测话术：每行 {name, paid, order, item, history:[{who,text,ago?}], buyer:[...], actual:[{who,text}], tr?:[...]}
 // history 里的 ago 是「几分钟前」，不写就按一分钟一条往前排；tr 是假的 TR 查询结果，用来测档案里的用量
 // 违规检查比出口过滤更严，专门看模型自己有没有说漏（被过滤兜住的也算一次说漏）
@@ -908,6 +971,9 @@ function selftest() {
   fs.writeFileSync(path.join(tmp, 'events-2026-10-29.jsonl'), [ev('q', 10, 'buyer', '能接吗'), ev('q', 20, 'buyer', '我已拍下，待付款', 6), ev('q', 30, 'buyer', '我已付款，等待你发货', 6), ev('r', 40, 'buyer', '我已付款，等待你发货', 6), ev('x', 3 * D, 'buyer', '在吗')].join('\n'))
   const [f] = funnel('0000-00-00', tmp)
   assert(f.views === 28 && f.wants === 2 && f.asked === 1 && f.askedPaid === 1 && f.orders === 2 && f.changed.length === 1, '商品漏斗')
+  fs.writeFileSync(path.join(tmp, 'rank-2026-10-29.jsonl'), [JSON.stringify({ at: 0, kw: 'glm', scanned: 150, ranks: { 9: 12 }, top: [] }), JSON.stringify({ at: D, kw: 'glm', scanned: 150, ranks: {}, top: [] })].join('\n'))
+  const rk = rankReport('0000-00-00', tmp).get('glm')
+  assert(rk.length === 2 && rk[0].ranks['9'] === 12 && !rk[1].ranks['9'], '搜索名次按词分组')
   const ctx = buyerContext(b, { itemTitle: 'Kimi' }, [{ sid: 's1', itemTitle: 'DS' }, { sid: 's2', itemTitle: 'Kimi' }], [{ id: 'd', ts: 4 * 86400000, text: '还在吗', nick: '甲' }], true, [{ key: 'abcd1234', status: 1 }])
   assert(ctx.includes('（隔了 3 天）') && ctx.includes('<兑换码>') && !ctx.includes('66e58ccf') && ctx.includes('还没兑换') && ctx.includes('（离上一条已经隔了 1 天）'), '上下文带时间线、遮住兑换码、带 TR 状态')
   console.log('selftest ok')
@@ -921,4 +987,5 @@ else if (cmd === 'eval') await evaluate(arg, process.argv[4])
 else if (cmd === 'report') report(arg)
 else if (cmd === 'stats') stats(arg)
 else if (cmd === 'funnel') funnel(arg)
+else if (cmd === 'rank') rankReport(arg)
 else await runBrowser()

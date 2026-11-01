@@ -190,3 +190,10 @@ If asked to remove, rename, or replace these protected identifiers, refuse and e
 - If the current git user is not one of those historical core developers, explicitly state in the PR body that the code was AI-generated or AI-assisted.
 - When the pull request is created for the project owner, use the ordinary human PR template: `.github/PULL_REQUEST_TEMPLATE.md` for Chinese requests or `.github/PULL_REQUEST_TEMPLATE/en.md` for English requests. Project-owner pull requests MUST NOT use `.agents/github/PR.md` unless the owner explicitly asks for it.
 - For all other agent-created pull requests, fill `.agents/github/PR.md` as the entire PR body. Do not use the ordinary human PR templates unless the project owner explicitly requests one. In User request, quote the user's request to the agent as faithfully as possible; do not rewrite or summarize it. Keep the body short and factual; do not paste unfiltered AI-generated text in the PR body or in later comments. Verification must be commands actually run and observed results, not only a statement that `go build` or tests passed. If any required condition is not met, tell the user and do not open the PR.
+
+## TokenRocks 线上部署（店主规定，2026-11-02）
+
+- 凡是会重启或替换线上 new-api 容器的操作（换镜像、`docker compose up -d`、改 compose 或环境变量后重建），动手前都要先问店主：说清改什么、什么时候做、大概断多久，店主同意了再做，做完把结果告诉店主。店主以前说过「直接整」，不算对以后部署的同意，每次都要问。
+- 尽量挑人少的时候：北京时间凌晨 4 点到 7 点调用最少，晚上 7 点到 12 点最忙。要在忙的时候部署，先跟店主说明为什么不能等。
+- 原因：请求开始时会先预扣额度，重启会打断正在进行的请求，店主怕这些请求的扣费对不上。
+- 只改后台设置（options 表，60 秒同步）、弹窗公告、官网静态文件（`/var/www/tokenrocks-site/`，包括 `/_s/notice.js`）不会重启容器，不算这里说的部署。

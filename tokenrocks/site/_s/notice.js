@@ -1,27 +1,43 @@
 // 弹窗公告：内容就是后台「系统设置 → 系统公告」（/api/notice），为空不弹。
-// 每次打开或刷新页面都弹；控制台从登录、注册这类页面进到别的页面（也就是刚登录完）时再弹一次，登录页本身不弹。
+// 只给登录用户弹：控制台登录后的页面（有侧边栏框架）每次打开或刷新都弹，刚登录完也弹一次；官网静态页、登录注册页、没登录的人都不弹。
+// 刚注册的人这一趟不弹（同一个标签页里去过注册页就算），让闲鱼来的人先安心兑换试用，下次再来才弹。
 // 「知道了」、点遮罩、按 Esc 只关这一次；勾了「今日不再弹出」，当天同一条公告不再弹，改了内容当天也会重新弹。
-// 由 wechat.js 加载，所以官网静态页和控制台都有。公告是 Markdown，这里只认段落、换行、**加粗**、# 标题行和网址；
+// 由 wechat.js 加载，官网静态页和控制台都会加载。公告是 Markdown，这里只认段落、换行、**加粗**、# 标题行和网址；
 // sk- 开头的密钥单独成块，带一键复制（手机上长按很难选全）；单独一行的 ![说明](/_s/图片) 显示成图片（比如群二维码），只认本站 /_s/ 下的图。
 ;(function () {
   var KEY = 'tokenrocks_notice_snooze'
-  var AUTH = /^\/(sign-in|sign-up|register|forgot-password|reset|otp|oauth|user\/reset)(\/|$)/
+  var NEW = 'tokenrocks_notice_new_signup'
+  var SIGN_UP = /^\/(sign-up|register)(\/|$)/
   var text = ''
 
+  // 控制台的侧边栏框架（web/src/components/ui/sidebar.tsx 的 SidebarProvider）只在登录后的页面渲染，手机上也有
+  function loggedIn() {
+    return !!document.querySelector('[data-slot="sidebar-wrapper"]')
+  }
+
+  function markSignUp() {
+    if (!SIGN_UP.test(location.pathname)) return
+    try {
+      sessionStorage.setItem(NEW, '1')
+    } catch (e) {}
+  }
+
+  markSignUp()
   fetch('/api/notice', { cache: 'no-store', credentials: 'same-origin' })
     .then(function (r) { return r.json() })
     .then(function (j) {
       text = ((j && j.success && j.data) || '').trim()
-      if (!AUTH.test(location.pathname)) show()
+      show()
     })
     .catch(function () {})
 
-  // 控制台是单页应用，登录后不刷新页面，只能看地址从登录页变成别的页面
-  var wasAuth = AUTH.test(location.pathname)
+  // 控制台是单页应用，登录、换页都不刷新页面，只能隔一秒看看框架有没有出现、地址有没有变成注册页
+  var wasIn = false
   setInterval(function () {
-    var isAuth = AUTH.test(location.pathname)
-    if (wasAuth && !isAuth) show()
-    wasAuth = isAuth
+    markSignUp()
+    var isIn = loggedIn()
+    if (isIn && !wasIn) show()
+    wasIn = isIn
   }, 1000)
 
   function today() {
@@ -78,10 +94,10 @@
   }
 
   function show() {
-    if (!text || document.querySelector('.tn-mask')) return
+    if (!text || !loggedIn() || document.querySelector('.tn-mask')) return
     var mark = today() + '|' + hash(text)
     try {
-      if (localStorage.getItem(KEY) === mark) return
+      if (localStorage.getItem(KEY) === mark || sessionStorage.getItem(NEW)) return
     } catch (e) {}
     if (!document.getElementById('tn-style')) {
       var style = document.createElement('style')

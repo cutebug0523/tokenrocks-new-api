@@ -139,11 +139,12 @@ func TestModelPriceHelperTieredInputPreConsumeMultiplier(t *testing.T) {
 		expected   int
 	}{
 		{"default uses only input", "default", 1000, 0, 1, 1500},
-		{"explicit output limit does not increase reservation", "default", 1000, 100, 1, 1500},
+		{"explicit output limit reserves output", "default", 1000, 100, 1, 2250},
+		{"multiplier scales input only", "default", 1000, 100, 2.5, 4500},
 		{"fraction below one", "default", 1000, 0, 0.5, 750},
 		{"fraction above one preserves context tier", "default", 1000, 0, 2.5, 3750},
 		{"small input has no token floor", "default", 100, 0, 1, 150},
-		{"zero input", "default", 0, 100, 1, 0},
+		{"zero input still reserves output", "default", 0, 100, 1, 750},
 		{"free group", "free", 1000, 0, 2.5, 0},
 	}
 
@@ -778,7 +779,7 @@ func TestInputPreConsumeMultiplierLegacyAndRequestPrices(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 			info := &relaycommon.RelayInfo{OriginModelName: tc.model, UserGroup: "default", UsingGroup: "default", BillingRequestInput: &billingexpr.RequestInput{}}
-			price, err := ModelPriceHelper(ctx, info, tc.prompt, &types.TokenCountMeta{MaxTokens: 10000})
+			price, err := ModelPriceHelper(ctx, info, tc.prompt, &types.TokenCountMeta{})
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, price.QuotaToPreConsume)
 			if tc.model == "image-input-policy" {
@@ -788,6 +789,40 @@ func TestInputPreConsumeMultiplierLegacyAndRequestPrices(t *testing.T) {
 				require.Nil(t, service.PrepareImageBillingForRequest(ctx, info, 2))
 				assert.Equal(t, 750, reservation.held, "retry must reuse the original fractional multiplier")
 			}
+		})
+	}
+}
+
+func TestModelPriceHelperReservesOutputLimit(t *testing.T) {
+	previous := config.GlobalConfig.ExportAllConfigs()
+	previousRatios, previousCompletion := ratio_setting.ModelRatio2JSONString(), ratio_setting.CompletionRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, config.GlobalConfig.LoadFromDB(previous))
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(previousRatios))
+		require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(previousCompletion))
+	})
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"reserve-output-model":1.5}`))
+	require.NoError(t, ratio_setting.UpdateCompletionRatioByJSONString(`{"reserve-output-model":4}`))
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{"group_ratio_setting.group_ratio": `{"default":1}`}))
+	operation_setting.GetQuotaSetting().PreConsumeMultiplier = 1
+
+	for _, tc := range []struct {
+		name      string
+		request   dto.Request
+		maxTokens int
+		want      int
+	}{
+		{"explicit limit reserves it at completion price", &dto.ClaudeRequest{}, 1000, 150 + 1000*4*3/2},
+		{"text request without limit reserves default", &dto.GeneralOpenAIRequest{}, 0, 150 + defaultPreConsumeCompletionTokens*4*3/2},
+		{"non-text request without limit reserves input only", nil, 0, 150},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			info := &relaycommon.RelayInfo{OriginModelName: "reserve-output-model", UserGroup: "default", UsingGroup: "default", Request: tc.request}
+			price, err := ModelPriceHelper(ctx, info, 100, &types.TokenCountMeta{MaxTokens: tc.maxTokens})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, price.QuotaToPreConsume)
 		})
 	}
 }

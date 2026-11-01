@@ -33,6 +33,24 @@ func modelPriceNotConfiguredError(c *gin.Context, modelName string, userId int) 
 	return errors.New(i18n.T(c, key, map[string]any{"Model": modelName}))
 }
 
+// TokenRocks: upstream (9978ee1e2) reserves only input cost, so a wallet with a
+// few cents could start long-output requests and settle deep into negative
+// balance. Pre-consume therefore also reserves the requested output limit;
+// text requests that omit it reserve defaultPreConsumeCompletionTokens.
+// Settlement still charges actual usage and returns the rest.
+const defaultPreConsumeCompletionTokens = 8192
+
+func preConsumeCompletionTokens(info *relaycommon.RelayInfo, meta *types.TokenCountMeta) int {
+	if meta != nil && meta.MaxTokens > 0 {
+		return meta.MaxTokens
+	}
+	switch info.Request.(type) {
+	case *dto.GeneralOpenAIRequest, *dto.ClaudeRequest, *dto.OpenAIResponsesRequest, *dto.GeminiChatRequest:
+		return defaultPreConsumeCompletionTokens
+	}
+	return 0
+}
+
 // HandleGroupRatio checks for "auto_group" in the context and updates the group ratio and relayInfo.UsingGroup if present
 func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) hosttypes.GroupRatioInfo {
 	groupRatioInfo := hosttypes.GroupRatioInfo{
@@ -75,7 +93,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 	// Check if this model uses tiered_expr billing
 	if billing_setting.GetBillingMode(billingModelName) == billing_setting.BillingModeTieredExpr {
-		return modelPriceHelperTiered(c, info, billingModelName, promptTokens, groupRatioInfo)
+		return modelPriceHelperTiered(c, info, billingModelName, promptTokens, meta, groupRatioInfo)
 	}
 
 	var preConsumedQuota int
@@ -119,7 +137,8 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		audioRatio = ratio_setting.GetAudioRatio(billingModelName)
 		audioCompletionRatio = ratio_setting.GetAudioCompletionRatio(billingModelName)
 		ratio := modelRatio * groupRatioInfo.GroupRatio
-		quota, err := common.QuotaFromFloatStrict(preConsumedTokens * ratio)
+		reservedTokens := preConsumedTokens + float64(preConsumeCompletionTokens(info, meta))*completionRatio
+		quota, err := common.QuotaFromFloatStrict(reservedTokens * ratio)
 		if err != nil {
 			return hosttypes.PriceData{}, err
 		}
@@ -341,7 +360,7 @@ func resolveBillingModelName(origin string) string {
 	return matched
 }
 
-func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billingModelName string, promptTokens int, groupRatioInfo hosttypes.GroupRatioInfo) (hosttypes.PriceData, error) {
+func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billingModelName string, promptTokens int, meta *types.TokenCountMeta, groupRatioInfo hosttypes.GroupRatioInfo) (hosttypes.PriceData, error) {
 	exprStr, ok := billing_setting.GetBillingExpr(billingModelName)
 	if !ok {
 		return hosttypes.PriceData{}, fmt.Errorf("model %s is configured as tiered_expr but has no billing expression", billingModelName)
@@ -406,8 +425,22 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 	quotaBeforeGroup := rawCost / 1_000_000 * common.QuotaPerUnit
 	// Scale the reservation, preserving the expression's context-length tier
 	// and leaving actual settlement and fixed request prices unchanged.
+	completionTokens := 0
 	if trace.BillingUnit != billingexpr.BillingUnitRequest {
 		quotaBeforeGroup *= preConsumeMultiplier
+		completionTokens = preConsumeCompletionTokens(info, meta)
+	}
+	if completionTokens > 0 {
+		// The multiplier scales input only; add the output cost on top at the same tier.
+		withCompletion, _, err := billingexpr.RunExprByHashWithRequest(exprStr, exprHash, billingexpr.TokenParams{
+			P:   float64(promptTokens),
+			C:   float64(completionTokens),
+			Len: float64(promptTokens),
+		}, requestInput)
+		if err != nil {
+			return hosttypes.PriceData{}, fmt.Errorf("model %s tiered expr run failed: %w", billingModelName, err)
+		}
+		quotaBeforeGroup += (withCompletion - rawCost) / 1_000_000 * common.QuotaPerUnit
 	}
 	preConsumedQuota, err := billingexpr.QuotaRoundStrict(quotaBeforeGroup * groupRatioInfo.GroupRatio)
 	if err != nil {
@@ -430,7 +463,7 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 		ExprHash:                  exprHash,
 		GroupRatio:                groupRatioInfo.GroupRatio,
 		EstimatedPromptTokens:     promptTokens,
-		EstimatedCompletionTokens: 0,
+		EstimatedCompletionTokens: completionTokens,
 		PreConsumeMultiplier:      preConsumeMultiplier,
 		EstimatedQuotaBeforeGroup: quotaBeforeGroup,
 		EstimatedQuotaAfterGroup:  preConsumedQuota,

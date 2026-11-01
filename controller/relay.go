@@ -639,7 +639,7 @@ func executeTaskSubmissionWith(
 		diagnostics.reserve("reserve_start", result.Quota)
 		if reserveErr := relayInfo.Billing.Reserve(result.Quota); reserveErr != nil {
 			common.SysError(common.LogText("reserve adjusted task billing error: %s", reserveErr.Error()))
-			taskErr = service.TaskErrorWrapperLocal(errors.New("insufficient quota for adjusted task cost"), string(types.ErrorCodeInsufficientUserQuota), http.StatusForbidden)
+			taskErr = service.TaskErrorWrapperLocal(errors.New("insufficient quota for adjusted task cost"), string(types.ErrorCodeInsufficientUserQuota), http.StatusPaymentRequired)
 			diagnostics.failed("reserve", "insufficient_quota", taskErr, false)
 			return nil, taskErr
 		}

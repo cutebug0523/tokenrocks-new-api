@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"math"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
@@ -189,6 +190,8 @@ func runFixedPriceAccountingCases(t *testing.T, db, logDB *gorm.DB) {
 			if tc.insufficient {
 				require.NotNil(t, apiErr)
 				assert.Equal(t, types.ErrorCodeInsufficientUserQuota, apiErr.GetErrorCode())
+				// 402, not 403: clients such as deepseek-harness show any 401/403 as an invalid API key.
+				assert.Equal(t, http.StatusPaymentRequired, apiErr.StatusCode)
 			} else {
 				require.Nil(t, apiErr)
 				held, err := model.GetUserQuota(user.Id, true)
@@ -199,6 +202,7 @@ func runFixedPriceAccountingCases(t *testing.T, db, logDB *gorm.DB) {
 					if tc.reserveInsufficient {
 						require.NotNil(t, reserveErr)
 						assert.Equal(t, types.ErrorCodeInsufficientUserQuota, reserveErr.GetErrorCode())
+						assert.Equal(t, http.StatusPaymentRequired, reserveErr.StatusCode)
 						assert.Equal(t, reservation, info.Billing.GetPreConsumedQuota())
 					} else {
 						require.Nil(t, reserveErr)

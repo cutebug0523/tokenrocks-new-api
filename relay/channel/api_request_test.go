@@ -369,8 +369,14 @@ func TestDoRequestWithGzipBody(t *testing.T) {
 			send := func() *http.Response {
 				c, _ := gin.CreateTestContext(httptest.NewRecorder())
 				c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-				req, err := http.NewRequest(http.MethodPost, upstream.URL, strings.NewReader(tt.body))
+				// Built the way DoApiRequest builds relay requests: a replayable body
+				// whose length net/http cannot see on its own.
+				body, closer, err := relaycommon.NewOutboundJSONBody([]byte(tt.body))
 				require.NoError(t, err)
+				defer closer.Close()
+				req, err := http.NewRequest(http.MethodPost, upstream.URL, body)
+				require.NoError(t, err)
+				ApplyUpstreamBodyMetadata(req, body)
 				resp, err := doRequestWithGzipBody(c, req, &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}, DisablePing: true})
 				require.NoError(t, err)
 				_ = resp.Body.Close()

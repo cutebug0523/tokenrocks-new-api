@@ -115,6 +115,7 @@ it.each([
       `支付 ${full}`
     )
     expect(screen.getByPlaceholderText('最低 1')).toBeVisible()
+    expect(screen.queryByText(/首次充值额外送/)).toBeNull()
     await act(() => i18n.changeLanguage('en'))
     expect(screen.getByRole('button', { name: /^100 / })).toHaveTextContent(
       `+20 bonusPay ${paid}`
@@ -125,3 +126,43 @@ it.each([
     expect(screen.getByPlaceholderText('Minimum 1')).toBeVisible()
   }
 )
+
+it('adds the first top-up bonus to every preset when the user has never topped up', () => {
+  render(
+    <I18nextProvider i18n={i18n}>
+      <RechargeFormCard
+        topupInfo={{
+          enable_online_topup: true,
+          enable_stripe_topup: false,
+          pay_methods: [],
+          min_topup: 10,
+          stripe_min_topup: 10,
+          amount_options: [10, 108],
+          discount: {},
+          first_topup_bonus: 10,
+        }}
+        presetAmounts={[{ value: 10 }, { value: 108, discount: 100 / 108 }]}
+        selectedPreset={null}
+        topupAmount={10}
+        paymentAmount={10}
+        priceRatio={1}
+        calculating={false}
+        paymentLoading={null}
+        redemptionCode=''
+        redeeming={false}
+        onSelectPreset={vi.fn()}
+        onTopupAmountChange={vi.fn()}
+        onPaymentMethodSelect={vi.fn()}
+        onRedemptionCodeChange={vi.fn()}
+        onRedeem={vi.fn()}
+      />
+    </I18nextProvider>
+  )
+  expect(screen.getByText(/首次充值额外送/)).toBeVisible()
+  expect(screen.getByRole('button', { name: /^20 / })).toHaveTextContent(
+    '多送 10支付 10'
+  )
+  expect(screen.getByRole('button', { name: /^118 / })).toHaveTextContent(
+    '多送 18支付 100'
+  )
+})

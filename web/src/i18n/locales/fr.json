@@ -7399,7 +7399,8 @@
     "Bonus {{amount}}": "+{{amount}} offerts",
     "Bonus included": "Dont bonus",
     "Referral commission {{quota}}": "Commission de parrainage {{quota}}",
-    "Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "Vos filleuls inscrits via votre lien reçoivent 10 % de plus sur leur première recharge (jusqu'à 10), et vous gagnez 10 % de chaque recharge qu'ils paient, en crédit. Transférable vers votre solde dès 7.",
-    "Invitee first top-up bonus {{quota}}": "Bonus de première recharge (parrainage) {{quota}}"
+    "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "Vos filleuls inscrits via votre lien vous rapportent 10 % de chaque recharge payée, en crédit. Transférable vers votre solde dès 7.",
+    "Get {{amount}} extra on your first top-up": "{{amount}} offerts sur votre première recharge",
+    "First top-up bonus {{quota}}": "Bonus de première recharge {{quota}}"
   }
 }

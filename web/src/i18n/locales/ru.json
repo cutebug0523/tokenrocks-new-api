@@ -7399,7 +7399,8 @@
     "Bonus {{amount}}": "+{{amount}} бонус",
     "Bonus included": "Из них бонус",
     "Referral commission {{quota}}": "Реферальное вознаграждение {{quota}}",
-    "Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "Друзья, зарегистрированные по вашей ссылке, получают +10% к первому пополнению (до 10), а вы — 10% от каждого их оплаченного пополнения в виде кредита. Перевод на баланс — от 7.",
-    "Invitee first top-up bonus {{quota}}": "Бонус за первое пополнение по приглашению {{quota}}"
+    "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "Друзья, зарегистрированные по вашей ссылке, приносят вам 10% от каждого оплаченного пополнения в виде кредита. Перевод на баланс — от 7.",
+    "Get {{amount}} extra on your first top-up": "{{amount}} в подарок к первому пополнению",
+    "First top-up bonus {{quota}}": "Бонус за первое пополнение {{quota}}"
   }
 }

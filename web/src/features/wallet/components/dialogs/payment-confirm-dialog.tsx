@@ -47,6 +47,7 @@ interface PaymentConfirmDialogProps {
   processing: boolean
   discountRate?: number
   usdExchangeRate?: number
+  firstTopupBonus?: number
 }
 
 export function PaymentConfirmDialog({
@@ -60,13 +61,15 @@ export function PaymentConfirmDialog({
   processing,
   discountRate = DEFAULT_DISCOUNT_RATE,
   usdExchangeRate = 1,
+  firstTopupBonus = 0,
 }: PaymentConfirmDialogProps) {
   const { t } = useTranslation()
   const hasDiscount = discountRate > 0 && discountRate < 1 && paymentAmount > 0
-  // TokenRocks: a discounted preset is shown as bonus balance, not a markdown
-  const bonusAmount = hasDiscount
-    ? topupAmount * usdExchangeRate * (1 - discountRate)
-    : 0
+  // TokenRocks: a discounted preset and the first top-up bonus are shown as
+  // bonus balance, not a markdown
+  const bonusAmount =
+    (hasDiscount ? topupAmount * usdExchangeRate * (1 - discountRate) : 0) +
+    firstTopupBonus * usdExchangeRate
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -86,11 +89,14 @@ export function PaymentConfirmDialog({
               {t('Topup Amount')}
             </span>
             <span className='text-lg font-semibold'>
-              {formatLocalCurrencyAmount(topupAmount * usdExchangeRate, {
-                digitsLarge: 2,
-                digitsSmall: 2,
-                abbreviate: false,
-              })}
+              {formatLocalCurrencyAmount(
+                (topupAmount + firstTopupBonus) * usdExchangeRate,
+                {
+                  digitsLarge: 2,
+                  digitsSmall: 2,
+                  abbreviate: false,
+                }
+              )}
             </span>
           </div>
 
@@ -107,7 +113,7 @@ export function PaymentConfirmDialog({
             )}
           </div>
 
-          {hasDiscount && !calculating && (
+          {bonusAmount > 0 && !calculating && (
             <div className='bg-muted/50 rounded-lg p-3'>
               <div className='flex items-center justify-between text-sm'>
                 <span className='text-muted-foreground'>

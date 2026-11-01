@@ -34,6 +34,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { formatLocalCurrencyAmount } from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -193,6 +194,9 @@ export function RechargeFormCard({
     )
   }
 
+  // TokenRocks: shown only until the user's first successful online top-up
+  const firstTopupBonus = (topupInfo?.first_topup_bonus ?? 0) * usdExchangeRate
+
   return (
     <TitledCard
       title={t('Add Funds')}
@@ -220,6 +224,19 @@ export function RechargeFormCard({
         <div className='space-y-4 sm:space-y-6'>
           {hasConfigurableTopup && (
             <>
+              {firstTopupBonus > 0 && (
+                <Alert>
+                  <Gift aria-hidden='true' />
+                  <AlertDescription>
+                    {t('Get {{amount}} extra on your first top-up', {
+                      amount: formatLocalCurrencyAmount(firstTopupBonus, {
+                        digitsLarge: 0,
+                        abbreviate: false,
+                      }),
+                    })}
+                  </AlertDescription>
+                </Alert>
+              )}
               {presetAmounts.length > 0 && (
                 <div className='space-y-2.5 sm:space-y-3'>
                   <Label className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
@@ -231,17 +248,13 @@ export function RechargeFormCard({
                         preset.discount ||
                         topupInfo?.discount?.[preset.value] ||
                         1.0
-                      const {
-                        displayValue,
-                        actualPrice,
-                        bonusValue,
-                        hasDiscount,
-                      } = calculatePresetPricing(
-                        preset.value,
-                        priceRatio,
-                        discount,
-                        usdExchangeRate
-                      )
+                      const { displayValue, actualPrice, bonusValue } =
+                        calculatePresetPricing(
+                          preset.value,
+                          priceRatio,
+                          discount,
+                          usdExchangeRate
+                        )
                       return (
                         <Button
                           key={preset.value}
@@ -256,12 +269,14 @@ export function RechargeFormCard({
                         >
                           <div className='flex w-full items-center justify-between'>
                             <div className='text-base font-semibold sm:text-lg'>
-                              {formatNumber(displayValue)}
+                              {formatNumber(displayValue + firstTopupBonus)}
                             </div>
-                            {hasDiscount && (
+                            {bonusValue + firstTopupBonus > 0 && (
                               <div className='text-xs font-medium text-green-600'>
                                 {t('Bonus {{amount}}', {
-                                  amount: formatNumber(bonusValue),
+                                  amount: formatNumber(
+                                    bonusValue + firstTopupBonus
+                                  ),
                                 })}
                               </div>
                             )}

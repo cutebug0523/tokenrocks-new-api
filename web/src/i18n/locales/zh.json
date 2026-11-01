@@ -7399,7 +7399,8 @@
     "Bonus {{amount}}": "多送 {{amount}}",
     "Bonus included": "其中多送",
     "Referral commission {{quota}}": "邀请返佣 {{quota}}",
-    "Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "好友用你的链接注册，首次充值多送 10%（最多 ¥10）；以后他每次充值，你都能拿到实付金额 10% 的额度，满 ¥7 可转入余额。",
-    "Invitee first top-up bonus {{quota}}": "邀请注册首充多送 {{quota}}"
+    "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "好友用你的链接注册后，以后他每次充值，你都能拿到实付金额 10% 的额度，满 ¥7 可转入余额。",
+    "Get {{amount}} extra on your first top-up": "首次充值额外送 {{amount}}",
+    "First top-up bonus {{quota}}": "首充多送 {{quota}}"
   }
 }

@@ -75,7 +75,7 @@ export function AffiliateRewardsCard({
             </h3>
             <p className='text-muted-foreground text-xs'>
               {t(
-                'Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.'
+                'Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.'
               )}
             </p>
           </div>

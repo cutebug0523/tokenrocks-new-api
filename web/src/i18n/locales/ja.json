@@ -7399,7 +7399,8 @@
     "Bonus {{amount}}": "+{{amount}} ボーナス",
     "Bonus included": "うちボーナス",
     "Referral commission {{quota}}": "紹介報酬 {{quota}}",
-    "Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "あなたのリンクから登録した友達は初回チャージが 10% 増量（最大 10）。友達がチャージするたびに、支払額の 10% をクレジットとして獲得できます。7 以上で残高に振り替えられます。",
-    "Invitee first top-up bonus {{quota}}": "招待特典・初回チャージ増量 {{quota}}"
+    "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "あなたのリンクから登録した友達がチャージするたびに、支払額の 10% をクレジットとして獲得できます。7 以上で残高に振り替えられます。",
+    "Get {{amount}} extra on your first top-up": "初回チャージで {{amount}} 上乗せ",
+    "First top-up bonus {{quota}}": "初回チャージ特典 {{quota}}"
   }
 }

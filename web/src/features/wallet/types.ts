@@ -136,6 +136,8 @@ export interface TopupInfo {
   discount: Record<number, number>
   /** Optional topup link for purchasing codes */
   topup_link?: string
+  /** TokenRocks: extra amount on this user's first online top-up, in topup amount units; 0 when none */
+  first_topup_bonus?: number
   /** Whether Creem topup is enabled */
   enable_creem_topup?: boolean
   /** Available Creem products */

@@ -122,6 +122,14 @@ func GetTopUpInfo(c *gin.Context) {
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
 		"topup_link":              common.TopUpLink,
 	}
+	// TokenRocks：从没成功充值过的用户，钱包页按这个数显示首充多送；查不出来就当不送，宁可少说
+	firstTopUpBonus := 0
+	if bonus := operation_setting.GetPaymentSetting().FirstTopUpBonus; bonus > 0 {
+		if paidBefore, err := model.HasSuccessfulTopUp(model.DB, c.GetInt("id"), 0); err == nil && !paidBefore {
+			firstTopUpBonus = bonus
+		}
+	}
+	data["first_topup_bonus"] = firstTopUpBonus
 	common.ApiSuccess(c, data)
 }
 

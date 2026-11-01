@@ -5,6 +5,8 @@ import "github.com/QuantumNous/new-api/setting/config"
 type PaymentSetting struct {
 	AmountOptions  []int           `json:"amount_options"`
 	AmountDiscount map[int]float64 `json:"amount_discount"` // 充值金额对应的折扣，例如 100 元 0.9 表示 100 元充值享受 9 折优惠
+	// FirstTopUpBonus 是每个用户第一笔在线充值额外送的额度，单位同充值金额（人民币显示时是元），0 表示不送（TokenRocks 改动）
+	FirstTopUpBonus int `json:"first_topup_bonus"`
 
 	ComplianceConfirmed    bool   `json:"compliance_confirmed"`
 	ComplianceTermsVersion string `json:"compliance_terms_version"`

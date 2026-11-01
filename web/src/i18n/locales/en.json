@@ -7399,7 +7399,8 @@
     "Bonus {{amount}}": "+{{amount}} bonus",
     "Bonus included": "Bonus included",
     "Referral commission {{quota}}": "Referral commission {{quota}}",
-    "Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.",
-    "Invitee first top-up bonus {{quota}}": "Invitee first top-up bonus {{quota}}"
+    "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.",
+    "Get {{amount}} extra on your first top-up": "Get {{amount}} extra on your first top-up",
+    "First top-up bonus {{quota}}": "First top-up bonus {{quota}}"
   }
 }

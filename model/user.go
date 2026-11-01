@@ -726,7 +726,7 @@ func (user *User) finishInsert(inviterId int) {
 			//_ = IncreaseUserQuota(inviterId, common.QuotaForInviter)
 			RecordLog(inviterId, LogTypeSystem, common.NewMessage("Bonus for inviting a user {{quota}}", map[string]any{"quota": logger.FormatQuota(common.QuotaForInviter)}))
 		}
-		// TokenRocks：邀请奖励改成按充值发（见 creditInviteRewards），注册奖励为 0 时也要记邀请人数
+		// TokenRocks：邀请奖励改成充值返佣（见 creditInviteCommission），注册奖励为 0 时也要记邀请人数
 		_ = inviteUser(inviterId)
 	}
 }

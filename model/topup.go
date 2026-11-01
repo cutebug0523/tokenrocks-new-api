@@ -182,71 +182,51 @@ func EpayTopUpQuota(amount int64) (int, error) {
 	return common.WalletQuotaFromDecimalStrict(quota)
 }
 
-// 邀请奖励（TokenRocks 改动），都按实付算，只看在线充值：
-//   - 邀请人：被邀请人每笔充值返 InviteCommissionRate，记进邀请额度；
-//   - 被邀请人：第一笔充值多送 InviteeFirstTopUpBonusRate，最多 InviteeFirstTopUpBonusCap（显示货币，TR 是元）。
-//
-// 注册本身不送，免得被刷号。改这几个数要同步改语言包里推荐计划卡片的说明。
-const (
-	InviteCommissionRate       = 0.1
-	InviteeFirstTopUpBonusRate = 0.1
-	InviteeFirstTopUpBonusCap  = 10
-)
+// InviteCommissionRate 是被邀请人每笔在线充值返给邀请人的比例，按实付算，记进邀请额度
+// （TokenRocks 改动）。改比例要同步改语言包里推荐计划卡片的说明。
+const InviteCommissionRate = 0.1
 
-type inviteRewards struct {
-	inviterId    int
-	commission   int // 已记进邀请人的邀请额度
-	inviteeBonus int // 付款人首充多送的额度，由调用方连同充值一起入账
+// HasSuccessfulTopUp 判断用户除 excludeTopUpId 那笔以外有没有成功的充值，用来认首充（TokenRocks 改动）。
+func HasSuccessfulTopUp(db *gorm.DB, userId int, excludeTopUpId int) (bool, error) {
+	var count int64
+	err := db.Model(&TopUp{}).
+		Where("user_id = ? AND status = ? AND id <> ?", userId, common.TopUpStatusSuccess, excludeTopUpId).
+		Count(&count).Error
+	return count > 0, err
 }
 
-// creditInviteRewards 给付款人的邀请人记返佣，并算出付款人首充该多送多少。没有邀请人时都是 0；
-// 邀请人已删除时不返佣，首充照送。档位带折扣时 creditedQuota 含赠送部分，乘回折扣就是实付。
-func creditInviteRewards(tx *gorm.DB, topUp *TopUp, creditedQuota int) (inviteRewards, error) {
-	var rewards inviteRewards
+// creditInviteCommission 给付款人的邀请人记返佣，没有邀请人或邀请人已删除时不记。
+// 档位带折扣时 creditedQuota 含赠送部分，乘回折扣就是按实付算。
+func creditInviteCommission(tx *gorm.DB, topUp *TopUp, creditedQuota int) (inviterId int, commission int, err error) {
 	var payer User
 	if err := tx.Select("inviter_id").Where("id = ?", topUp.UserId).First(&payer).Error; err != nil {
-		return rewards, err
+		return 0, 0, err
 	}
 	if payer.InviterId == 0 {
-		return rewards, nil
+		return 0, 0, nil
 	}
 	discount := 1.0
 	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(topUp.Amount)]; ok && ds > 0 {
 		discount = ds
 	}
-	paidQuota := decimal.NewFromInt(int64(creditedQuota)).Mul(decimal.NewFromFloat(discount))
-
-	// ponytail: 同一用户两笔首充同时到账时可能都算首充、各多送一次；要根治得锁用户行
-	var earlierTopUps int64
-	if err := tx.Model(&TopUp{}).
-		Where("user_id = ? AND status = ? AND id <> ?", topUp.UserId, common.TopUpStatusSuccess, topUp.Id).
-		Count(&earlierTopUps).Error; err != nil {
-		return rewards, err
-	}
-	if earlierTopUps == 0 {
-		capQuota, err := EpayTopUpQuota(InviteeFirstTopUpBonusCap)
-		if err != nil {
-			return rewards, err
-		}
-		rewards.inviteeBonus = min(int(paidQuota.Mul(decimal.NewFromFloat(InviteeFirstTopUpBonusRate)).IntPart()), capQuota)
-	}
-
-	commission := int(paidQuota.Mul(decimal.NewFromFloat(InviteCommissionRate)).IntPart())
+	commission = int(decimal.NewFromInt(int64(creditedQuota)).
+		Mul(decimal.NewFromFloat(discount)).
+		Mul(decimal.NewFromFloat(InviteCommissionRate)).
+		IntPart())
 	if commission <= 0 {
-		return rewards, nil
+		return 0, 0, nil
 	}
 	result := tx.Model(&User{}).Where("id = ?", payer.InviterId).Updates(map[string]any{
 		"aff_quota":   gorm.Expr("aff_quota + ?", commission),
 		"aff_history": gorm.Expr("aff_history + ?", commission),
 	})
 	if result.Error != nil {
-		return rewards, result.Error
+		return 0, 0, result.Error
 	}
-	if result.RowsAffected == 1 {
-		rewards.inviterId = payer.InviterId
-		rewards.commission = commission
+	if result.RowsAffected == 0 {
+		return 0, 0, nil
 	}
-	return rewards, nil
+	return payer.InviterId, commission, nil
 }
 
 // RechargeEpay 原子完成易支付订单：订单行锁、状态校验、成功更新与用户额度增加
@@ -263,8 +243,7 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 		refCol = `"trade_no"`
 	}
 
-	var quotaToAdd int
-	var rewards inviteRewards
+	var quotaToAdd, firstBonus, inviterId, commission int
 	topUp := &TopUp{}
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		if err := lockForUpdate(tx).Where(refCol+" = ?", tradeNo).First(topUp).Error; err != nil {
@@ -293,12 +272,24 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 		if err := tx.Save(topUp).Error; err != nil {
 			return err
 		}
-		var rewardsErr error
-		rewards, rewardsErr = creditInviteRewards(tx, topUp, quotaToAdd)
-		if rewardsErr != nil {
-			return rewardsErr
+		// ponytail: 同一用户两笔首充同时到账时可能都算首充、各多送一次；要根治得锁用户行
+		if bonus := operation_setting.GetPaymentSetting().FirstTopUpBonus; bonus > 0 {
+			paidBefore, bonusErr := HasSuccessfulTopUp(tx, topUp.UserId, topUp.Id)
+			if bonusErr != nil {
+				return bonusErr
+			}
+			if !paidBefore {
+				if firstBonus, bonusErr = EpayTopUpQuota(int64(bonus)); bonusErr != nil {
+					return bonusErr
+				}
+			}
 		}
-		return creditTopUpQuota(tx, topUp.UserId, quotaToAdd+rewards.inviteeBonus, nil)
+		var commissionErr error
+		inviterId, commission, commissionErr = creditInviteCommission(tx, topUp, quotaToAdd)
+		if commissionErr != nil {
+			return commissionErr
+		}
+		return creditTopUpQuota(tx, topUp.UserId, quotaToAdd+firstBonus, nil)
 	})
 	if err != nil {
 		if !errors.Is(err, ErrTopUpNotFound) && !errors.Is(err, ErrPaymentMethodMismatch) && !errors.Is(err, ErrTopUpStatusInvalid) {
@@ -309,12 +300,12 @@ func RechargeEpay(tradeNo string, actualPaymentMethod string, callerIp string) (
 	if alreadyDone {
 		return true, nil
 	}
-	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd+rewards.inviteeBonus, common.LogText("epay topup"))
-	if rewards.inviteeBonus > 0 {
-		RecordLog(topUp.UserId, LogTypeSystem, common.NewMessage("Invitee first top-up bonus {{quota}}", map[string]any{"quota": logger.FormatQuota(rewards.inviteeBonus)}))
+	syncCreditUserQuotaCache(topUp.UserId, quotaToAdd+firstBonus, common.LogText("epay topup"))
+	if firstBonus > 0 {
+		RecordLog(topUp.UserId, LogTypeSystem, common.NewMessage("First top-up bonus {{quota}}", map[string]any{"quota": logger.FormatQuota(firstBonus)}))
 	}
-	if rewards.commission > 0 {
-		RecordLog(rewards.inviterId, LogTypeSystem, common.NewMessage("Referral commission {{quota}}", map[string]any{"quota": logger.FormatQuota(rewards.commission)}))
+	if commission > 0 {
+		RecordLog(inviterId, LogTypeSystem, common.NewMessage("Referral commission {{quota}}", map[string]any{"quota": logger.FormatQuota(commission)}))
 	}
 
 	common.SysLog(common.LogText("Epay top-up succeeded trade_no=%s user_id=%d quota_to_add=%d money=%.2f", topUp.TradeNo, topUp.UserId, quotaToAdd, topUp.Money))

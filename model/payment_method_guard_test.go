@@ -242,57 +242,61 @@ func TestRechargeEpayCreditsYuanAmountInCNYMode(t *testing.T) {
 	assert.Equal(t, 7_142_857, getUserQuotaForPaymentGuardTest(t, user.Id))
 }
 
-func TestRechargeEpayPaysInviteRewardsOnPaidAmountOnce(t *testing.T) {
+func TestRechargeEpayPaysFirstTopUpBonusAndInviteCommissionOnce(t *testing.T) {
 	truncateTables(t)
 
 	oldQuotaPerUnit := common.QuotaPerUnit
 	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
 	oldExchangeRate := operation_setting.USDExchangeRate
 	oldDiscount := operation_setting.GetPaymentSetting().AmountDiscount
+	oldFirstBonus := operation_setting.GetPaymentSetting().FirstTopUpBonus
 	common.QuotaPerUnit = 500000
 	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeCNY
 	operation_setting.USDExchangeRate = 7
-	// 付 ¥500 到账 ¥550，付 ¥100 到账 ¥108
+	// 付 ¥500 到账 ¥550，付 ¥100 到账 ¥108；首充多送 ¥10
 	operation_setting.GetPaymentSetting().AmountDiscount = map[int]float64{550: 500.0 / 550, 108: 100.0 / 108}
+	operation_setting.GetPaymentSetting().FirstTopUpBonus = 10
 	t.Cleanup(func() {
 		common.QuotaPerUnit = oldQuotaPerUnit
 		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
 		operation_setting.USDExchangeRate = oldExchangeRate
 		operation_setting.GetPaymentSetting().AmountDiscount = oldDiscount
+		operation_setting.GetPaymentSetting().FirstTopUpBonus = oldFirstBonus
 	})
 
 	inviter := &User{Id: 601, Username: "commission_inviter", AffCode: "inv1", Status: common.UserStatusEnabled}
 	require.NoError(t, DB.Create(inviter).Error)
 	payer := &User{Id: 602, Username: "commission_payer", AffCode: "pay1", Status: common.UserStatusEnabled, InviterId: inviter.Id}
 	require.NoError(t, DB.Create(payer).Error)
-	inviterAffQuota := func() (int, int) {
-		var u User
-		require.NoError(t, DB.Select("aff_quota", "aff_history").Where("id = ?", inviter.Id).First(&u).Error)
-		return u.AffQuota, u.AffHistoryQuota
-	}
-	recharge := func(tradeNo string, amount int, money float64) {
-		order := createEpayTestOrder(t, payer.Id, tradeNo, PaymentProviderEpay, common.TopUpStatusPending)
+	recharge := func(userId int, tradeNo string, amount int, money float64) {
+		order := createEpayTestOrder(t, userId, tradeNo, PaymentProviderEpay, common.TopUpStatusPending)
 		require.NoError(t, DB.Model(&TopUp{}).Where("id = ?", order.Id).Updates(map[string]any{"amount": amount, "money": money}).Error)
 		for range 2 {
 			_, err := RechargeEpay(tradeNo, "alipay", "127.0.0.1")
 			require.NoError(t, err)
 		}
 	}
+	inviterAffQuota := func() int {
+		var u User
+		require.NoError(t, DB.Select("aff_quota").Where("id = ?", inviter.Id).First(&u).Error)
+		return u.AffQuota
+	}
+	const firstBonus = 714_286 // ¥10 ÷ 7 × 500000
 
-	// 首充付 ¥500：到账 ¥550 = 39285714；多送 10% 是 ¥50，封顶 ¥10 = 714286；返佣 ¥50 = 3571428（舍去小数）
-	recharge("EPAYTESTINVITE1", 550, 500)
-	assert.Equal(t, 39_285_714+714_286, getUserQuotaForPaymentGuardTest(t, payer.Id))
-	affQuota, affHistory := inviterAffQuota()
-	assert.Equal(t, 3_571_428, affQuota)
-	assert.Equal(t, 3_571_428, affHistory)
+	// 首充付 ¥500：到账 ¥550 = 39285714，加首充 ¥10；邀请人返实付 ¥50 = 3571428（舍去小数）
+	recharge(payer.Id, "EPAYTESTINVITE1", 550, 500)
+	assert.Equal(t, 39_285_714+firstBonus, getUserQuotaForPaymentGuardTest(t, payer.Id))
+	assert.Equal(t, 3_571_428, inviterAffQuota())
 
 	// 第二笔付 ¥100：到账 ¥108 = 7714286，不再多送；返佣 ¥10 = 714285
-	recharge("EPAYTESTINVITE2", 108, 100)
-	assert.Equal(t, 39_285_714+714_286+7_714_286, getUserQuotaForPaymentGuardTest(t, payer.Id))
-	affQuota, affHistory = inviterAffQuota()
-	assert.Equal(t, 3_571_428+714_285, affQuota)
-	assert.Equal(t, 3_571_428+714_285, affHistory)
-	assert.Zero(t, getUserQuotaForPaymentGuardTest(t, inviter.Id))
+	recharge(payer.Id, "EPAYTESTINVITE2", 108, 100)
+	assert.Equal(t, 39_285_714+firstBonus+7_714_286, getUserQuotaForPaymentGuardTest(t, payer.Id))
+	assert.Equal(t, 3_571_428+714_285, inviterAffQuota())
+
+	// 没被邀请的人首充也送，且不给谁返佣
+	recharge(inviter.Id, "EPAYTESTINVITE3", 108, 100)
+	assert.Equal(t, 7_714_286+firstBonus, getUserQuotaForPaymentGuardTest(t, inviter.Id))
+	assert.Equal(t, 3_571_428+714_285, inviterAffQuota())
 }
 
 func TestRechargeEpayKeepsRedisAndDatabaseCreditInSync(t *testing.T) {

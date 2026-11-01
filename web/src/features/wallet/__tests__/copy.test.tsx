@@ -74,11 +74,11 @@ it('translates billing history statuses and updates them when the language chang
 })
 
 it.each([
-  { priceRatio: 7.3, paid: '584', saved: '146', full: '146' },
-  { priceRatio: 0.000123, paid: '0.0098', saved: '0.0025', full: '0.0025' },
+  { priceRatio: 7.3, paid: '584', full: '146' },
+  { priceRatio: 0.000123, paid: '0.0098', full: '0.0025' },
 ])(
   'translates recharge presets and minimum amount without changing precision at price ratio $priceRatio',
-  async ({ priceRatio, paid, saved, full }) => {
+  async ({ priceRatio, paid, full }) => {
     render(
       <I18nextProvider i18n={i18n}>
         <RechargeFormCard
@@ -109,7 +109,7 @@ it.each([
       </I18nextProvider>
     )
     expect(screen.getByRole('button', { name: /^100 / })).toHaveTextContent(
-      `优惠 20%支付 ${paid} • 节省 ${saved}`
+      `多送 20支付 ${paid}`
     )
     expect(screen.getByRole('button', { name: /^20 / })).toHaveTextContent(
       `支付 ${full}`
@@ -117,7 +117,7 @@ it.each([
     expect(screen.getByPlaceholderText('最低 1')).toBeVisible()
     await act(() => i18n.changeLanguage('en'))
     expect(screen.getByRole('button', { name: /^100 / })).toHaveTextContent(
-      `20% OFFPay ${paid} • Save ${saved}`
+      `+20 bonusPay ${paid}`
     )
     expect(screen.getByRole('button', { name: /^20 / })).toHaveTextContent(
       `Pay ${full}`

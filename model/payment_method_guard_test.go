@@ -242,6 +242,59 @@ func TestRechargeEpayCreditsYuanAmountInCNYMode(t *testing.T) {
 	assert.Equal(t, 7_142_857, getUserQuotaForPaymentGuardTest(t, user.Id))
 }
 
+func TestRechargeEpayPaysInviteRewardsOnPaidAmountOnce(t *testing.T) {
+	truncateTables(t)
+
+	oldQuotaPerUnit := common.QuotaPerUnit
+	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	oldExchangeRate := operation_setting.USDExchangeRate
+	oldDiscount := operation_setting.GetPaymentSetting().AmountDiscount
+	common.QuotaPerUnit = 500000
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeCNY
+	operation_setting.USDExchangeRate = 7
+	// 付 ¥500 到账 ¥550，付 ¥100 到账 ¥108
+	operation_setting.GetPaymentSetting().AmountDiscount = map[int]float64{550: 500.0 / 550, 108: 100.0 / 108}
+	t.Cleanup(func() {
+		common.QuotaPerUnit = oldQuotaPerUnit
+		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
+		operation_setting.USDExchangeRate = oldExchangeRate
+		operation_setting.GetPaymentSetting().AmountDiscount = oldDiscount
+	})
+
+	inviter := &User{Id: 601, Username: "commission_inviter", AffCode: "inv1", Status: common.UserStatusEnabled}
+	require.NoError(t, DB.Create(inviter).Error)
+	payer := &User{Id: 602, Username: "commission_payer", AffCode: "pay1", Status: common.UserStatusEnabled, InviterId: inviter.Id}
+	require.NoError(t, DB.Create(payer).Error)
+	inviterAffQuota := func() (int, int) {
+		var u User
+		require.NoError(t, DB.Select("aff_quota", "aff_history").Where("id = ?", inviter.Id).First(&u).Error)
+		return u.AffQuota, u.AffHistoryQuota
+	}
+	recharge := func(tradeNo string, amount int, money float64) {
+		order := createEpayTestOrder(t, payer.Id, tradeNo, PaymentProviderEpay, common.TopUpStatusPending)
+		require.NoError(t, DB.Model(&TopUp{}).Where("id = ?", order.Id).Updates(map[string]any{"amount": amount, "money": money}).Error)
+		for range 2 {
+			_, err := RechargeEpay(tradeNo, "alipay", "127.0.0.1")
+			require.NoError(t, err)
+		}
+	}
+
+	// 首充付 ¥500：到账 ¥550 = 39285714；多送 10% 是 ¥50，封顶 ¥10 = 714286；返佣 ¥50 = 3571428（舍去小数）
+	recharge("EPAYTESTINVITE1", 550, 500)
+	assert.Equal(t, 39_285_714+714_286, getUserQuotaForPaymentGuardTest(t, payer.Id))
+	affQuota, affHistory := inviterAffQuota()
+	assert.Equal(t, 3_571_428, affQuota)
+	assert.Equal(t, 3_571_428, affHistory)
+
+	// 第二笔付 ¥100：到账 ¥108 = 7714286，不再多送；返佣 ¥10 = 714285
+	recharge("EPAYTESTINVITE2", 108, 100)
+	assert.Equal(t, 39_285_714+714_286+7_714_286, getUserQuotaForPaymentGuardTest(t, payer.Id))
+	affQuota, affHistory = inviterAffQuota()
+	assert.Equal(t, 3_571_428+714_285, affQuota)
+	assert.Equal(t, 3_571_428+714_285, affHistory)
+	assert.Zero(t, getUserQuotaForPaymentGuardTest(t, inviter.Id))
+}
+
 func TestRechargeEpayKeepsRedisAndDatabaseCreditInSync(t *testing.T) {
 	truncateTables(t)
 	useUserCacheMiniRedis(t)

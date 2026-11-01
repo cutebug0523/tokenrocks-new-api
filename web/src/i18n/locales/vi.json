@@ -132,7 +132,6 @@
     "{{name}} called {{count}} times, cost {{quota}}": "{{name}} được gọi {{count}} lần, chi phí {{quota}}",
     "{{operation}} (ID: {{id}})": "{{operation}} (ID: {{id}})",
     "{{percentOff}}% off": "Giảm {{percentOff}}%",
-    "{{percent}}% OFF": "Giảm {{percent}}%",
     "{{processed}} of {{total}} log entries processed.": "Đã xử lý {{processed}}/{{total}} mục nhật ký.",
     "{{protocol}} auth name": "Tên xác thực {{protocol}}",
     "{{protocol}} auth value": "Giá trị xác thực {{protocol}}",
@@ -2165,7 +2164,6 @@
     "Each tier supports 0~2 conditions (over len, p, c); the last tier is the catch-all without conditions. Use len (full input length, including cache hits) for tier conditions to avoid mis-routing when cache hits reduce p.": "Mỗi bậc hỗ trợ 0~2 điều kiện (đối với len, p, c); bậc cuối là bậc dự phòng không cần điều kiện. Hãy dùng len (độ dài đầu vào đầy đủ, bao gồm cả cache hits) cho điều kiện bậc để tránh định tuyến sai khi cache hits làm giảm p.",
     "Each tier supports up to 2 conditions; the last tier is the catch-all without conditions. Use full input length for tier conditions to avoid mis-routing when cache hits reduce billable input tokens.": "Mỗi tầng hỗ trợ tối đa 2 điều kiện; tầng cuối cùng là tầng dự phòng không có điều kiện. Hãy dùng độ dài đầu vào đầy đủ cho điều kiện tầng để tránh chọn sai tầng khi cache hit làm giảm token đầu vào tính phí.",
     "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.": "Mỗi tầng hỗ trợ tối đa 2 điều kiện. Tầng cuối cùng không có điều kiện là tầng dự phòng.",
-    "Earn rewards when users join through your referral link. Transfer accumulated rewards to your balance anytime.": "Nhận phần thưởng khi người dùng đăng ký qua liên kết giới thiệu của bạn. Chuyển phần thưởng tích lũy vào số dư bất cứ lúc nào.",
     "Earnings": "Thu nhập",
     "Edit": "Chỉnh sửa",
     "Edit {{title}}": "Chỉnh sửa {{title}}",
@@ -4596,7 +4594,6 @@
     "Pause drag demo": "Tạm dừng minh họa kéo thả",
     "Pay": "Pay",
     "Pay {{amount}}": "Thanh toán {{amount}}",
-    "Pay {{amount}} <savings>• Save {{saved}}</savings>": "Thanh toán {{amount}} <savings>• Tiết kiệm {{saved}}</savings>",
     "Pay with Balance": "Thanh toán bằng số dư",
     "Pay-as-you-go with real-time usage monitoring": "Thanh toán theo mức sử dụng với theo dõi mức sử dụng theo thời gian thực",
     "Payment": "Thanh toán",
@@ -7371,7 +7368,6 @@
     "You have unsaved changes": "Bạn có thay đổi chưa được lưu",
     "You have unsaved changes. Are you sure you want to leave?": "Bạn có thay đổi chưa được lưu. Bạn có chắc chắn muốn rời đi không?",
     "You Pay": "Bạn thanh toán",
-    "You save": "Bạn tiết kiệm",
     "You understand and independently bear legal responsibility arising from deployment, operation, and charging behavior.": "Bạn hiểu và tự chịu trách nhiệm pháp lý phát sinh từ việc triển khai, vận hành và thu phí.",
     "You understand this compliance reminder is only for risk notice and does not constitute legal advice, a compliance review conclusion, or a guarantee of the legality of your use of this system; you should consult professional legal or compliance advisors based on your actual business scenario.": "Bạn hiểu rằng nhắc nhở tuân thủ này chỉ là thông báo rủi ro, không cấu thành tư vấn pháp lý, kết luận rà soát tuân thủ hoặc bảo đảm tính hợp pháp của việc sử dụng hệ thống; bạn nên tham khảo cố vấn pháp lý hoặc tuân thủ chuyên nghiệp dựa trên tình huống kinh doanh thực tế.",
     "You will be redirected to Telegram to complete the binding process.": "Bạn sẽ được chuyển hướng đến Telegram để hoàn tất quá trình liên kết.",
@@ -7399,6 +7395,11 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Bonus {{amount}}": "Tặng thêm {{amount}}",
+    "Bonus included": "Trong đó tặng thêm",
+    "Referral commission {{quota}}": "Hoa hồng giới thiệu {{quota}}",
+    "Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "Bạn bè đăng ký qua liên kết của bạn được tặng thêm 10% cho lần nạp đầu (tối đa 10), và bạn nhận 10% mỗi lần nạp họ thanh toán, dưới dạng tín dụng. Chuyển vào số dư khi đạt 7.",
+    "Invitee first top-up bonus {{quota}}": "Thưởng nạp lần đầu (được mời) {{quota}}"
   }
 }

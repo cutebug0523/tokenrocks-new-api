@@ -132,7 +132,6 @@
     "{{name}} called {{count}} times, cost {{quota}}": "{{name}} を {{count}} 回呼び出し、費用 {{quota}}",
     "{{operation}} (ID: {{id}})": "{{operation}}（ID: {{id}}）",
     "{{percentOff}}% off": "{{percentOff}}%オフ",
-    "{{percent}}% OFF": "{{percent}}% オフ",
     "{{processed}} of {{total}} log entries processed.": "{{total}} 件中 {{processed}} 件のログを処理しました。",
     "{{protocol}} auth name": "{{protocol}} 認証名",
     "{{protocol}} auth value": "{{protocol}} 認証値",
@@ -2165,7 +2164,6 @@
     "Each tier supports 0~2 conditions (over len, p, c); the last tier is the catch-all without conditions. Use len (full input length, including cache hits) for tier conditions to avoid mis-routing when cache hits reduce p.": "各層は 0~2 個の条件（len、p、c に対して）を設定でき、最後の層は条件なしのキャッチオール層です。キャッシュヒットによって p が下がり層が誤判定されるのを防ぐため、層の条件には len（キャッシュヒットを含む完全な入力長）を使用してください。",
     "Each tier supports up to 2 conditions; the last tier is the catch-all without conditions. Use full input length for tier conditions to avoid mis-routing when cache hits reduce billable input tokens.": "各階層は最大2つの条件をサポートします。最後の階層は条件なしのフォールバックです。キャッシュヒットで課金対象の入力トークンが減っても誤った階層にならないよう、条件には完全な入力長を使用してください。",
     "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.": "各段階は最大 2 つの条件に対応します。条件のない最後の段階がフォールバックです。",
-    "Earn rewards when users join through your referral link. Transfer accumulated rewards to your balance anytime.": "ユーザーがあなたの紹介リンクから登録すると報酬を獲得できます。貯まった報酬はいつでも残高へ振り替えられます。",
     "Earnings": "収益",
     "Edit": "編集",
     "Edit {{title}}": "{{title}}を編集",
@@ -4596,7 +4594,6 @@
     "Pause drag demo": "ドラッグのデモを一時停止",
     "Pay": "Pay",
     "Pay {{amount}}": "支払額 {{amount}}",
-    "Pay {{amount}} <savings>• Save {{saved}}</savings>": "支払額 {{amount}} <savings>• {{saved}} お得</savings>",
     "Pay with Balance": "残高で支払う",
     "Pay-as-you-go with real-time usage monitoring": "リアルタイム使用量監視付き従量課金制",
     "Payment": "支払い",
@@ -7371,7 +7368,6 @@
     "You have unsaved changes": "未保存の変更があります",
     "You have unsaved changes. Are you sure you want to leave?": "未保存の変更があります。離れてもよろしいですか？",
     "You Pay": "お支払い額",
-    "You save": "節約額",
     "You understand and independently bear legal responsibility arising from deployment, operation, and charging behavior.": "デプロイ、運用、課金行為に起因する法的責任を理解し、独立して負います。",
     "You understand this compliance reminder is only for risk notice and does not constitute legal advice, a compliance review conclusion, or a guarantee of the legality of your use of this system; you should consult professional legal or compliance advisors based on your actual business scenario.": "このコンプライアンス注意事項はリスク通知にすぎず、法的助言、コンプライアンス審査の結論、または本システム利用の合法性の保証ではないことを理解しています。実際の事業状況に応じて、専門の法律またはコンプライアンス担当者に相談してください。",
     "You will be redirected to Telegram to complete the binding process.": "バインドプロセスを完了するためにTelegramにリダイレクトされます。",
@@ -7399,6 +7395,11 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Bonus {{amount}}": "+{{amount}} ボーナス",
+    "Bonus included": "うちボーナス",
+    "Referral commission {{quota}}": "紹介報酬 {{quota}}",
+    "Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "あなたのリンクから登録した友達は初回チャージが 10% 増量（最大 10）。友達がチャージするたびに、支払額の 10% をクレジットとして獲得できます。7 以上で残高に振り替えられます。",
+    "Invitee first top-up bonus {{quota}}": "招待特典・初回チャージ増量 {{quota}}"
   }
 }

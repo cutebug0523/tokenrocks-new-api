@@ -132,7 +132,6 @@
     "{{name}} called {{count}} times, cost {{quota}}": "{{name}} 调用 {{count}} 次，调用花费 {{quota}}",
     "{{operation}} (ID: {{id}})": "{{operation}}（ID: {{id}}）",
     "{{percentOff}}% off": "{{zhe}}折",
-    "{{percent}}% OFF": "优惠 {{percent}}%",
     "{{processed}} of {{total}} log entries processed.": "已处理 {{processed}} / {{total}} 条日志。",
     "{{protocol}} auth name": "{{protocol}} 认证名称",
     "{{protocol}} auth value": "{{protocol}} 认证值",
@@ -2165,7 +2164,6 @@
     "Each tier supports 0~2 conditions (over len, p, c); the last tier is the catch-all without conditions. Use len (full input length, including cache hits) for tier conditions to avoid mis-routing when cache hits reduce p.": "每个档位支持 0~2 个条件（针对 len、p、c），最后一档为兜底档无需条件。建议条件使用 len（完整输入长度，含缓存命中），避免缓存命中降低 p 导致档位误判。",
     "Each tier supports up to 2 conditions; the last tier is the catch-all without conditions. Use full input length for tier conditions to avoid mis-routing when cache hits reduce billable input tokens.": "每个档位最多支持 2 个条件；最后一个档位是不带条件的兜底档。建议使用完整输入长度作为档位条件，避免缓存命中减少计费输入 token 后误判档位。",
     "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.": "每个阶梯最多支持 2 个条件。最后一个无条件阶梯作为兜底。",
-    "Earn rewards when users join through your referral link. Transfer accumulated rewards to your balance anytime.": "用户通过您的推荐链接注册后，您即可获得奖励。可随时将累计奖励转入余额。",
     "Earnings": "收益",
     "Edit": "编辑",
     "Edit {{title}}": "编辑{{title}}",
@@ -4596,7 +4594,6 @@
     "Pause drag demo": "暂停拖拽演示",
     "Pay": "支付",
     "Pay {{amount}}": "支付 {{amount}}",
-    "Pay {{amount}} <savings>• Save {{saved}}</savings>": "支付 {{amount}} <savings>• 节省 {{saved}}</savings>",
     "Pay with Balance": "使用余额支付",
     "Pay-as-you-go with real-time usage monitoring": "按量付费，实时监控使用情况",
     "Payment": "支付",
@@ -7371,7 +7368,6 @@
     "You have unsaved changes": "您有未保存的更改",
     "You have unsaved changes. Are you sure you want to leave?": "您有未保存的更改。确定要离开吗？",
     "You Pay": "您支付",
-    "You save": "您节省",
     "You understand and independently bear legal responsibility arising from deployment, operation, and charging behavior.": "你理解并独立承担因部署、运营和收费行为产生的法律责任。",
     "You understand this compliance reminder is only for risk notice and does not constitute legal advice, a compliance review conclusion, or a guarantee of the legality of your use of this system; you should consult professional legal or compliance advisors based on your actual business scenario.": "你理解此合规提醒仅用于风险提示，不构成法律意见、合规审查结论或对你使用本系统合法性的保证；你应结合实际业务场景咨询专业法律或合规顾问。",
     "You will be redirected to Telegram to complete the binding process.": "您将被重定向到 Telegram 以完成绑定过程。",
@@ -7399,6 +7395,11 @@
     "Zhipu": "智谱",
     "Zhipu GLM": "智谱GLM",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Bonus {{amount}}": "多送 {{amount}}",
+    "Bonus included": "其中多送",
+    "Referral commission {{quota}}": "邀请返佣 {{quota}}",
+    "Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "好友用你的链接注册，首次充值多送 10%（最多 ¥10）；以后他每次充值，你都能拿到实付金额 10% 的额度，满 ¥7 可转入余额。",
+    "Invitee first top-up bonus {{quota}}": "邀请注册首充多送 {{quota}}"
   }
 }

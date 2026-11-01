@@ -132,7 +132,6 @@
     "{{name}} called {{count}} times, cost {{quota}}": "{{name}} appelé {{count}} fois, coût {{quota}}",
     "{{operation}} (ID: {{id}})": "{{operation}} (ID : {{id}})",
     "{{percentOff}}% off": "-{{percentOff}} %",
-    "{{percent}}% OFF": "-{{percent}} %",
     "{{processed}} of {{total}} log entries processed.": "{{processed}} sur {{total}} entrées de journal traitées.",
     "{{protocol}} auth name": "Nom d’authentification {{protocol}}",
     "{{protocol}} auth value": "Valeur d’authentification {{protocol}}",
@@ -2165,7 +2164,6 @@
     "Each tier supports 0~2 conditions (over len, p, c); the last tier is the catch-all without conditions. Use len (full input length, including cache hits) for tier conditions to avoid mis-routing when cache hits reduce p.": "Chaque palier accepte 0 à 2 conditions (sur len, p, c) ; le dernier palier est le filet de sécurité sans condition. Utilisez len (longueur d'entrée complète, y compris les cache hits) pour les conditions de palier afin d'éviter les routages erronés lorsque les cache hits réduisent p.",
     "Each tier supports up to 2 conditions; the last tier is the catch-all without conditions. Use full input length for tier conditions to avoid mis-routing when cache hits reduce billable input tokens.": "Chaque palier accepte jusqu’à 2 conditions ; le dernier palier sert de repli sans condition. Utilisez la longueur complète de l’entrée pour éviter un mauvais aiguillage lorsque les lectures de cache réduisent les tokens d’entrée facturables.",
     "Each tier supports up to 2 conditions. The last tier without conditions is the fallback.": "Chaque palier prend en charge jusqu’à 2 conditions. Le dernier palier sans condition sert de repli.",
-    "Earn rewards when users join through your referral link. Transfer accumulated rewards to your balance anytime.": "Gagnez des récompenses quand des utilisateurs rejoignent via votre lien de parrainage. Transférez-les vers votre solde à tout moment.",
     "Earnings": "Gains",
     "Edit": "Modifier",
     "Edit {{title}}": "Modifier {{title}}",
@@ -4596,7 +4594,6 @@
     "Pause drag demo": "Mettre la démo en pause",
     "Pay": "Pay",
     "Pay {{amount}}": "Payer {{amount}}",
-    "Pay {{amount}} <savings>• Save {{saved}}</savings>": "Payer {{amount}} <savings>• Économisez {{saved}}</savings>",
     "Pay with Balance": "Payer avec le solde",
     "Pay-as-you-go with real-time usage monitoring": "Paiement à l'usage avec suivi de la consommation en temps réel",
     "Payment": "Paiement",
@@ -7371,7 +7368,6 @@
     "You have unsaved changes": "Vous avez des modifications non enregistrées",
     "You have unsaved changes. Are you sure you want to leave?": "Vous avez des modifications non enregistrées. Êtes-vous sûr de vouloir quitter ?",
     "You Pay": "Vous payez",
-    "You save": "Vous économisez",
     "You understand and independently bear legal responsibility arising from deployment, operation, and charging behavior.": "Vous comprenez et assumez indépendamment la responsabilité juridique découlant du déploiement, de l’exploitation et de la facturation.",
     "You understand this compliance reminder is only for risk notice and does not constitute legal advice, a compliance review conclusion, or a guarantee of the legality of your use of this system; you should consult professional legal or compliance advisors based on your actual business scenario.": "Vous comprenez que ce rappel de conformité est uniquement un avis de risque et ne constitue ni un conseil juridique, ni une conclusion d’examen de conformité, ni une garantie de la légalité de votre utilisation de ce système ; vous devez consulter des conseillers juridiques ou conformité professionnels selon votre situation réelle.",
     "You will be redirected to Telegram to complete the binding process.": "Vous serez redirigé vers Telegram pour terminer le processus de liaison.",
@@ -7399,6 +7395,11 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Bonus {{amount}}": "+{{amount}} offerts",
+    "Bonus included": "Dont bonus",
+    "Referral commission {{quota}}": "Commission de parrainage {{quota}}",
+    "Friends who sign up through your link get 10% extra on their first top-up (up to 10), and you earn 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "Vos filleuls inscrits via votre lien reçoivent 10 % de plus sur leur première recharge (jusqu'à 10), et vous gagnez 10 % de chaque recharge qu'ils paient, en crédit. Transférable vers votre solde dès 7.",
+    "Invitee first top-up bonus {{quota}}": "Bonus de première recharge (parrainage) {{quota}}"
   }
 }

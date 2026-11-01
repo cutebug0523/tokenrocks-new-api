@@ -24,6 +24,10 @@ const (
 var batchUpdateStores []map[int]int
 var batchUpdateLocks []sync.Mutex
 
+// batchUpdateRunLock keeps a shutdown flush from returning while the
+// periodic updater is still writing a batch it already took.
+var batchUpdateRunLock sync.Mutex
+
 func init() {
 	for range BatchUpdateTypeCount {
 		batchUpdateStores = append(batchUpdateStores, make(map[int]int))
@@ -38,6 +42,12 @@ func InitBatchUpdater() {
 			batchUpdate()
 		}
 	})
+}
+
+// FlushBatchUpdates writes queued quota deltas to the database. Call it on
+// shutdown after in-flight requests finish, or the last interval is lost.
+func FlushBatchUpdates() {
+	batchUpdate()
 }
 
 func addNewRecord(type_ int, id int, value int) {
@@ -62,6 +72,9 @@ func addNewRecord(type_ int, id int, value int) {
 }
 
 func batchUpdate() {
+	batchUpdateRunLock.Lock()
+	defer batchUpdateRunLock.Unlock()
+
 	// check if there's any data to update
 	hasData := false
 	for i := range BatchUpdateTypeCount {

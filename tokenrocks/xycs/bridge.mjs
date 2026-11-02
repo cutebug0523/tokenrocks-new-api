@@ -297,13 +297,24 @@ function onMessage(m, replay, { draftIt = true } = {}) {
 }
 
 // ---------- 草稿 ----------
+// 一个会话同时只写一份：上一份还在写（读图、等模型要好几秒），过 2 秒再来，这期间的新消息留在 pending 里一起答
 async function draft(s) {
+  if (s.busy) return void (s.timer = setTimeout(() => draft(s), 2000))
+  s.busy = true
+  try {
+    await draftOnce(s)
+  } finally {
+    s.busy = false
+  }
+}
+
+async function draftOnce(s) {
   const msgs = s.pending.splice(0)
   if (!msgs.length || s.weBuy) return
   if (await notOurItem(s.itemId)) return log('不是自己店的商品，不替人回', s.itemId, msgs[0].nick)
   const b = buyer(s.buyerId)
-  // 截图先让看图模型读成文字，档案里那条「[图片]」也换掉，后面每次出草稿都看得到
-  for (const m of msgs.filter((x) => x.image)) {
+  // 截图先让看图模型读成文字，档案里那条「[图片]」也换掉，后面每次出草稿都看得到（放回来重答的已经读过）
+  for (const m of msgs.filter((x) => x.image && !x.text.startsWith('[图片，'))) {
     try {
       m.text = `[图片，系统读出来的内容：${maskSecrets(await describeImage(m.image))}]`
     } catch (err) {
@@ -363,6 +374,12 @@ async function draft(s) {
     rec.why = '已经说过记下了，等店主回'
   }
   rec.ms = Date.now() - t0
+  // 写的时候买家又发了新消息：这份不发，消息放回去跟新的一起重答，免得连回几条、答过时的问题
+  if (rec.wouldSend && s.pending.length) {
+    s.pending.unshift(...msgs)
+    rec.wouldSend = false
+    rec.why = '写的时候买家又发了，合起来重答'
+  }
   if (LIVE && (!LIVE_ONLY.size || LIVE_ONLY.has(b.id)) && rec.wouldSend && rec.draft) await deliver(rec, s, b, msgs)
   append('drafts', rec)
   log('草稿', rec.nick, msgs.map((m) => m.text).join(' / ').slice(0, 40), '→', rec.draft || rec.why || rec.error)
@@ -617,7 +634,7 @@ function saveState() {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
     fs.mkdirSync(path.join(DATA, 'buyers'), { recursive: true })
-    const out = [...convs.values()].map(({ timer, pending, ...rest }) => rest)
+    const out = [...convs.values()].map(({ timer, pending, busy, ...rest }) => rest)
     fs.writeFileSync(path.join(DATA, 'state.json'), JSON.stringify(out))
     for (const id of dirty) fs.writeFileSync(path.join(DATA, 'buyers', `${id}.json`), JSON.stringify(buyers.get(id)))
     dirty.clear()
@@ -1150,6 +1167,10 @@ async function selftest() {
   ourItems.add('9')
   listOurItems = async () => ['9', '10']
   assert(!(await notOurItem('9')) && !(await notOurItem('')) && !(await notOurItem('10')) && (await notOurItem('8')), '别人店的商品不回，刚上架的拉列表认出来')
+  const sb = { sid: 'busy', pending: [{ id: 'x' }], busy: true, timer: null }
+  await draft(sb)
+  assert(sb.pending.length === 1 && sb.timer, '上一份还在写，新消息留着等它写完一起答')
+  clearTimeout(sb.timer)
   console.log('selftest ok')
 }
 

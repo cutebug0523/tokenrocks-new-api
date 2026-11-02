@@ -17,8 +17,9 @@ import (
 
 // What a client receives must not identify the upstream that served it. The
 // helpers below strip the three places upstream identity leaks: response
-// headers (ShouldCopyUpstreamHeader), response bodies (SanitizeUpstreamJSON)
-// and error text (UserFacingError). Admins still see the originals in logs.
+// headers (ShouldCopyUpstreamHeader), response bodies and stream events
+// including errors sent after the response started (SanitizeUpstreamJSON), and
+// error text (UserFacingError). Admins still see the originals in logs.
 
 // upstreamHeaderAllowlist lists the only upstream response headers copied to
 // clients. Content-Length is recomputed locally, and the Codex headers carry
@@ -42,15 +43,18 @@ var clientUsageFields = []string{
 var (
 	responseModelField = regexp.MustCompile(`"(model|modelVersion)"\s*:\s*"(?:[^"\\]|\\.)*"`)
 	responseUsageField = regexp.MustCompile(`"usage"\s*:\s*\{`)
+	responseErrorField = regexp.MustCompile(`"(error|response\.failed)"`)
 )
 
 // SanitizeUpstreamJSON rewrites one JSON response body or stream event before
-// it reaches the client: every "model" field becomes the model the client
-// requested, and a top-level usage object keeps only clientUsageFields.
+// it reaches the client: an upstream error message becomes the fixed one,
+// every "model" field becomes the model the client requested, and a top-level
+// usage object keeps only clientUsageFields.
 func SanitizeUpstreamJSON(c *gin.Context, data string) string {
 	if c == nil {
 		return data
 	}
+	data = hideUpstreamErrorText(c, data)
 	if requested := c.GetString(string(constant.ContextKeyOriginalModel)); requested != "" && strings.Contains(data, `"model`) {
 		if quoted, err := common.Marshal(requested); err == nil {
 			data = responseModelField.ReplaceAllStringFunc(data, func(field string) string {
@@ -89,6 +93,85 @@ func SanitizeUpstreamJSON(c *gin.Context, data string) string {
 		return data
 	}
 	return string(out)
+}
+
+// upstreamErrorCode replaces an upstream error code, which can name the
+// upstream's routing (for example smart_route_all_candidates_failed).
+var upstreamErrorCode = json.RawMessage(`"upstream_error"`)
+
+// hideUpstreamErrorText replaces the message and code of an error that
+// upstream put inside a response body or stream event. Once a stream has
+// started, such an event is copied to the client as data and never reaches
+// UserFacingError. It covers the "error" object of OpenAI, Claude and Gemini,
+// a bare "error" string, the Responses "error" event and a Responses
+// "response.failed" event.
+func hideUpstreamErrorText(c *gin.Context, data string) string {
+	if c.GetBool(string(constant.ContextKeyGatewayStreamError)) || !responseErrorField.MatchString(data) {
+		return data
+	}
+	var body map[string]json.RawMessage
+	if common.UnmarshalJsonStr(data, &body) != nil {
+		return data
+	}
+	message, err := common.Marshal(common.MessageWithRequestId(i18n.T(c, i18n.UpstreamErrorKey(0)), c.GetString(common.RequestIdKey)))
+	if err != nil {
+		return data
+	}
+	var eventType string
+	_ = common.Unmarshal(body["type"], &eventType)
+	changed := false
+	switch {
+	case common.GetJsonType(body["error"]) == "string" && string(body["error"]) != `""`:
+		body["error"], changed = message, true
+	case common.GetJsonType(body["error"]) == "object":
+		body["error"], changed = withNeutralError(body["error"], message)
+	case eventType == "error":
+		changed = neutralizeError(body, message)
+	case eventType == "response.failed":
+		var response map[string]json.RawMessage
+		if common.Unmarshal(body["response"], &response) != nil {
+			break
+		}
+		if response["error"], changed = withNeutralError(response["error"], message); changed {
+			body["response"], err = common.Marshal(response)
+			changed = err == nil
+		}
+	}
+	if !changed {
+		return data
+	}
+	out, err := common.Marshal(body)
+	if err != nil {
+		return data
+	}
+	return string(out)
+}
+
+// neutralizeError sets the fixed message and code on an error's fields, and
+// reports whether they held an error message.
+func neutralizeError(fields map[string]json.RawMessage, message []byte) bool {
+	if fields["message"] == nil {
+		return false
+	}
+	fields["message"] = message
+	if common.GetJsonType(fields["code"]) == "string" {
+		fields["code"] = upstreamErrorCode
+	}
+	return true
+}
+
+// withNeutralError returns an error object passed through neutralizeError,
+// and whether it was an error object with a message.
+func withNeutralError(errObject json.RawMessage, message []byte) (json.RawMessage, bool) {
+	var fields map[string]json.RawMessage
+	if common.GetJsonType(errObject) != "object" || common.Unmarshal(errObject, &fields) != nil || !neutralizeError(fields, message) {
+		return errObject, false
+	}
+	out, err := common.Marshal(fields)
+	if err != nil {
+		return errObject, false
+	}
+	return out, true
 }
 
 // UserFacingError replaces an error that came from upstream with a fixed

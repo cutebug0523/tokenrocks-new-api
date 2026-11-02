@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -73,6 +74,39 @@ func TestSanitizeUpstreamJSON(t *testing.T) {
 			require.JSONEq(t, tc.want, SanitizeUpstreamJSON(c, tc.in))
 		})
 	}
+
+	errorEvents := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"openai and claude error object", `{"type":"error","error":{"type":"overloaded_error","message":"provider-x: switch your pool"}}`, `{"type":"error","error":{"type":"overloaded_error","message":"MSG"}}`},
+		{"bare error string", `{"error":"provider-x: switch your pool"}`, `{"error":"MSG"}`},
+		{"error object code", `{"error":{"message":"provider-x: switch your pool","type":"upstream_error","code":"provider_x_pool_failed"}}`, `{"error":{"message":"MSG","type":"upstream_error","code":"upstream_error"}}`},
+		{"responses error event", `{"type":"error","code":"provider_x_pool_failed","message":"provider-x: switch your pool","sequence_number":3}`, `{"type":"error","code":"upstream_error","message":"MSG","sequence_number":3}`},
+		{"responses failed event", `{"type":"response.failed","response":{"id":"r","status":"failed","error":{"code":"provider_x_pool_failed","message":"provider-x: switch your pool"}}}`, `{"type":"response.failed","response":{"id":"r","status":"failed","error":{"code":"upstream_error","message":"MSG"}}}`},
+	}
+	require.NoError(t, i18n.Init())
+	errCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	errCtx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	errCtx.Request.Header.Set("Accept-Language", "zh-CN")
+	errCtx.Set(common.RequestIdKey, "tr-1")
+	fixed, err := common.Marshal("上游线路暂时不可用，请稍后重试。 (request id: tr-1)")
+	require.NoError(t, err)
+	for _, tc := range errorEvents {
+		t.Run(tc.name, func(t *testing.T) {
+			require.JSONEq(t, strings.ReplaceAll(tc.want, `"MSG"`, string(fixed)), SanitizeUpstreamJSON(errCtx, tc.in))
+		})
+	}
+	for _, kept := range []string{
+		`{"choices":[{"delta":{"content":"error"}}]}`,
+		`{"type":"response.completed","response":{"status":"completed","error":null}}`,
+	} {
+		assert.Equal(t, kept, SanitizeUpstreamJSON(errCtx, kept), "events without an error are left alone")
+	}
+	errCtx.Set(string(constant.ContextKeyGatewayStreamError), true)
+	gatewayErr := `{"error":{"message":"额度不足 (request id: tr-1)"}}`
+	assert.Equal(t, gatewayErr, SanitizeUpstreamJSON(errCtx, gatewayErr), "errors this gateway raised keep their text")
 
 	plain := `{"model":"up","usage":{"prompt_tokens":1}}`
 	assert.Equal(t, plain, SanitizeUpstreamJSON(gin.CreateTestContextOnly(httptest.NewRecorder(), gin.New()), plain), "no requested model and nothing to drop")

@@ -75,6 +75,11 @@ const (
 	ContextKeyIsStream             ContextKey = "is_stream"
 	ContextKeyResponseStreamStatus ContextKey = "response_stream_status"
 
+	// ContextKeyGatewayStreamError marks that the error event now being written
+	// into a stream was raised by this gateway, so its text is already safe for
+	// users and must not be replaced like an upstream error.
+	ContextKeyGatewayStreamError ContextKey = "gateway_stream_error"
+
 	// ContextKeyAuditLogged marks that the current request has already recorded
 	// a manage/operation audit log inside the handler. When set, the admin-audit
 	// fallback in authHelper (finishAdminAudit) skips its record to avoid

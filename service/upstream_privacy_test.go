@@ -84,11 +84,11 @@ func TestUserFacingError(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	c.Request.Header.Set("Accept-Language", "zh-CN")
 
-	upstream := types.WithOpenAIError(types.OpenAIError{Message: "个人智能路由池没有活跃候选。请切换固定商家", Type: "service_unavailable"}, http.StatusServiceUnavailable)
+	upstream := types.WithOpenAIError(types.OpenAIError{Message: "provider-x: no active route in your pool", Type: "service_unavailable"}, http.StatusServiceUnavailable)
 	got := UserFacingError(c, upstream)
 	assert.Equal(t, http.StatusServiceUnavailable, got.StatusCode)
 	assert.Equal(t, "上游线路暂时不可用，请稍后重试。", got.ToOpenAIError().Message)
-	assert.NotContains(t, got.ToClaudeError().Message, "商家")
+	assert.NotContains(t, got.ToClaudeError().Message, "provider-x")
 
 	tooMany := UserFacingError(c, types.WithClaudeError(types.ClaudeError{Message: "upstream says slow down", Type: "rate_limit_error"}, http.StatusTooManyRequests))
 	assert.Equal(t, "请求过多或线路容量已满，请降低并发、稍后重试。", tooMany.Error())

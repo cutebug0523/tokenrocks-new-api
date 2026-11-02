@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>编程客户端配置 · TokenRocks</title>
+<meta name="description" content="在 DeepSeek Harness、ZCode、WorkBuddy 里手动添加 TokenRocks：接口地址、Responses 协议、上下文、图片和思考设置，每一步都有截图。">
+<link rel="icon" href="/_s/favicon.ico">
+<link rel="stylesheet" href="/_s/site.css">
+<style>
+  .doc { --key: #e8590c; max-width: 1200px; margin: 0 auto; padding: 0 24px; display: flex; gap: 40px; align-items: flex-start; }
+  .doc-nav { flex: 0 0 220px; position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: 36px 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+  .doc-nav .label { font-size: 12px; font-weight: 600; color: var(--muted-2); letter-spacing: 0.5px; padding: 14px 10px 6px; }
+  .doc-nav .label:first-child { padding-top: 6px; }
+  .doc-nav a { text-decoration: none; color: var(--text-2); padding: 8px 10px; border-radius: 6px; }
+  .doc-nav a:hover, .doc-nav a[aria-current] { background: var(--alt); }
+  .doc-nav a[aria-current] { color: var(--ink); font-weight: 600; }
+  .doc-main { flex: 1 1 auto; min-width: 0; padding: 36px 0 80px; display: flex; flex-direction: column; gap: 44px; font-size: 16px; line-height: 1.8; }
+  .doc-main h2 { margin: 0; font-size: 26px; font-weight: 700; line-height: 1.3; scroll-margin-top: 16px; }
+  .doc-main h3 { margin: 18px 0 0; font-size: 18px; font-weight: 700; }
+  .doc-main section { display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 16px; }
+  .doc-main p { margin: 0; color: var(--text-2); }
+  .doc-main a { color: var(--brand); }
+  .doc-main p code, .doc-main li code, .doc-table code { font-size: 14px; background: var(--alt); padding: 1px 6px; border-radius: 4px; color: var(--ink); overflow-wrap: anywhere; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .doc-table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 15px; line-height: 1.6; }
+  .doc-table th { padding: 10px 14px; font-weight: 600; text-align: left; font-size: 13px; color: var(--muted); background: var(--alt); }
+  .doc-table td { padding: 12px 14px; border-top: 1px solid var(--line-soft); color: var(--text-2); }
+  .doc-table td.no { color: var(--key); font-weight: 600; }
+  .note { background: var(--brand-light); border: 1px solid var(--brand-border); border-radius: 10px; padding: 14px 16px; font-size: 15px; color: #0b3d33; }
+  .note.key { background: #fff4ec; border-color: #f7c3a3; color: #7a2e06; }
+  .shot { margin: 4px 0 0; }
+  .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; }
+  /* 截图下面的编号说明，颜色和图上的框一致：绿色是要点，橙色是 API 密钥 */
+  .marks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; color: var(--text-2); }
+  .marks li { position: relative; padding-left: 32px; }
+  .marks li::before { content: attr(data-n); position: absolute; left: 0; top: 4px; width: 22px; height: 22px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 13px; font-weight: 700; line-height: 22px; text-align: center; }
+  .marks li.key::before { background: var(--key); }
+  .mobile-toc { display: none; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 15px; }
+  .mobile-toc nav { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; }
+  .mobile-toc a { text-decoration: none; }
+  @media (max-width: 860px) {
+    .doc { padding: 0 16px; }
+    .doc-nav { display: none; }
+    .mobile-toc { display: block; }
+    .doc-main h1 { font-size: 32px !important; }
+    .brand-sub { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="inner">
+    <div class="left">
+      <a class="brand" href="/" aria-label="TokenRocks 首页">
+        <span class="brand-mark" aria-hidden="true">T</span>
+        <span class="brand-name">TokenRocks</span>
+        <span class="brand-sub">文档</span>
+      </a>
+      <nav class="main-nav" aria-label="主导航">
+        <a class="optional" href="/">产品</a>
+        <a href="/pricing">模型</a>
+        <a href="/guide/">文档</a>
+        <a href="/guide/clients/" aria-current="page">教程</a>
+      </nav>
+    </div>
+    <div class="header-actions">
+      <a class="btn-dark" href="/dashboard">进入控制台</a>
+    </div>
+  </div>
+</header>
+
+<div class="doc">
+  <nav class="doc-nav" aria-label="文档目录">
+    <span class="label">文档</span>
+    <a href="/guide/">使用指南</a>
+    <a href="/guide/clients/" aria-current="page">编程客户端</a>
+    <span class="label">本页</span>
+    <a href="#prep">先准备好</a>
+    <a href="#dsh">DeepSeek Harness</a>
+    <a href="#zcode">ZCode</a>
+    <a href="#workbuddy">WorkBuddy</a>
+  </nav>
+
+  <main class="doc-main">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <h1 style="margin: 0; font-size: 40px; font-weight: 800; letter-spacing: -0.8px; line-height: 1.2;">编程客户端配置</h1>
+      <p style="font-size: 18px; color: var(--muted);">DeepSeek Harness、ZCode、WorkBuddy 没有一键导入，需要手动添加一次，以后打开就能用。截图里<b>绿色框</b>是要点或要填的地方，<b>橙色框</b>是 API 密钥，粘贴你自己的。看不清就点图片看大图。</p>
+    </div>
+
+    <details class="mobile-toc">
+      <summary>本页目录</summary>
+      <nav aria-label="本页目录（手机）">
+        <a href="#prep">先准备好</a><a href="#dsh">DeepSeek Harness</a><a href="#zcode">ZCode</a><a href="#workbuddy">WorkBuddy</a><a href="/guide/">返回使用指南</a>
+      </nav>
+    </details>
+
+    <section id="prep" aria-labelledby="prep-title">
+      <h2 id="prep-title">先准备好</h2>
+      <p>三个客户端都填同样的东西：</p>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <tbody>
+            <tr><td>接口地址</td><td><code>https://api.tokenrocks.ai/v1</code></td></tr>
+            <tr><td>协议</td><td><b>Responses</b>（不要选 Chat Completions）</td></tr>
+            <tr><td>API 密钥</td><td>在控制台「API 密钥」页创建，形如 <code>sk-xxxx</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>每个模型这样设：</p>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th scope="col">模型名</th><th scope="col">上下文</th><th scope="col">最大输出</th><th scope="col">图片</th><th scope="col">思考</th></tr></thead>
+          <tbody>
+            <tr><td><code>deepseek-v4.1-flash</code></td><td>1024000</td><td>128000</td><td>勾</td><td>开</td></tr>
+            <tr><td><code>glm-5.3</code></td><td>1024000</td><td>128000</td><td class="no">不勾</td><td>开</td></tr>
+            <tr><td><code>glm-5.3-flash</code></td><td>1024000</td><td>128000</td><td>勾</td><td>开</td></tr>
+            <tr><td><code>kimi-k3.1-pro</code></td><td>1024000</td><td>128000</td><td>勾</td><td>开</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>只有 glm-5.3 不支持看图，它的 flash 版反而支持。用不到的模型可以不加，其他模型名见<a href="/pricing">模型与价格</a>。</p>
+      <div class="note key">API 密钥只粘贴在客户端的「API 密钥 / API Key」框里，不要发给别人。截图里这个框是空的，就是要你粘贴的地方。</div>
+    </section>
+
+    <section id="dsh" aria-labelledby="dsh-title">
+      <h2 id="dsh-title">DeepSeek Harness</h2>
+      <p>要用「自定义模型 API」。「第三方模型提供商」那一栏是内置的官方服务商，填不了接口地址。</p>
+
+      <h3>1. 打开设置</h3>
+      <figure class="shot"><a href="/guide/clients/img/dsh-1.webp" target="_blank"><img src="/guide/clients/img/dsh-1.webp" width="1600" height="1025" alt="DeepSeek Harness 左下角更多菜单里的设置" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">点左下角「··· 更多」</li><li data-n="2">点「设置」</li></ol>
+
+      <h3>2. 添加模型提供商</h3>
+      <figure class="shot"><a href="/guide/clients/img/dsh-2.webp" target="_blank"><img src="/guide/clients/img/dsh-2.webp" width="1600" height="1025" alt="设置里的模型页和添加模型提供商按钮" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">左边选「模型」</li><li data-n="2">点「添加模型提供商」</li></ol>
+
+      <h3>3. 填提供商信息</h3>
+      <figure class="shot"><a href="/guide/clients/img/dsh-3.webp" target="_blank"><img src="/guide/clients/img/dsh-3.webp" width="1600" height="1031" alt="自定义模型 API 表单" loading="lazy"></a></figure>
+      <ol class="marks">
+        <li data-n="1">切到「自定义模型 API」</li>
+        <li data-n="2">Provider ID 填 <code>tokenrocks</code></li>
+        <li data-n="3">显示名称填 <code>TokenRocks</code></li>
+        <li data-n="4">API 地址填 <code>https://api.tokenrocks.ai/v1</code></li>
+        <li data-n="5">API 协议选「OpenAI Responses」</li>
+        <li data-n="6" class="key">API 密钥粘贴你的密钥</li>
+      </ol>
+
+      <h3>4. 添加模型</h3>
+      <figure class="shot"><a href="/guide/clients/img/dsh-4.webp" target="_blank"><img src="/guide/clients/img/dsh-4.webp" width="1600" height="1025" alt="模型目录里的四个模型" loading="lazy"></a></figure>
+      <ol class="marks">
+        <li data-n="1" class="key">确认 API 密钥已经粘贴（sk- 开头）</li>
+        <li data-n="2">模型目录里依次填模型名，显示名称可以空着</li>
+        <li data-n="3">每个模型点右边的「&gt;」展开，按下一步设置</li>
+        <li data-n="4">点「添加模型」加下一个</li>
+      </ol>
+
+      <h3>5. 设上下文、图片和推理</h3>
+      <figure class="shot"><a href="/guide/clients/img/dsh-5.webp" target="_blank"><img src="/guide/clients/img/dsh-5.webp" width="1600" height="1025" alt="展开后的模型设置" loading="lazy"></a></figure>
+      <ol class="marks">
+        <li data-n="1">上下文窗口 <code>1024000</code>，最大输出 <code>128000</code></li>
+        <li data-n="2">输入类型勾「文本」和「图片」；<b>glm-5.3 只勾文本</b></li>
+        <li data-n="3">打开「推理等级」</li>
+        <li data-n="4">档位用默认的 off / low / medium / high，不用改</li>
+        <li data-n="5">所有模型设好后，点「创建提供商」</li>
+      </ol>
+
+      <h3>6. 完成</h3>
+      <figure class="shot"><a href="/guide/clients/img/dsh-6.webp" target="_blank"><img src="/guide/clients/img/dsh-6.webp" width="1600" height="1025" alt="模型列表里出现 TokenRocks" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">列表里出现「TokenRocks 自定义」就配好了</li></ol>
+      <figure class="shot"><a href="/guide/clients/img/dsh-7.webp" target="_blank"><img src="/guide/clients/img/dsh-7.webp" width="1600" height="1025" alt="聊天框模型菜单里的 TokenRocks 模型" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">聊天时在 TokenRocks 分组里选模型</li><li data-n="2">输入框右下角点这里切换模型</li></ol>
+    </section>
+
+    <section id="zcode" aria-labelledby="zcode-title">
+      <h2 id="zcode-title">ZCode</h2>
+      <p>ZCode 的「智能配置」能认出这几个模型，会自动填好图片和推理等级，你只需要改上下文和最大输出。</p>
+
+      <h3>1. 第一次打开：跳过登录</h3>
+      <p>已经进到工作区的直接看第 2 步。</p>
+      <figure class="shot"><a href="/guide/clients/img/zc-1.webp" target="_blank"><img src="/guide/clients/img/zc-1.webp" width="1600" height="1067" alt="ZCode 欢迎页" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">点「使用 API key」</li></ol>
+      <figure class="shot"><a href="/guide/clients/img/zc-2.webp" target="_blank"><img src="/guide/clients/img/zc-2.webp" width="1600" height="1067" alt="ZCode API key 页" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">点「暂时跳过」（这一页的 API Key 是智谱官方的，不用填）</li></ol>
+
+      <h3>2. 添加供应商</h3>
+      <figure class="shot"><a href="/guide/clients/img/zc-3.webp" target="_blank"><img src="/guide/clients/img/zc-3.webp" width="1600" height="1067" alt="ZCode 模型设置页" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">点左下角齿轮进设置，选「模型设置」</li><li data-n="2">点右上角「+ 添加供应商」</li></ol>
+      <figure class="shot"><a href="/guide/clients/img/zc-4.webp" target="_blank"><img src="/guide/clients/img/zc-4.webp" width="1600" height="1067" alt="添加供应商列表" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">点「创建自定义供应商」</li></ol>
+
+      <h3>3. 填地址，选 Responses</h3>
+      <figure class="shot"><a href="/guide/clients/img/zc-5.webp" target="_blank"><img src="/guide/clients/img/zc-5.webp" width="1600" height="1067" alt="自定义供应商表单" loading="lazy"></a></figure>
+      <ol class="marks">
+        <li data-n="1">Base URL 填 <code>https://api.tokenrocks.ai/v1</code></li>
+        <li data-n="2">API 格式选「Responses (/responses)」</li>
+      </ol>
+      <p>选好格式后下面会多出 API Key 框，把 API 密钥粘贴进去（见第 6 步的图）。</p>
+
+      <h3>4. 添加模型</h3>
+      <p>点「模型列表」右边的「+ 添加模型」。</p>
+      <figure class="shot"><a href="/guide/clients/img/zc-6.webp" target="_blank"><img src="/guide/clients/img/zc-6.webp" width="1600" height="1067" alt="ZCode 添加模型对话框" loading="lazy"></a></figure>
+      <ol class="marks">
+        <li data-n="1">「智能配置」保持打开</li>
+        <li data-n="2">填模型名，比如 <code>deepseek-v4.1-flash</code></li>
+        <li data-n="3">上下文窗口改成 <code>1024000</code></li>
+        <li data-n="4">最大输出 Token 改成 <code>128000</code></li>
+        <li data-n="5">展开「高级配置」</li>
+        <li data-n="6">输入类型只勾「文本」「图片」；视频、PDF 如果被自动勾上，取消掉</li>
+        <li data-n="7">推理等级是自动填的，不用改</li>
+        <li data-n="8">点「保存」，每个模型各加一次</li>
+      </ol>
+
+      <h3>5. glm-5.3 不勾图片</h3>
+      <figure class="shot"><a href="/guide/clients/img/zc-7.webp" target="_blank"><img src="/guide/clients/img/zc-7.webp" width="1600" height="1067" alt="glm-5.3 的添加模型对话框" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">加 glm-5.3 时，输入类型只留「文本」</li></ol>
+
+      <h3>6. 粘贴 API 密钥，检查列表</h3>
+      <figure class="shot"><a href="/guide/clients/img/zc-8.webp" target="_blank"><img src="/guide/clients/img/zc-8.webp" width="1600" height="1067" alt="配好的供应商和模型列表" loading="lazy"></a></figure>
+      <ol class="marks">
+        <li data-n="1" class="key">API Key 粘贴你的密钥</li>
+        <li data-n="2">还没加完就继续点「添加模型」</li>
+        <li data-n="3">模型都显示 1M；除了 glm-5.3，其余都带「视觉」标签</li>
+      </ol>
+      <p>供应商默认叫「新供应商」，想改名点右上角「···」→「重命名」，不改也能用。配好后回到工作区，聊天时在模型选择里选这些模型。</p>
+    </section>
+
+    <section id="workbuddy" aria-labelledby="workbuddy-title">
+      <h2 id="workbuddy-title">WorkBuddy</h2>
+      <p>WorkBuddy 一次只能加一个模型，第 3～5 步每个模型走一遍。</p>
+
+      <h3>1. 打开设置</h3>
+      <figure class="shot"><a href="/guide/clients/img/wb-1.webp" target="_blank"><img src="/guide/clients/img/wb-1.webp" width="1600" height="960" alt="WorkBuddy 主界面左下角头像" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">点左下角自己的头像</li></ol>
+      <figure class="shot"><a href="/guide/clients/img/wb-2.webp" target="_blank"><img src="/guide/clients/img/wb-2.webp" width="1600" height="960" alt="头像菜单里的设置" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">点「设置」</li></ol>
+
+      <h3>2. 进入自定义模型</h3>
+      <figure class="shot"><a href="/guide/clients/img/wb-3.webp" target="_blank"><img src="/guide/clients/img/wb-3.webp" width="1600" height="1209" alt="设置里的模型页" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">左边选「模型」</li><li data-n="2">点「添加模型」</li></ol>
+
+      <h3>3. 供应商选「自定义」</h3>
+      <figure class="shot"><a href="/guide/clients/img/wb-4.webp" target="_blank"><img src="/guide/clients/img/wb-4.webp" width="1600" height="1209" alt="供应商下拉搜索自定义" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">点开供应商下拉（默认是腾讯云）</li><li data-n="2">搜「自定义」</li><li data-n="3">选「自定义」</li></ol>
+
+      <h3>4. 填地址、API 密钥、模型名称</h3>
+      <figure class="shot"><a href="/guide/clients/img/wb-5.webp" target="_blank"><img src="/guide/clients/img/wb-5.webp" width="1600" height="1209" alt="WorkBuddy 自定义模型表单上半部分" loading="lazy"></a></figure>
+      <ol class="marks">
+        <li data-n="1">接口地址填 <code>https://api.tokenrocks.ai/v1</code>（框里灰色的提示是一长串地址，不用管，填到 /v1 就行）</li>
+        <li data-n="2" class="key">API Key 粘贴你的密钥</li>
+        <li data-n="3">模型名称填模型名，比如 <code>deepseek-v4.1-flash</code></li>
+      </ol>
+
+      <h3>5. 往下滚，勾图片和思考，填上下文</h3>
+      <figure class="shot"><a href="/guide/clients/img/wb-6.webp" target="_blank"><img src="/guide/clients/img/wb-6.webp" width="1600" height="1209" alt="WorkBuddy 自定义模型表单下半部分" loading="lazy"></a></figure>
+      <ol class="marks">
+        <li data-n="1">勾「图片输入」和「思考模式」；<b>glm-5.3 不勾图片输入</b>（「工具调用」「允许关闭思考」默认勾着，保留）</li>
+        <li data-n="2">支持的思考强度勾「低」「中」「高」</li>
+        <li data-n="3">输入填 <code>1024000</code>，输出填 <code>128000</code></li>
+        <li data-n="4">点「保存」，再点「添加模型」加下一个</li>
+      </ol>
+
+      <h3>6. 完成</h3>
+      <figure class="shot"><a href="/guide/clients/img/wb-7.webp" target="_blank"><img src="/guide/clients/img/wb-7.webp" width="1600" height="1209" alt="自定义模型列表" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">加好的模型都在列表里</li></ol>
+      <figure class="shot"><a href="/guide/clients/img/wb-8.webp" target="_blank"><img src="/guide/clients/img/wb-8.webp" width="1600" height="960" alt="对话框模型菜单里的自定义模型" loading="lazy"></a></figure>
+      <ol class="marks"><li data-n="1">在「自定义模型」分组里选，别选成上面 WorkBuddy 自带的同名模型</li><li data-n="2">输入框右下角点这里切换模型</li></ol>
+    </section>
+
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 20px; font-size: 15px;">
+      <span style="color: var(--muted-2);">配不上？加站长微信 bbslaoli</span>
+      <a href="/guide/" style="text-decoration: none; font-weight: 600;">返回使用指南 →</a>
+    </div>
+  </main>
+</div>
+
+<footer class="site-footer">
+  <div class="inner">
+    <div class="col"><span class="title" style="font-size: 16px;">TokenRocks</span><span>大模型 API 平台</span></div>
+    <div class="col"><span class="title">产品</span><a href="/pricing">模型与价格</a><a href="/#plans">线路方案</a><a href="/dashboard">控制台</a></div>
+    <div class="col"><span class="title">资源</span><a href="/guide/">使用指南</a><a href="https://github.com/cutebug0523/tokenrocks-new-api">GitHub 开源</a></div>
+    <div class="col"><span class="title">联系</span><span>微信 bbslaoli</span></div>
+  </div>
+</footer>
+
+<script src="/_s/wechat.js?v=20261101"></script>
+</body>
+</html>

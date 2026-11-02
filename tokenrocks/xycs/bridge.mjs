@@ -78,6 +78,7 @@ const SPEAKER = { buyer: '买家', owner: '店主本人', yidian: '之前的自�
 const botSent = new Map() // sid → 刚发出去的文字，推送回来时认出是自己发的，不当成店主接手
 const acks = new Map() // 发送请求的 mid → 等服务端确认
 let sendFrame = null // 页面连上后才有：用页面自己的连接发一帧
+let listOurItems = null // 页面连上后才有：拉一次自己店里在售的商品 ID
 let sentCount = { day: '', n: 0 }
 const seen = new Set()
 let loggedIn = false
@@ -299,6 +300,7 @@ function onMessage(m, replay, { draftIt = true } = {}) {
 async function draft(s) {
   const msgs = s.pending.splice(0)
   if (!msgs.length || s.weBuy) return
+  if (await notOurItem(s.itemId)) return log('不是自己店的商品，不替人回', s.itemId, msgs[0].nick)
   const b = buyer(s.buyerId)
   // 截图先让看图模型读成文字，档案里那条「[图片]」也换掉，后面每次出草稿都看得到
   for (const m of msgs.filter((x) => x.image)) {
@@ -365,6 +367,24 @@ async function draft(s) {
   append('drafts', rec)
   log('草稿', rec.nick, msgs.map((m) => m.text).join(' / ').slice(0, 40), '→', rec.draft || rec.why || rec.error)
   maybeSummarize(b).catch((err) => log('更新总结失败', err.message))
+}
+
+// 会话里的商品不是自己店的，说明这个号在别人那儿当买家（比如二店号去一店问过话），不替对方当客服，不然两个机器人会互相回。
+// 先看历次商品快照，没有再拉一次在售列表（10 分钟最多一次，刚上架的商品当天快照里还没有）；拉不到就照常回
+const ourItems = new Set()
+let ourItemsAt = 0
+async function notOurItem(id) {
+  if (!ourItems.size) for (const r of readLogs('items', '0000-00-00')) ourItems.add(String(r.id))
+  if (!id || ourItems.has(String(id))) return false
+  if (!listOurItems || Date.now() - ourItemsAt < 600000) return ourItems.size > 0
+  ourItemsAt = Date.now()
+  try {
+    for (const x of await listOurItems()) ourItems.add(String(x))
+  } catch (err) {
+    log('拉在售商品失败', err.message)
+    return false
+  }
+  return !ourItems.has(String(id))
 }
 
 // 这个会话里有没有人（机器人、店主、自动发货）回过买家
@@ -772,6 +792,7 @@ async function runBrowser() {
     if (retry && /TOKEN/.test(r.ret)) return mtop(api, data, false)
     throw new Error(`${api} ${r.ret}`)
   }
+  listOurItems = async () => ((await mtop('mtop.idle.web.xyh.item.list', { needGroupInfo: false, pageNumber: 1, userId: MY_ID, pageSize: 20 })).cardList || []).map((x) => x.cardData.id)
   // 商品快照：每天（北京时间）第一次跑到这里时，给每个在售商品记一次浏览、想要、标题、主图，写 data/items-<日期>.jsonl。
   // 详情接口每调一次浏览就 +1（店主自己看也算），所以一天只拍一次，funnel 报表里扣掉
   let snapTried = ''
@@ -1068,7 +1089,7 @@ async function evaluate(file, outFile) {
   for (const r of leaks) console.log('  说漏：', r.buyer.join(' / '), '→', r.raw, `［${r.leak}］`)
 }
 
-function selftest() {
+async function selftest() {
   const assert = (ok, what) => {
     if (!ok) throw new Error(`selftest 失败：${what}`)
   }
@@ -1126,12 +1147,15 @@ function selftest() {
   assert(rk.length === 2 && rk[0].ranks['9'] === 12 && !rk[1].ranks['9'], '搜索名次按词分组')
   const ctx = buyerContext(b, { itemTitle: 'Kimi' }, [{ sid: 's1', itemTitle: 'DS' }, { sid: 's2', itemTitle: 'Kimi' }], [{ id: 'd', ts: 4 * 86400000, text: '还在吗', nick: '甲' }], true, [{ key: 'abcd1234', status: 1 }])
   assert(ctx.includes('（隔了 3 天）') && ctx.includes('<兑换码>') && !ctx.includes('66e58ccf') && ctx.includes('还没兑换') && ctx.includes('（离上一条已经隔了 1 天）'), '上下文带时间线、遮住兑换码、带 TR 状态')
+  ourItems.add('9')
+  listOurItems = async () => ['9', '10']
+  assert(!(await notOurItem('9')) && !(await notOurItem('')) && !(await notOurItem('10')) && (await notOurItem('8')), '别人店的商品不回，刚上架的拉列表认出来')
   console.log('selftest ok')
 }
 
 const [cmd, arg] = process.argv.slice(2)
 if (!['selftest', 'eval', 'stats', 'see'].includes(cmd)) loadState()
-if (cmd === 'selftest') selftest()
+if (cmd === 'selftest') await selftest()
 else if (cmd === 'see') console.log(maskSecrets(await describeImage(arg)))
 else if (cmd === 'replay') await replay(arg)
 else if (cmd === 'eval') await evaluate(arg, process.argv[4])

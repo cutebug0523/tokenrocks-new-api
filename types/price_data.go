@@ -38,7 +38,10 @@ type PriceData struct {
 	UsePrice              bool
 	Quota                 int // 按次计费的最终额度（MJ / Task）
 	QuotaToPreConsume     int // 按量计费的预消耗额度
-	GroupRatioInfo        GroupRatioInfo
+	// ReservedCompletionTokens is the output allowance inside a ratio-billed
+	// QuotaToPreConsume (0 elsewhere); see relay.clampMaxOutputToBalance.
+	ReservedCompletionTokens int
+	GroupRatioInfo           GroupRatioInfo
 }
 
 func (p *PriceData) AddOtherRatio(key string, ratio float64) {

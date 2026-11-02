@@ -38,11 +38,16 @@ func modelPriceNotConfiguredError(c *gin.Context, modelName string, userId int) 
 // balance. Pre-consume therefore also reserves the requested output limit;
 // text requests that omit it reserve defaultPreConsumeCompletionTokens.
 // Settlement still charges actual usage and returns the rest.
-const defaultPreConsumeCompletionTokens = 8192
+// Clients such as Codex send max_output_tokens near the whole context window,
+// so the reservation is capped at maxPreConsumeCompletionTokens.
+const (
+	defaultPreConsumeCompletionTokens = 8192
+	maxPreConsumeCompletionTokens     = 32768
+)
 
 func preConsumeCompletionTokens(info *relaycommon.RelayInfo, meta *types.TokenCountMeta) int {
 	if meta != nil && meta.MaxTokens > 0 {
-		return meta.MaxTokens
+		return min(meta.MaxTokens, maxPreConsumeCompletionTokens)
 	}
 	switch info.Request.(type) {
 	case *dto.GeneralOpenAIRequest, *dto.ClaudeRequest, *dto.OpenAIResponsesRequest, *dto.GeminiChatRequest:
@@ -97,6 +102,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	}
 
 	var preConsumedQuota int
+	var reservedCompletionTokens int
 	var modelRatio float64
 	var completionRatio float64
 	var cacheRatio float64
@@ -137,7 +143,8 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		audioRatio = ratio_setting.GetAudioRatio(billingModelName)
 		audioCompletionRatio = ratio_setting.GetAudioCompletionRatio(billingModelName)
 		ratio := modelRatio * groupRatioInfo.GroupRatio
-		reservedTokens := preConsumedTokens + float64(preConsumeCompletionTokens(info, meta))*completionRatio
+		reservedCompletionTokens = preConsumeCompletionTokens(info, meta)
+		reservedTokens := preConsumedTokens + float64(reservedCompletionTokens)*completionRatio
 		quota, err := common.QuotaFromFloatStrict(reservedTokens * ratio)
 		if err != nil {
 			return hosttypes.PriceData{}, err
@@ -175,21 +182,22 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	}
 
 	priceData := hosttypes.PriceData{
-		FreeModel:             freeModel,
-		ModelPrice:            modelPrice,
-		ModelRatio:            modelRatio,
-		CompletionRatio:       completionRatio,
-		GroupRatioInfo:        groupRatioInfo,
-		UsePrice:              usePrice,
-		CacheRatio:            cacheRatio,
-		ImageRatio:            imageRatio,
-		AudioRatio:            audioRatio,
-		AudioCompletionRatio:  audioCompletionRatio,
-		CacheCreationRatio:    cacheCreationRatio,
-		CacheCreation5mRatio:  cacheCreationRatio5m,
-		CacheCreation1hRatio:  cacheCreationRatio1h,
-		CacheCreation12hRatio: cacheCreationRatio12h,
-		QuotaToPreConsume:     preConsumedQuota,
+		FreeModel:                freeModel,
+		ModelPrice:               modelPrice,
+		ModelRatio:               modelRatio,
+		CompletionRatio:          completionRatio,
+		GroupRatioInfo:           groupRatioInfo,
+		UsePrice:                 usePrice,
+		CacheRatio:               cacheRatio,
+		ImageRatio:               imageRatio,
+		AudioRatio:               audioRatio,
+		AudioCompletionRatio:     audioCompletionRatio,
+		CacheCreationRatio:       cacheCreationRatio,
+		CacheCreation5mRatio:     cacheCreationRatio5m,
+		CacheCreation1hRatio:     cacheCreationRatio1h,
+		CacheCreation12hRatio:    cacheCreationRatio12h,
+		QuotaToPreConsume:        preConsumedQuota,
+		ReservedCompletionTokens: reservedCompletionTokens,
 	}
 	if usePrice {
 		for name, ratio := range meta.BillingRatios {

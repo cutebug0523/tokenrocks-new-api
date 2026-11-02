@@ -895,3 +895,10 @@ func TestCheckGroupModelRatioRejectsInvalidRules(t *testing.T) {
 		assert.Error(t, ratio_setting.CheckGroupModelRatio(invalid), invalid)
 	}
 }
+
+func TestPreConsumeCompletionTokensCap(t *testing.T) {
+	info := &relaycommon.RelayInfo{Request: &dto.OpenAIResponsesRequest{}}
+	assert.Equal(t, defaultPreConsumeCompletionTokens, preConsumeCompletionTokens(info, &types.TokenCountMeta{}))
+	assert.Equal(t, 4096, preConsumeCompletionTokens(info, &types.TokenCountMeta{MaxTokens: 4096}))
+	assert.Equal(t, maxPreConsumeCompletionTokens, preConsumeCompletionTokens(info, &types.TokenCountMeta{MaxTokens: 1_000_000}))
+}

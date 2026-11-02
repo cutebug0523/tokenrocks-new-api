@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -64,7 +65,70 @@ func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.N
 		logger.LogInfo(c, common.LogText("model %s is free, skipping pre-consume", info.OriginModelName))
 		return nil
 	}
-	return service.PreConsumeBilling(c, priceData.QuotaToPreConsume, info)
+	clampMaxOutputToBalance(c, info)
+	return service.PreConsumeBilling(c, info.PriceData.QuotaToPreConsume, info)
+}
+
+// TokenRocks: a small wallet (e.g. ¥1 from a gift code) could not afford the
+// output reservation and got 402 before its first request. When the wallet
+// still covers the input plus minClampedOutputTokens, lower the request's
+// max output to what it can pay for and reserve that instead. Ratio billing
+// only: tiered snapshots re-reserve on group change from their own estimate.
+const minClampedOutputTokens = 1024
+
+func clampMaxOutputToBalance(c *gin.Context, info *relaycommon.RelayInfo) {
+	pd := &info.PriceData
+	reserved := pd.ReservedCompletionTokens
+	perToken := pd.CompletionRatio * pd.ModelRatio * pd.GroupRatioInfo.GroupRatio
+	if reserved <= 0 || perToken <= 0 || info.Billing != nil || info.TieredBillingSnapshot != nil {
+		return
+	}
+	available, err := model.GetUserQuota(info.UserId, false)
+	if err != nil {
+		return
+	}
+	if !info.TokenUnlimited {
+		if token, err := model.GetTokenByKey(info.TokenKey, false); err == nil && token != nil {
+			available = min(available, token.RemainQuota)
+		}
+	}
+	if available >= pd.QuotaToPreConsume {
+		return
+	}
+	if hasSub, err := model.HasActiveUserSubscription(info.UserId); err != nil || hasSub {
+		return
+	}
+	inputQuota := pd.QuotaToPreConsume - common.QuotaFromFloat(float64(reserved)*perToken)
+	tokens := common.QuotaFromFloat(float64(available-inputQuota) / perToken)
+	if tokens < minClampedOutputTokens || !setMaxOutputTokens(info.Request, uint(tokens)) {
+		return
+	}
+	pd.QuotaToPreConsume = inputQuota + common.QuotaFromFloat(float64(tokens)*perToken)
+	pd.ReservedCompletionTokens = tokens
+	logger.LogInfo(c, common.LogText("user %d balance %s below reservation, max output lowered to %d", info.UserId, logger.FormatQuota(available), tokens))
+}
+
+// setMaxOutputTokens rewrites the output limit sent upstream; handlers build
+// the upstream body from info.Request.
+func setMaxOutputTokens(request dto.Request, n uint) bool {
+	switch r := request.(type) {
+	case *dto.GeneralOpenAIRequest:
+		if r.MaxCompletionTokens != nil {
+			r.MaxCompletionTokens = &n
+		}
+		if r.MaxTokens != nil || r.MaxCompletionTokens == nil {
+			r.MaxTokens = &n
+		}
+	case *dto.OpenAIResponsesRequest:
+		r.MaxOutputTokens = &n
+	case *dto.ClaudeRequest:
+		r.MaxTokens = &n
+	case *dto.GeminiChatRequest:
+		r.GenerationConfig.MaxOutputTokens = &n
+	default:
+		return false
+	}
+	return true
 }
 
 // RefundFailedRequestBilling applies the common final-failure policy after all

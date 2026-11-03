@@ -788,7 +788,8 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 	case relayconstant.RelayModeResponsesCompact:
 		usage, err = OaiResponsesCompactionHandler(c, resp)
 	default:
-		if info.IsStream {
+		// A non-streaming upstream reply is re-emitted as SSE by OpenaiHandler.
+		if info.IsStream && (!info.UpstreamNonStream || strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream")) {
 			usage, err = OaiStreamHandler(c, info, resp)
 		} else {
 			usage, err = OpenaiHandler(c, info, resp)

@@ -20,6 +20,10 @@ type GeneralSetting struct {
 	CustomCurrencySymbol string `json:"custom_currency_symbol"`
 	// 自定义货币与美元汇率（1 USD = X Custom）
 	CustomCurrencyExchangeRate float64 `json:"custom_currency_exchange_rate"`
+	// TokenRocks: streaming chat requests from these users are sent upstream
+	// as non-streaming and returned to the client as one SSE chunk. Bulk
+	// clients that refuse gzip otherwise pull ~400KB of SSE per reply.
+	NonStreamUpstreamUserIds []int `json:"non_stream_upstream_user_ids"`
 }
 
 // 默认配置

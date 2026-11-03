@@ -92,7 +92,10 @@ type RelayInfo struct {
 	FirstResponseTime time.Time
 	isFirstResponse   bool
 	//SendLastReasoningResponse bool
-	IsStream               bool
+	IsStream bool
+	// UpstreamNonStream asks upstream for a non-streaming chat completion while
+	// the client still receives SSE (general_setting.non_stream_upstream_user_ids).
+	UpstreamNonStream      bool
 	IsGeminiBatchEmbedding bool
 	IsPlayground           bool
 	UsePrice               bool

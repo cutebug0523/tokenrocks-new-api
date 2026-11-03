@@ -23,13 +23,22 @@
   }
 
   markSignUp()
-  fetch('/api/notice', { cache: 'no-store', credentials: 'same-origin' })
-    .then(function (r) { return r.json() })
-    .then(function (j) {
-      text = ((j && j.success && j.data) || '').trim()
-      show()
-    })
-    .catch(function () {})
+  // 控制台一开就是半天，不刷新就看不到新公告：登录后每 2 分钟再拉一次，内容变了才弹（没变不重复弹）
+  function load() {
+    fetch('/api/notice', { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json() })
+      .then(function (j) {
+        var next = ((j && j.success && j.data) || '').trim()
+        if (next === text) return
+        text = next
+        show()
+      })
+      .catch(function () {})
+  }
+  load()
+  setInterval(function () {
+    if (loggedIn()) load()
+  }, 120000)
 
   // 控制台是单页应用，登录、换页都不刷新页面，只能隔一秒看看框架有没有出现、地址有没有变成注册页
   var wasIn = false

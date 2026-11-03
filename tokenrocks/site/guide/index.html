@@ -163,7 +163,7 @@
       <ul>
         <li><b>在线充值</b>：控制台 →「钱包」→「余额充值」，选一个档位或填自定义金额（最低 ¥10），用支付宝付款，付完自动到账。当前的充值优惠在钱包页能看到。</li>
         <li><b>兑换码</b>：在「钱包」页「有兑换码吗？」处粘贴，点「兑换额度」，立即到账。一个兑换码只能用一次。</li>
-        <li><b>大额充值</b>：加站长微信 <b>bbslaoli</b>。</li>
+        <li><b>大额充值</b>：进<a href="#wechat">官方交流群</a>找站长。</li>
         <li>余额按实际用量扣减，不过期。</li>
       </ul>
     </section>
@@ -177,7 +177,7 @@
           <tbody>
             <tr><td><b>auto（自动）</b></td><td>全部</td><td>按实际走的分组计费</td><td>不知道选什么就用它，按模型自动选最便宜的可用分组</td></tr>
             <tr><td>国模特价</td><td>DeepSeek、Qwen、GLM、Kimi</td><td>DeepSeek、Qwen、GLM 0.5 折，GLM Flash 1 折，Kimi 1.5 折</td><td>日常使用、批量任务，性价比最高</td></tr>
-            <tr><td>国模企业满血</td><td>DeepSeek、GLM、Kimi</td><td>3 折</td><td>对稳定性和效果要求高的生产场景</td></tr>
+            <tr><td>国模企业满血</td><td>DeepSeek、Qwen、GLM、Kimi</td><td>3 折，Qwen Flash 5 折</td><td>对稳定性和效果要求高的生产场景</td></tr>
             <tr><td>国外特价</td><td>Claude、GPT、Grok</td><td>Claude、Grok 0.6 折，GPT 0.5 折</td><td>个人开发、编码助手，性价比优先</td></tr>
             <tr><td>国外企业满血</td><td>Claude、GPT、Grok、Gemini</td><td>Claude 3 折，GPT、Grok 1.2 折，Gemini 2 折</td><td>团队与生产环境，稳定优先</td></tr>
             <tr><td>生图</td><td>GPT Image、Nano Banana</td><td>按张计费</td><td>图片生成与改图</td></tr>
@@ -244,13 +244,13 @@ print(reply.choices[0].message.content)</pre>
         <details><summary>报错 401 / 无效的令牌</summary><p>检查密钥是否完整复制（以 sk- 开头）、是否被禁用或过期；接口地址要用 api.tokenrocks.ai，不要填官网页面地址。有的客户端余额不足时也显示成「密钥无效」，先到「钱包」看看余额。</p></details>
         <details><summary>报错 404 / 接口地址不对</summary><p>接口地址只填到 <code>https://api.tokenrocks.ai/v1</code>，后面的 <code>/chat/completions</code>、<code>/responses</code> 不要填，客户端会自己拼。</p></details>
         <details><summary>回复很慢或超时</summary><p>大模型首字一般需要几秒到十几秒，长回复建议开启流式输出（stream）。特价线路高峰期可能变慢，着急的任务可以换企业满血分组。超时没返回内容却扣了费的，我们每天统一核对，原数退回余额，不用另外找客服。</p></details>
-        <details><summary>余额会过期吗？</summary><p>余额不过期。遇到兑换码无效、扣费异常，请带上截图联系站长微信 bbslaoli。</p></details>
+        <details><summary>余额会过期吗？</summary><p>余额不过期。遇到兑换码无效、扣费异常，请带上截图在<a href="#wechat">官方交流群</a>里找站长。</p></details>
         <details><summary>怎么查每次调用花了多少钱？</summary><p>控制台「使用日志」里有每次调用的模型、token 数和扣费金额；「数据看板」可以看按天汇总。</p></details>
       </div>
     </section>
 
     <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 20px; font-size: 15px;">
-      <span style="color: var(--muted-2);">还有问题？加站长微信 bbslaoli</span>
+      <span style="color: var(--muted-2);">还有问题？进<a href="#wechat">官方交流群</a>问</span>
       <a href="/pricing" style="text-decoration: none; font-weight: 600;">查看模型与价格 →</a>
     </div>
   </main>
@@ -275,7 +275,7 @@ print(reply.choices[0].message.content)</pre>
     <div class="col"><span class="title" style="font-size: 16px;">TokenRocks</span><span>大模型 API 平台</span></div>
     <div class="col"><span class="title">产品</span><a href="/pricing">模型与价格</a><a href="/#plans">线路方案</a><a href="/dashboard">控制台</a></div>
     <div class="col"><span class="title">资源</span><a href="/guide/">使用指南</a><a href="https://github.com/cutebug0523/tokenrocks-new-api">GitHub 开源</a></div>
-    <div class="col"><span class="title">联系</span><span>微信 bbslaoli</span></div>
+    <div class="col"><span class="title">联系</span><a href="#wechat">官方交流群</a></div>
   </div>
 </footer>
 

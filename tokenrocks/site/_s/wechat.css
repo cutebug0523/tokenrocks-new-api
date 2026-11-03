@@ -1,9 +1,8 @@
-/* 右下角「加站长微信」卡片（_s/wechat.js 生成并加载本文件）。官网静态页和控制台共用，所以不依赖 site.css 的变量。z-index 低于控制台弹窗的 50。 */
+/* 右下角「加官方群」卡片（_s/wechat.js 生成并加载本文件）。官网静态页和控制台共用，所以不依赖 site.css 的变量。z-index 低于控制台弹窗的 50。 */
 .wx {
   --wx-brand: #0e7c66;
   --wx-brand-dark: #0b5d4d;
   --wx-border: #d1e7e1;
-  --wx-tint: #f0faf7;
   position: fixed;
   right: 20px;
   bottom: 20px;
@@ -83,52 +82,6 @@
 .wx-mobile {
   display: none;
 }
-.wx-id {
-  margin-top: 10px;
-  padding: 7px 8px 7px 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  background: var(--wx-tint);
-  border-radius: 8px;
-  font-size: 12px;
-  color: #4b5563;
-  white-space: nowrap;
-}
-.wx-id b {
-  font-family: 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
-  font-size: 13px;
-  color: #0b1220;
-  margin-right: auto;
-}
-.wx-copy {
-  border: 1px solid var(--wx-border);
-  background: #fff;
-  color: var(--wx-brand-dark);
-  border-radius: 6px;
-  padding: 3px 8px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.wx-open {
-  margin-top: 10px;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: var(--wx-brand);
-  color: #fff;
-  font-weight: 700;
-  text-decoration: none;
-}
-.wx-open:hover {
-  color: #fff;
-  background: var(--wx-brand-dark);
-}
 .wx-pill {
   display: inline-flex;
   align-items: center;
@@ -186,9 +139,6 @@
   }
   .wx-hint.wx-mobile {
     display: block;
-  }
-  .wx-open.wx-mobile {
-    display: flex;
   }
 }
 @media print {

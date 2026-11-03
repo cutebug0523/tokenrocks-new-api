@@ -47,7 +47,7 @@ afterEach(() => {
 })
 
 describe('AuthLayout', () => {
-  it('shows the brand panel with selling points and the WeChat contact beside the form', () => {
+  it('shows the brand panel with selling points and the official group link beside the form', () => {
     render(
       <AuthLayout>
         <form aria-label='Sign in form' />
@@ -58,7 +58,12 @@ describe('AuthLayout', () => {
       name: 'An LLM API platform built for teams',
     })
     expect(within(panel).getAllByRole('listitem')).toHaveLength(3)
-    expect(within(panel).getByText('bbslaoli')).toBeInTheDocument()
+    expect(
+      within(panel).getByRole('link', {
+        name: 'Questions? Join our official group',
+      })
+    ).toHaveAttribute('href', '#wechat')
+    expect(within(panel).queryByText(/bbslaoli/)).not.toBeInTheDocument()
     expect(
       screen.getByRole('form', { name: 'Sign in form' })
     ).toBeInTheDocument()

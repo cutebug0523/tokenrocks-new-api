@@ -17,37 +17,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-import { copyToClipboard } from '@/lib/copy-to-clipboard'
+import { describe, expect, it } from 'vitest'
 
 import { SiteOwnerContact } from '../site-owner-contact'
 
-vi.mock('@/lib/copy-to-clipboard', () => ({
-  copyToClipboard: vi.fn(),
-}))
-
-beforeEach(() => {
-  vi.mocked(copyToClipboard).mockReset().mockResolvedValue(true)
-})
-
 describe('site owner contact', () => {
-  it('shows the WeChat contact and guidance together', () => {
+  it('guides users into the official group instead of a personal WeChat', () => {
     render(<SiteOwnerContact />)
 
-    expect(screen.getByText('Site owner WeChat:')).toBeVisible()
-    expect(screen.getByText('bbslaoli')).toBeVisible()
-    expect(screen.getByText('Questions? Add me on WeChat')).toBeVisible()
+    expect(screen.getByText('Questions? Join our official group')).toBeVisible()
+    expect(screen.queryByText('bbslaoli')).not.toBeInTheDocument()
   })
 
-  it('copies the displayed WeChat ID from the accessible copy button', async () => {
-    const user = userEvent.setup()
+  it('opens the group QR card through the #wechat link', () => {
     render(<SiteOwnerContact />)
 
-    await user.click(screen.getByRole('button', { name: 'Copy WeChat ID' }))
-
-    expect(copyToClipboard).toHaveBeenCalledWith('bbslaoli')
-    expect(await screen.findByRole('button', { name: 'Copied' })).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Scan to join' })
+    ).toHaveAttribute('href', '#wechat')
   })
 })

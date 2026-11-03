@@ -83,10 +83,13 @@ export function AuthLayout({ children }: AuthLayoutProps) {
             ))}
           </ul>
         </div>
-        <p className='text-sm opacity-85'>
-          {t('Site owner WeChat:')}{' '}
-          <span className='font-mono font-semibold'>bbslaoli</span>
-        </p>
+        {/* #wechat 打开官网脚本 /_s/wechat.js 的群二维码卡片 */}
+        <a
+          href='#wechat'
+          className='w-fit text-sm underline-offset-4 opacity-85 hover:underline hover:opacity-100'
+        >
+          {t('Questions? Join our official group')}
+        </a>
       </aside>
       <div className='container flex items-center pt-16 sm:pt-0'>
         <div className='mx-auto flex w-full flex-col justify-center space-y-2 px-4 py-8 sm:w-[480px] sm:p-8'>

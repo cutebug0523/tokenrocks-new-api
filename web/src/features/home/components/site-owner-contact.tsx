@@ -19,8 +19,9 @@ For commercial licensing, please contact support@quantumnous.com
 import { MessageCircleMore } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { CopyButton } from '@/components/copy-button'
+import { Button } from '@/components/ui/button'
 
+// 11-03 起不放站长个人微信，全部引导进群：#wechat 链接会打开官网脚本 /_s/wechat.js 的群二维码卡片（群码在那里统一换）
 export function SiteOwnerContact() {
   const { t } = useTranslation()
 
@@ -33,23 +34,21 @@ export function SiteOwnerContact() {
         <MessageCircleMore className='size-5' />
       </div>
       <div className='min-w-0 flex-1'>
-        <p className='text-muted-foreground text-xs'>
-          {t('Questions? Add me on WeChat')}
+        <p className='text-sm font-medium'>
+          {t('Questions? Join our official group')}
         </p>
-        <p className='mt-0.5 flex flex-wrap items-baseline gap-x-2 text-sm'>
-          <span className='font-medium'>{t('Site owner WeChat:')}</span>
-          <span className='font-mono font-semibold tracking-tight text-emerald-700 dark:text-emerald-300'>
-            bbslaoli
-          </span>
+        <p className='text-muted-foreground mt-0.5 text-xs'>
+          {t('Top-up, usage questions and outage notices are all in the group')}
         </p>
       </div>
-      <CopyButton
-        value='bbslaoli'
-        className='text-muted-foreground hover:text-foreground size-8'
-        iconClassName='size-4'
-        tooltip={t('Copy WeChat ID')}
-        aria-label={t('Copy WeChat ID')}
-      />
+      <Button
+        variant='outline'
+        size='sm'
+        className='shrink-0'
+        render={<a href='#wechat' />}
+      >
+        {t('Scan to join')}
+      </Button>
     </div>
   )
 }

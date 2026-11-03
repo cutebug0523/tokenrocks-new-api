@@ -96,7 +96,7 @@ func SanitizeUpstreamJSON(c *gin.Context, data string) string {
 }
 
 // upstreamErrorCode replaces an upstream error code, which can name the
-// upstream's routing (for example smart_route_all_candidates_failed).
+// upstream's internal routing.
 var upstreamErrorCode = json.RawMessage(`"upstream_error"`)
 
 // hideUpstreamErrorText replaces the message and code of an error that

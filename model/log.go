@@ -163,9 +163,16 @@ func FormatRootLogs(logs []*Log) {
 
 // hideRetriedErrorLogs 用在用户视角的日志查询上（TokenRocks 改动）：同一请求重试后成功了，
 // 前面失败那几次的错误记录不给用户看，免得救回来的请求在使用日志里看着像出错。管理员视角照常全部显示。
-// scopeColumn 是 user_id 或 token_id，把子查询限定在同一个用户或令牌，走索引。
+// scopeColumn 是 user_id 或 token_id，把子查询限定在同一个用户或令牌。
+// 用按 request_id 走索引的 NOT EXISTS：IN 子查询的结果装不进 work_mem 时，PostgreSQL 会对每条错误记录
+// 重扫一遍子查询（11-04 一个有 21 万条成功记录的用户，一次计数跑了 8 分钟以上、把 CPU 打满）。
+// ClickHouse 不支持关联子查询，保留 IN 的写法。
 func hideRetriedErrorLogs(tx *gorm.DB, scopeColumn string, scopeId int) *gorm.DB {
-	return tx.Where("NOT (logs.type = ? AND COALESCE(logs.request_id, '') IN (SELECT retried.request_id FROM logs retried WHERE retried."+scopeColumn+" = ? AND retried.type = ? AND retried.request_id <> ''))",
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		return tx.Where("NOT (logs.type = ? AND COALESCE(logs.request_id, '') IN (SELECT retried.request_id FROM logs retried WHERE retried."+scopeColumn+" = ? AND retried.type = ? AND retried.request_id <> ''))",
+			LogTypeError, scopeId, LogTypeConsume)
+	}
+	return tx.Where("NOT (logs.type = ? AND logs.request_id <> '' AND EXISTS (SELECT 1 FROM logs retried WHERE retried.request_id = logs.request_id AND retried."+scopeColumn+" = ? AND retried.type = ?))",
 		LogTypeError, scopeId, LogTypeConsume)
 }
 

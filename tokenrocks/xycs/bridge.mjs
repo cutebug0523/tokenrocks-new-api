@@ -34,6 +34,8 @@ const EFFORT = process.env.XYCS_EFFORT || 'low'
 // 每天查搜索名次用的词：买家常搜的短词，加上和我们标题对得上的长词。改了要重启
 const RANK_KEYWORDS = ['deepseek', 'kimi', 'glm', 'qwen', 'api', '大模型', '兑换码', 'deepseek api', 'kimi k3', 'glm5.3', 'qwen3.8']
 const RANK_PAGES = 5
+// XYCS_RANK=0 不查名次：11-04 四、五店（新号）查到一半弹滑块，之后这个页面的接口都卡住，只留老号查
+const RANK_ON = process.env.XYCS_RANK !== '0'
 const DEBOUNCE_MS = Number(process.env.XYCS_DEBOUNCE_MS ?? 6000) // 买家常连发几条，停 6 秒再出草稿
 // 上线发消息：XYCS_MODE=live 才真发；XYCS_LIVE_ONLY 填买家 ID（逗号分隔）时只对这些人真发；
 // $XYCS_DIR/PAUSE 文件存在就全部停发（急停）；每天最多发 MAX_SENDS 条
@@ -893,7 +895,7 @@ async function runBrowser() {
       snapTried = day()
       snapshot().catch((err) => log('商品快照失败', err.message))
     }
-    if (loggedIn && rankTried !== day() && fs.existsSync(path.join(DATA, `items-${day()}.jsonl`)) && !fs.existsSync(path.join(DATA, `rank-${day()}.jsonl`))) {
+    if (RANK_ON && loggedIn && rankTried !== day() && fs.existsSync(path.join(DATA, `items-${day()}.jsonl`)) && !fs.existsSync(path.join(DATA, `rank-${day()}.jsonl`))) {
       rankTried = day()
       rank().catch((err) => log('搜索名次失败', err.message))
     }

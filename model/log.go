@@ -181,7 +181,9 @@ func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		order = clickHouseLogOrder("")
 	}
-	err = hideRetriedErrorLogs(LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId), "token_id", tokenId).Order(order).Limit(common.MaxRecentItems).Find(&logs).Error
+	ctx, cancel := context.WithTimeout(context.Background(), userLogQueryTimeout)
+	defer cancel()
+	err = hideRetriedErrorLogs(LOG_DB.WithContext(ctx).Model(&Log{}).Where("token_id = ?", tokenId), "token_id", tokenId).Order(order).Limit(common.MaxRecentItems).Find(&logs).Error
 	formatUserLogs(logs, 0)
 	return logs, err
 }
@@ -630,8 +632,16 @@ func GetAllLogs(filter LogFilter, startIdx int, num int) (logs []*Log, total int
 
 const logSearchCountLimit = 10000
 
+// userLogQueryTimeout bounds the log queries behind a user's console pages,
+// which refresh every minute. A query slower than that would pile up and starve
+// the database; on timeout the driver cancels it on the server and the page
+// shows a query failure instead (TokenRocks change, 2026-11-04).
+const userLogQueryTimeout = 10 * time.Second
+
 func GetUserLogs(userId int, filter LogFilter, startIdx int, num int) (logs []*Log, total int64, err error) {
-	tx, err := filter.apply(hideRetriedErrorLogs(LOG_DB.Where("logs.user_id = ?", userId), "user_id", userId))
+	ctx, cancel := context.WithTimeout(context.Background(), userLogQueryTimeout)
+	defer cancel()
+	tx, err := filter.apply(hideRetriedErrorLogs(LOG_DB.WithContext(ctx).Where("logs.user_id = ?", userId), "user_id", userId))
 	if err != nil {
 		return nil, 0, err
 	}

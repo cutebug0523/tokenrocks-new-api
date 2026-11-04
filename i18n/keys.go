@@ -55,6 +55,7 @@ const (
 	MsgRelayUpstreamNotFound    = "relay.upstream_not_found"
 	MsgRelayUpstreamTooLarge    = "relay.upstream_too_large"
 	MsgRelayUpstreamRateLimited = "relay.upstream_rate_limited"
+	MsgRelayUpstreamTimeout     = "relay.upstream_timeout"
 	MsgRelayUpstreamUnavailable = "relay.upstream_unavailable"
 )
 
@@ -138,6 +139,8 @@ func UpstreamErrorKey(statusCode int) string {
 		return MsgRelayUpstreamTooLarge
 	case 429:
 		return MsgRelayUpstreamRateLimited
+	case 408, 504, 524:
+		return MsgRelayUpstreamTimeout
 	default:
 		return MsgRelayUpstreamUnavailable
 	}

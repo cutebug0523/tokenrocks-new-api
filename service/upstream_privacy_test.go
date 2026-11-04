@@ -91,7 +91,7 @@ func TestSanitizeUpstreamJSON(t *testing.T) {
 	errCtx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 	errCtx.Request.Header.Set("Accept-Language", "zh-CN")
 	errCtx.Set(common.RequestIdKey, "tr-1")
-	fixed, err := common.Marshal("上游线路暂时不可用，请稍后重试。 (request id: tr-1)")
+	fixed, err := common.Marshal("线路暂时不可用，请稍后重试。 (request id: tr-1)")
 	require.NoError(t, err)
 	for _, tc := range errorEvents {
 		t.Run(tc.name, func(t *testing.T) {
@@ -121,7 +121,7 @@ func TestUserFacingError(t *testing.T) {
 	upstream := types.WithOpenAIError(types.OpenAIError{Message: "provider-x: no active route in your pool", Type: "service_unavailable"}, http.StatusServiceUnavailable)
 	got := UserFacingError(c, upstream)
 	assert.Equal(t, http.StatusServiceUnavailable, got.StatusCode)
-	assert.Equal(t, "上游线路暂时不可用，请稍后重试。", got.ToOpenAIError().Message)
+	assert.Equal(t, "线路暂时不可用，请稍后重试。", got.ToOpenAIError().Message)
 	assert.NotContains(t, got.ToClaudeError().Message, "provider-x")
 
 	tooMany := UserFacingError(c, types.WithClaudeError(types.ClaudeError{Message: "upstream says slow down", Type: "rate_limit_error"}, http.StatusTooManyRequests))

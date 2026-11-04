@@ -80,8 +80,8 @@ func TestBackendMessageLanguage(t *testing.T) {
 	require.NoError(t, Init())
 	t.Cleanup(func() { common.DefaultLanguage = "" })
 	quota := map[string]any{"Remaining": "$0.10"}
-	const english = "Insufficient user quota, remaining quota: $0.10"
-	const chinese = "用户额度不足, 剩余额度: $0.10"
+	const english = "Insufficient balance: $0.10 left. Top up and try again"
+	const chinese = "余额不足，当前余额 $0.10，请充值后重试"
 	for _, tc := range []struct {
 		name            string
 		defaultLanguage string
@@ -95,7 +95,7 @@ func TestBackendMessageLanguage(t *testing.T) {
 		{"nothing stated with an English default", "en", "", "", english},
 		{"header wins over the default", "zh-CN", "", "en-US,en;q=0.9", english},
 		{"header in a language without a locale", "zh-CN", "", "fr-FR", english},
-		{"saved language wins over the header", "", "zhTW", "en-US", "使用者額度不足，剩餘額度：$0.10"},
+		{"saved language wins over the header", "", "zhTW", "en-US", "餘額不足，目前餘額 $0.10，請儲值後重試"},
 		{"saved language", "zh-CN", "en", "", english},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

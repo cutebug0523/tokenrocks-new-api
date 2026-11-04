@@ -193,6 +193,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if channelErr != nil {
 			logger.LogError(c, channelErr.Error())
 			newAPIError = channelErr
+			// Retries ran out of channels: the client gets the failure upstream
+			// actually returned, not the gateway's own lookup error.
+			if relayInfo.LastError != nil {
+				newAPIError = relayInfo.LastError
+			}
 			break
 		}
 		service.AppendUsedChannel(c, channel.Id)

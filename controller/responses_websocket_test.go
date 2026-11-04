@@ -996,15 +996,20 @@ func TestResponsesStreamOutcomesPreserveAccounting(t *testing.T) {
 }
 
 func TestResponsesHTTPHealthCountsFinalResult(t *testing.T) {
+	require.NoError(t, i18n.Init())
 	for _, tc := range []struct {
 		name, code            string
 		firstStatus, attempts int
 		success               bool
 		ignored               bool
+		failAll               bool
 	}{
-		{"business rejection", "context_length_exceeded", 400, 1, false, true},
-		{"credentials rejected as 400", "invalid_api_key", 400, 1, false, false},
-		{"retry succeeds", "server_error", 500, 2, true, false},
+		{"business rejection", "context_length_exceeded", 400, 1, false, true, false},
+		{"credentials rejected as 400", "invalid_api_key", 400, 1, false, false, false},
+		{"retry succeeds", "server_error", 500, 2, true, false, false},
+		// The client gets the last upstream failure, not the gateway's own
+		// "no channel left" lookup error, once retries run out of channels.
+		{"every attempt rejected", "insufficient_quota", 403, 2, false, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fixture := newResponsesWSBillingTest(t, `tier("request", fixed(0.002))`, func(*websocket.Conn, *http.Request) {})
@@ -1014,7 +1019,7 @@ func TestResponsesHTTPHealthCountsFinalResult(t *testing.T) {
 			var attempts atomic.Int64
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				if attempts.Add(1) == 1 {
+				if attempts.Add(1) == 1 || tc.failAll {
 					w.WriteHeader(tc.firstStatus)
 					_, _ = fmt.Fprintf(w, `{"error":{"type":"%s","code":"%s","message":"test rejection"}}`, tc.code, tc.code)
 					return
@@ -1023,15 +1028,33 @@ func TestResponsesHTTPHealthCountsFinalResult(t *testing.T) {
 			}))
 			t.Cleanup(upstream.Close)
 			require.NoError(t, model.DB.Model(&model.Channel{}).Where("name = ?", "responses-ws-upstream").Update("base_url", upstream.URL).Error)
+			if tc.failAll {
+				// An auto-group token with cross-group retry, as most clients use:
+				// once its groups are exhausted, the next lookup finds no channel.
+				previousAutoGroups := setting.AutoGroups2JsonString()
+				previousUsable := setting.UserUsableGroups2JSONString()
+				require.NoError(t, setting.UpdateAutoGroupsByJsonString(`["default"]`))
+				require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default","auto":"Auto"}`))
+				t.Cleanup(func() {
+					require.NoError(t, setting.UpdateAutoGroupsByJsonString(previousAutoGroups))
+					require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(previousUsable))
+				})
+				require.NoError(t, model.DB.Model(fixture.token).Updates(map[string]any{"group": "auto", "cross_group_retry": true}).Error)
+				require.NoError(t, model.InvalidateUserTokensCache(fixture.user.Id))
+			}
 			request, err := http.NewRequest(http.MethodPost, fixture.gatewayURL+"/v1/responses", strings.NewReader(`{"model":"ws-billing","input":"hello"}`))
 			require.NoError(t, err)
 			request.Header.Set("Authorization", "Bearer sk-"+fixture.token.Key)
 			request.Header.Set("Content-Type", "application/json")
 			response, err := http.DefaultClient.Do(request)
 			require.NoError(t, err)
-			_, err = io.Copy(io.Discard, response.Body)
+			body, err := io.ReadAll(response.Body)
 			require.NoError(t, err)
 			require.NoError(t, response.Body.Close())
+			if tc.failAll {
+				assert.Contains(t, string(body), i18n.Translate("", i18n.MsgRelayUpstreamAuth))
+				assert.NotContains(t, string(body), "test rejection")
+			}
 			select {
 			case <-fixture.httpDone:
 			case <-time.After(3 * time.Second):

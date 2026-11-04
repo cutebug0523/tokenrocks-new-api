@@ -68,7 +68,8 @@ const RISKY = /中转|渠道|满血版|破解|共享|官转|官方授权|官方�
 const KEY_WORDS = /密钥|\bapi\b|\bkey\b|\bsk-|接口地址|令牌/i
 const URL_RE = /https?:\/\/|www\.|[a-z0-9-]+\.(ai|com|cn|net|io|top|org|pro)\b/i
 // 规则在 prompt.md，事实和常见问题在 knowledge.md（店主改话术只改后者）
-const PROMPT = ['prompt.md', 'knowledge.md'].map((f) => fs.readFileSync(new URL(`./${f}`, import.meta.url), 'utf8')).join('\n\n')
+// 每次出草稿时现读（两个文件共二十几 KB），改话术不用重启：重启一店可能掉登录要重新扫码
+const prompt = () => ['prompt.md', 'knowledge.md'].map((f) => fs.readFileSync(new URL(`./${f}`, import.meta.url), 'utf8')).join('\n\n')
 
 const convs = new Map() // sid → 会话（买家 + 商品）
 const buyers = new Map() // 买家 ID → 档案（用到时才从文件读）
@@ -346,7 +347,7 @@ async function draftOnce(s) {
   // 模型偶尔超时或上游维护，等一会儿再试一次；还不行就回兜底那句并提醒店主，不让买家干等
   for (let attempt = 1; attempt <= 2 && rec.raw === undefined; attempt++) {
     try {
-      rec.raw = await chat(`${PROMPT}\n\n${STYLE}`, buyerContext(b, s, mine, msgs, paid, tr))
+      rec.raw = await chat(`${prompt()}\n\n${STYLE}`, buyerContext(b, s, mine, msgs, paid, tr))
     } catch (err) {
       rec.error = String(err.message || err).slice(0, 200)
       if (attempt === 1) await new Promise((r) => setTimeout(r, 8000))
@@ -530,7 +531,7 @@ function buyerContext(b, s, mine, msgs, paid, tr) {
   facts.push(`订单状态：${paid ? '已付款的老客户' : '还没拍下'}`)
   facts.push(`问过的商品：${mine.map((c) => `${c.itemTitle || c.itemId || '某商品'}（${isPaid(c) ? `已付款，${c.order || '已发码'}` : c.order || '没拍下'}）`).join('；')}`)
   facts.push(`这次是在「${s.itemTitle || s.itemId || '未知商品'}」下聊`)
-  if (b.codes.length) facts.push(`发过兑换码 ${b.codes.length} 个`)
+  if (b.codes.length) facts.push(`发过兑换码 ${b.codes.length} 个${b.codes.length > 10 ? '，下面只列最近 10 个' : ''}`)
   for (const t of tr || []) facts.push(trLine(t))
   if (b.summary) facts.push(`早前聊天的总结：${b.summary}`)
   const pendingIds = new Set(msgs.map((m) => m.id))
@@ -599,7 +600,7 @@ async function trLookup(codes) {
     const j = await res.json()
     if (!res.ok || j.result !== 'success') throw new Error(`TR 查询失败 ${res.status} ${JSON.stringify(j).slice(0, 100)}`)
     const now = Date.now()
-    for (const c of fresh) trCache.set(c, { at: now, data: j.rows.find((r) => r.key === c) || { key: c, status: 0 } })
+    for (const c of fresh.slice(-10)) trCache.set(c, { at: now, data: j.rows.find((r) => r.key === c) || { key: c, status: 0 } })
   }
   return codes.map((c) => trCache.get(c)?.data).filter(Boolean)
 }
@@ -1084,7 +1085,7 @@ async function evaluate(file, outFile) {
       const r = { ...c }
       const t0 = Date.now()
       try {
-        r.raw = await chat(`${PROMPT}\n\n${STYLE}`, buyerContext(b, s, [s], msgs, s.paid, c.tr))
+        r.raw = await chat(`${prompt()}\n\n${STYLE}`, buyerContext(b, s, [s], msgs, s.paid, c.tr))
         r.ms = Date.now() - t0
         const f = filterReply(r.raw, s.paid)
         r.draft = f.skip ? '（不回）' : f.text

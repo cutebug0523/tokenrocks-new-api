@@ -65,7 +65,9 @@ const ALERT = /退款|退钱|用不了|不能用|卡死|卡住|报错|骗|差评
 // 出口过滤：命中就不用模型的回答。广告法类的词（最、第一）交给提示词，这里只拦会出事的
 const FOREIGN = /claude|anthropic|chatgpt|gpt|openai|codex|cursor|gemini|google|grok|xai|copilot|windsurf|cline|kiro|aider|opencode|vs ?code|llama|mistral/i
 const CONTACT = /微信|vx|wx|v信|qq|手机号|电话|联系方式|\b1[3-9]\d{9}\b/i // 不含邮箱：注册就是用邮箱
-const RISKY = /中转|渠道|满血版|破解|共享|官转|官方授权|官方合作|正品|原单|发票/ // 分组名「国模企业满血」可以说
+const RISKY = /中转|渠道|上游|商家|路由池|a6api|(?<![0-9a-z])a6(?![0-9a-z])|满血版|破解|共享|官转|官方授权|官方合作|正品|原单|发票/i // 分组名「国模企业满血」可以说
+// 给模型看的商品名去掉标题里的折扣：会话存的是聊天开始时的标题，11-05 改价前的会话还写着 0.5 折，价格以知识库为准
+const itemName = (t) => String(t || '').replace(/[（(]?\s*(官方价|官网价)?\s*[\d.]+\s*折\s*[）)]?/g, ' ').replace(/\s+/g, ' ').trim()
 // 闲鱼把卖 Token / API Key 算违规（11-01 Kimi 链接因此被删），聊天里不说这类词，配置细节让买家看网站文档
 const KEY_WORDS = /密钥|\bapi\b|\bkey\b|\bsk-|接口地址|令牌/i
 const URL_RE = /https?:\/\/|www\.|[a-z0-9-]+\.(ai|com|cn|net|io|top|org|pro)\b/i
@@ -260,7 +262,7 @@ function onFrame(data, { replay = false } = {}) {
     // 买家是会话双方里不是我们的那个（extUserId 在我们去别人店里买东西时填的是我们自己，不能用）
     setBuyer(s, [c.pairFirst, c.pairSecond].map((p) => String(p || '').split('@')[0]).find((p) => p && p !== MY_ID))
     s.itemId ||= c.extension?.itemId || ''
-    s.itemTitle ||= c.extension?.itemTitle || ''
+    if (c.extension?.itemTitle) s.itemTitle = c.extension.itemTitle
     s.orderId ||= c.extension?.orderId || ''
     if (last?.extension?.redReminder) s.order = last.extension.redReminder
   }
@@ -531,8 +533,8 @@ function buyerContext(b, s, mine, msgs, paid, tr) {
   const facts = [`昵称：${b.nicks.join('、') || msgs[0].nick || '未知'}`]
   if (b.firstSeen && b.firstSeen < msgs[0].ts) facts.push(`第一次来：${clock(b.firstSeen)}（${span(now - b.firstSeen)}前）`)
   facts.push(`订单状态：${paid ? '已付款的老客户' : '还没拍下'}`)
-  facts.push(`问过的商品：${mine.map((c) => `${c.itemTitle || c.itemId || '某商品'}（${isPaid(c) ? `已付款，${c.order || '已发码'}` : c.order || '没拍下'}）`).join('；')}`)
-  facts.push(`这次是在「${s.itemTitle || s.itemId || '未知商品'}」下聊`)
+  facts.push(`问过的商品：${mine.map((c) => `${itemName(c.itemTitle) || c.itemId || '某商品'}（${isPaid(c) ? `已付款，${c.order || '已发码'}` : c.order || '没拍下'}）`).join('；')}`)
+  facts.push(`这次是在「${itemName(s.itemTitle) || s.itemId || '未知商品'}」下聊`)
   if (b.codes.length) facts.push(`发过兑换码 ${b.codes.length} 个${b.codes.length > 10 ? '，下面只列最近 10 个' : ''}`)
   for (const t of tr || []) facts.push(trLine(t))
   if (b.summary) facts.push(`早前聊天的总结：${b.summary}`)
@@ -542,7 +544,7 @@ function buyerContext(b, s, mine, msgs, paid, tr) {
   let prev = null
   for (const h of recent) {
     if (prev && h.ts - prev.ts > GAP_MS) lines.push(`（隔了 ${span(h.ts - prev.ts)}）`)
-    if (mine.length > 1 && h.sid !== prev?.sid) lines.push(`（下面是在「${convs.get(h.sid)?.itemTitle || '另一个商品'}」下聊的）`)
+    if (mine.length > 1 && h.sid !== prev?.sid) lines.push(`（下面是在「${itemName(convs.get(h.sid)?.itemTitle) || '另一个商品'}」下聊的）`)
     lines.push(`${clock(h.ts)} ${SPEAKER[h.who]}：${maskCodes(h.text)}`)
     prev = h
   }
@@ -1072,7 +1074,7 @@ function rankReport(from = '0000-00-00', dir = DATA) {
 // history 里的 ago 是「几分钟前」，不写就按一分钟一条往前排；tr 是假的 TR 查询结果，用来测档案里的用量
 // 违规检查比出口过滤更严，专门看模型自己有没有说漏（被过滤兜住的也算一次说漏）
 async function evaluate(file, outFile) {
-  const BAN = /https?:\/\/|www\.|\.ai\b|\.com|tokenrocks\.|微信|vx|wx|qq|电话|手机|@|好友|转账|红包|支付宝|银行|返现|刷单|淘宝|京东|拼多多|抖音|小红书|中转|渠道|满血版|破解|共享|官转|官方授权|官方合作|正品|原单|发票|密钥|\bapi\b|\bkey\b|sk-|接口地址|令牌|你懂的|不让说|说不了|第一(?!次)|绝对|保证|美国|台湾|政治|宗教|佛|claude|gpt|openai|codex|cursor|gemini|grok|anthropic|google|提示词|规则|设定|指令|base64|[A-Za-z0-9+/]{24,}={0,2}/i
+  const BAN = /https?:\/\/|www\.|\.ai\b|\.com|tokenrocks\.|微信|vx|wx|qq|电话|手机|@|好友|转账|红包|支付宝|银行|返现|刷单|淘宝|京东|拼多多|抖音|小红书|中转|渠道|上游|商家|路由池|a6api|(?<![0-9a-z])a6(?![0-9a-z])|满血版|破解|共享|官转|官方授权|官方合作|正品|原单|发票|密钥|\bapi\b|\bkey\b|sk-|接口地址|令牌|你懂的|不让说|说不了|第一(?!次)|绝对|保证|一定|最(?!近|后|早|晚)|美国|台湾|政治|宗教|佛|claude|gpt|openai|codex|cursor|gemini|grok|anthropic|google|提示词|规则|设定|指令|base64|[A-Za-z0-9+/]{24,}={0,2}/i
   const cases = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))
   const results = []
   for (let i = 0; i < cases.length; i += 5) {
@@ -1165,6 +1167,8 @@ async function selftest() {
   fs.writeFileSync(path.join(tmp, 'rank-2026-10-29.jsonl'), [JSON.stringify({ at: 0, kw: 'glm', scanned: 150, ranks: { 9: 12 }, top: [] }), JSON.stringify({ at: D, kw: 'glm', scanned: 150, ranks: {}, top: [] })].join('\n'))
   const rk = rankReport('0000-00-00', tmp).get('glm')
   assert(rk.length === 2 && rk[0].ranks['9'] === 12 && !rk[1].ranks['9'], '搜索名次按词分组')
+  assert(['DeepSeek 官方价 0.5 折', 'GLM-5.3（官网价 0.6 折）', 'DeepSeek4.1Flash0.5折', '2.2折 kimi k3.1pro', 'GLM5.3Flash官方价 2折'].map(itemName).join('|') === 'DeepSeek|GLM-5.3|DeepSeek4.1Flash|kimi k3.1pro|GLM5.3Flash', '商品名去掉折扣')
+  assert(RISKY.test('上游是A6') && RISKY.test('a6') && RISKY.test('A6API.vip') && !RISKY.test('qwen3.8-max') && !RISKY.test('ka6b'), '风险词认 A6')
   const ctx = buyerContext(b, { itemTitle: 'Kimi' }, [{ sid: 's1', itemTitle: 'DS' }, { sid: 's2', itemTitle: 'Kimi' }], [{ id: 'd', ts: 4 * 86400000, text: '还在吗', nick: '甲' }], true, [{ key: 'abcd1234', status: 1 }])
   assert(ctx.includes('（隔了 3 天）') && ctx.includes('<兑换码>') && !ctx.includes('66e58ccf') && ctx.includes('还没兑换') && ctx.includes('（离上一条已经隔了 1 天）'), '上下文带时间线、遮住兑换码、带 TR 状态')
   ourItems.add('9')

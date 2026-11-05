@@ -216,10 +216,10 @@ def external_links(art):
 
 
 def check_pelican(model, fmt, vendor, key, tier):
-    # GLM-5.3 思考量很大，16000 token 想不完就交不出作品，不设上限、等久一点
-    glm = model.startswith('glm-')
-    body = body_for(model, fmt, vendor, PROMPT, None if glm else 16000, True, effort='medium')
-    res = post('/v1/messages' if fmt == 'anthropic' else '/v1/chat/completions', key, fmt, body, 1800 if glm else 900, stream=True)
+    # GLM-5.3、DeepSeek V4 Pro 思考量很大，16000 token 想不完就交不出作品，不设上限、等久一点
+    unlimited = model.startswith('glm-') or model == 'deepseek-v4-pro'
+    body = body_for(model, fmt, vendor, PROMPT, None if unlimited else 16000, True, effort='medium')
+    res = post('/v1/messages' if fmt == 'anthropic' else '/v1/chat/completions', key, fmt, body, 1800 if unlimited else 900, stream=True)
     if res['status'] != 200:
         bad = failed(res)
         return bad, bad

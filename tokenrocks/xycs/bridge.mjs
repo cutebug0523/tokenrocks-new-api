@@ -158,8 +158,10 @@ function decodeData(s) {
 
 // ---------- 消息解析 ----------
 // 店主号发出的：文字、图片、语音才是店主本人；评价、拍下未付款、防诈提示这类卡片是系统发的，不算店主接手
-function whoOf(sender, platform, text, contentType) {
-  if (sender !== MY_ID) return 'buyer'
+// 别人发的字和图，没有客户端平台、也不挂商品的是闲鱼官方号（运营小二、闲小蜜、擦亮小能手），不当买家回：
+// 11-05 五个店 2200 多条买家的字和图两样都有，没有的只有这几个号；机器人回过它们，官方回复里说「像是在测试」
+function whoOf(sender, platform, text, contentType, itemId) {
+  if (sender !== MY_ID) return !platform && !itemId && [1, 2].includes(contentType) ? 'system' : 'buyer'
   if (![1, 2, 3].includes(contentType)) return 'system'
   return platform === 'weChat' || (['web', ''].includes(platform) && AUTO_TEXT.test(text.trim())) ? 'yidian' : 'owner'
 }
@@ -179,7 +181,7 @@ function parseMessage(v) {
   const q = new URLSearchParams((ext.reminderUrl || '').split('?')[1] || '')
   const text = content.text?.text ?? ext.reminderContent ?? ''
   const contentType = content.contentType ?? null
-  const who = whoOf(String(ext.senderUserId || ''), ext._platform || '', text, contentType)
+  const who = whoOf(String(ext.senderUserId || ''), ext._platform || '', text, contentType, q.get('itemId') || '')
   const image = contentType === 2 ? imageUrl(content) : ''
   if (contentType === 2 && !image) log('图片消息里没找到网址', JSON.stringify(content).slice(0, 300))
   return {
@@ -662,7 +664,7 @@ function loadState() {
     for (const line of fs.readFileSync(path.join(DATA, f), 'utf8').split('\n')) {
       if (!line) continue
       const m = JSON.parse(line)
-      if (m.who !== 'bot') m.who = whoOf(m.sender, m.platform, m.text, m.contentType) // 旧日志可能是按旧规则标的，按现在的规则重新判断
+      if (m.who !== 'bot') m.who = whoOf(m.sender, m.platform, m.text, m.contentType, m.itemId) // 旧日志可能是按旧规则标的，按现在的规则重新判断
       onMessage(m, true, { draftIt: false })
     }
   }
@@ -1128,6 +1130,8 @@ async function selftest() {
   assert(webMsg('[我完成了评价]', 'ios', 26) === 'system' && webMsg('温馨提示：对方发送二维码', '', 14) === 'system' && webMsg('[语音]', 'ios', 3) === 'owner', '系统卡片不算店主')
   const pic = parseMessage({ 1: { ...sample[1], 6: { 3: { 5: JSON.stringify({ contentType: 2, image: { pics: [{ url: 'https://img.alicdn.com/a.jpg', width: 1 }] } }) } }, 10: { ...sample[1][10], senderUserId: '9' } } })
   assert(pic.who === 'buyer' && pic.image === 'https://img.alicdn.com/a.jpg', '图片消息取出网址')
+  const fromOther = (platform, url) => parseMessage({ 1: { ...sample[1], 10: { senderUserId: '1400', _platform: platform, reminderUrl: url } } }).who
+  assert(fromOther('', 'fleamarket://message_chat?sid=1') === 'system' && fromOther('ohos', 'fleamarket://message_chat?sid=1') === 'buyer' && fromOther('', 'fleamarket://message_chat?itemId=9&sid=1') === 'buyer', '闲鱼官方号的字不当买家')
   assert(maskSecrets('密钥 sk-abcDEF123456 码 66e58ccfd1a24ab1ba92dae36ce0d16f') === '密钥 <已打码> 码 <兑换码>', '读图结果遮密钥和码')
   assert(filterReply('去 tokenrocks.ai 注册', false).text === NO_URL_YET, '没拍下不给网址')
   assert(filterReply('浏览器打开 tokenrocks.ai 注册', true).text.includes('tokenrocks'), '已付款可以给网站')

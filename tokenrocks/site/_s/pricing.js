@@ -92,9 +92,10 @@
       var ratio = group ? TR.ratioFor(pricing, m.name, group) : null
       var badge = el('span', { class: 'badge', text: ratio == null ? '' : TR.discountLabel(ratio), title: group || '' })
       if (ratio == null) {
-        var otherTier = tier === 'value' ? 'enterprise' : 'value'
+        // 这条线路没有时，写出它在哪几条线路上有，比如「仅平价/企业满血」
+        var others = Object.keys(TR.TIERS).filter(function (t) { return t !== tier && TR.groupForTier(m.raw, t) })
         badge.className = 'badge off'
-        badge.textContent = TR.groupForTier(m.raw, otherTier) ? '仅' + TR.TIERS[otherTier].short : '暂不可用'
+        badge.textContent = others.length ? '仅' + others.map(function (t) { return TR.TIERS[t].short }).join('/') : '暂不可用'
       }
       body.appendChild(
         el('tr', {}, [

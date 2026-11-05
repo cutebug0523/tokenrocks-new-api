@@ -114,13 +114,14 @@
           <thead><tr><th scope="col">模型名</th><th scope="col">上下文</th><th scope="col">最大输出</th><th scope="col">图片</th><th scope="col">思考</th></tr></thead>
           <tbody>
             <tr><td><code>deepseek-v4.1-flash</code></td><td>1024000</td><td>128000</td><td>勾</td><td>开</td></tr>
+            <tr><td><code>deepseek-v4-pro</code></td><td>1024000</td><td>128000</td><td class="no">不勾</td><td>开</td></tr>
             <tr><td><code>glm-5.3</code></td><td>1024000</td><td>128000</td><td class="no">不勾</td><td>开</td></tr>
             <tr><td><code>glm-5.3-flash</code></td><td>1024000</td><td>128000</td><td>勾</td><td>开</td></tr>
             <tr><td><code>kimi-k3.1-pro</code></td><td>1024000</td><td>128000</td><td>勾</td><td>开</td></tr>
           </tbody>
         </table>
       </div>
-      <p>只有 glm-5.3 不支持看图，它的 flash 版反而支持。用不到的模型可以不加，其他模型名见<a href="/pricing">模型与价格</a>。</p>
+      <p>glm-5.3 和 deepseek-v4-pro 不支持看图，glm-5.3 的 flash 版反而支持。用不到的模型可以不加，其他模型名见<a href="/pricing">模型与价格</a>。</p>
       <div class="note key">API 密钥只粘贴在客户端的「API 密钥 / API Key」框里，不要发给别人。截图里这个框是空的，就是要你粘贴的地方。</div>
     </section>
 
@@ -160,7 +161,7 @@
       <figure class="shot"><a href="/guide/clients/img/dsh-5.webp" target="_blank"><img src="/guide/clients/img/dsh-5.webp" width="1600" height="1025" alt="展开后的模型设置" loading="lazy"></a></figure>
       <ol class="marks">
         <li data-n="1">上下文窗口 <code>1024000</code>，最大输出 <code>128000</code></li>
-        <li data-n="2">输入类型勾「文本」和「图片」；<b>glm-5.3 只勾文本</b></li>
+        <li data-n="2">输入类型勾「文本」和「图片」；<b>glm-5.3、deepseek-v4-pro 只勾文本</b></li>
         <li data-n="3">打开「推理等级」</li>
         <li data-n="4">档位用默认的 off / low / medium / high，不用改</li>
         <li data-n="5">所有模型设好后，点「创建提供商」</li>
@@ -212,16 +213,16 @@
         <li data-n="8">点「保存」，每个模型各加一次</li>
       </ol>
 
-      <h3>5. glm-5.3 不勾图片</h3>
+      <h3>5. glm-5.3、deepseek-v4-pro 不勾图片</h3>
       <figure class="shot"><a href="/guide/clients/img/zc-7.webp" target="_blank"><img src="/guide/clients/img/zc-7.webp" width="1600" height="1067" alt="glm-5.3 的添加模型对话框" loading="lazy"></a></figure>
-      <ol class="marks"><li data-n="1">加 glm-5.3 时，输入类型只留「文本」</li></ol>
+      <ol class="marks"><li data-n="1">加 glm-5.3、deepseek-v4-pro 时，输入类型只留「文本」</li></ol>
 
       <h3>6. 粘贴 API 密钥，检查列表</h3>
       <figure class="shot"><a href="/guide/clients/img/zc-8.webp" target="_blank"><img src="/guide/clients/img/zc-8.webp" width="1600" height="1067" alt="配好的供应商和模型列表" loading="lazy"></a></figure>
       <ol class="marks">
         <li data-n="1" class="key">API Key 粘贴你的密钥</li>
         <li data-n="2">还没加完就继续点「添加模型」</li>
-        <li data-n="3">模型都显示 1M；除了 glm-5.3，其余都带「视觉」标签</li>
+        <li data-n="3">模型都显示 1M；除了 glm-5.3 和 deepseek-v4-pro，其余都带「视觉」标签</li>
       </ol>
       <p>供应商默认叫「新供应商」，想改名点右上角「···」→「重命名」，不改也能用。配好后回到工作区，聊天时在模型选择里选这些模型。</p>
     </section>
@@ -255,7 +256,7 @@
       <h3>5. 往下滚，勾图片和思考，填上下文</h3>
       <figure class="shot"><a href="/guide/clients/img/wb-6.webp" target="_blank"><img src="/guide/clients/img/wb-6.webp" width="1600" height="1209" alt="WorkBuddy 自定义模型表单下半部分" loading="lazy"></a></figure>
       <ol class="marks">
-        <li data-n="1">勾「图片输入」和「思考模式」；<b>glm-5.3 不勾图片输入</b>（「工具调用」「允许关闭思考」默认勾着，保留）</li>
+        <li data-n="1">勾「图片输入」和「思考模式」；<b>glm-5.3、deepseek-v4-pro 不勾图片输入</b>（「工具调用」「允许关闭思考」默认勾着，保留）</li>
         <li data-n="2">支持的思考强度勾「低」「中」「高」</li>
         <li data-n="3">输入填 <code>1024000</code>，输出填 <code>128000</code></li>
         <li data-n="4">点「保存」，再点「添加模型」加下一个</li>

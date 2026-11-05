@@ -179,7 +179,7 @@
             <tr><td><b>国模平价</b></td><td>DeepSeek、Qwen、GLM、Kimi</td><td>DeepSeek、Qwen Max、GLM 1 折，Qwen Flash、GLM Flash 1.5 折，Kimi 2 折</td><td>日常使用、长对话和编码任务，线路实测筛选，缓存稳定，推荐</td></tr>
             <tr><td>国模特价</td><td>DeepSeek、Qwen、GLM、Kimi</td><td>DeepSeek、Qwen、GLM 0.5 折，GLM Flash 1 折，Kimi 1.5 折</td><td>价格最低，线路不稳定、不再优化，能用就用，适合能容忍报错的批量任务</td></tr>
             <tr><td>国模企业满血</td><td>DeepSeek、Qwen、GLM、Kimi</td><td>3 折，Qwen Flash 5 折</td><td>对稳定性和效果要求高的生产场景</td></tr>
-            <tr><td>国外特价</td><td>Claude、GPT、Grok</td><td>Claude、Grok 0.6 折，GPT 0.5 折</td><td>个人开发、编码助手，性价比优先</td></tr>
+            <tr><td>国外特价</td><td>Claude、GPT、Grok</td><td>Claude、Grok 0.6 折，GPT 0.5 折</td><td>价格最低，停止维护，能用就用</td></tr>
             <tr><td>国外企业满血</td><td>Claude、GPT、Grok、Gemini</td><td>Claude 3 折，GPT、Grok 1.2 折，Gemini 2 折</td><td>团队与生产环境，稳定优先</td></tr>
             <tr><td>生图</td><td>GPT Image、Nano Banana</td><td>按张计费</td><td>图片生成与改图</td></tr>
           </tbody>
@@ -191,7 +191,7 @@
     <section id="tier-diff" aria-labelledby="tier-diff-title">
       <h2 id="tier-diff-title">特价、平价和企业满血的区别</h2>
       <div class="tier-cards">
-        <div class="tier-card"><div class="t">特价线路</div><div class="d">价格最便宜。个别模型的上游会在请求里附带固定的系统提示词，多计少量输入 token（通常能命中缓存，影响很小）；高峰期偶尔会慢。</div></div>
+        <div class="tier-card"><div class="t">特价线路（停止维护）</div><div class="d">单价极低，但不算稳定，福利组，能用就用。高峰期可能卡顿或报错；个别模型的上游会在请求里附带固定的系统提示词，多计少量输入 token。</div></div>
         <div class="tier-card"><div class="t">平价线路</div><div class="d">每条线路都经过长对话实测筛选，缓存命中和成功率稳定，价格仍远低于官方，日常用推荐。</div></div>
         <div class="tier-card strong"><div class="t">企业满血线路</div><div class="d">保真线路，走官方原版模型，稳定优先，适合正式项目。</div></div>
       </div>
@@ -245,7 +245,7 @@ print(reply.choices[0].message.content)</pre>
         <details><summary>报错「额度不足」或「余额不足」</summary><p>到「钱包」充值，支付宝付完自动到账。余额只剩几毛时，客户端的「最大输出」设得很大也会报这个错，因为请求前要按最大输出预留额度，充一点或把最大输出调小就行。如果给密钥单独设置了额度上限，也可能是密钥额度用完了，在「API 密钥」页编辑。</p></details>
         <details><summary>报错 401 / 无效的令牌</summary><p>检查密钥是否完整复制（以 sk- 开头）、是否被禁用或过期；接口地址要用 api.tokenrocks.ai，不要填官网页面地址。有的客户端余额不足时也显示成「密钥无效」，先到「钱包」看看余额。</p></details>
         <details><summary>报错 404 / 接口地址不对</summary><p>接口地址只填到 <code>https://api.tokenrocks.ai/v1</code>，后面的 <code>/chat/completions</code>、<code>/responses</code> 不要填，客户端会自己拼。</p></details>
-        <details><summary>回复很慢或超时</summary><p>大模型首字一般需要几秒到十几秒，长回复建议开启流式输出（stream）。特价线路高峰期可能变慢，着急的任务可以换企业满血分组。超时没返回内容却扣了费的，我们每天统一核对，原数退回余额，不用另外找客服。</p></details>
+        <details><summary>回复很慢或超时</summary><p>大模型首字一般需要几秒到十几秒，长回复建议开启流式输出（stream）。特价线路已停止维护，高峰期可能变慢，着急的任务换国模平价或企业满血分组。超时没返回内容却扣了费的，我们每天统一核对，原数退回余额，不用另外找客服。</p></details>
         <details><summary>余额会过期吗？</summary><p>余额不过期。遇到兑换码无效、扣费异常，请带上截图在<a href="#wechat">官方交流群</a>里找站长。</p></details>
         <details><summary>怎么查每次调用花了多少钱？</summary><p>控制台「使用日志」里有每次调用的模型、token 数和扣费金额；「数据看板」可以看按天汇总。</p></details>
       </div>

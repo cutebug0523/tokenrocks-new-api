@@ -148,11 +148,20 @@
       </div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; align-items: stretch;">
         <div style="background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: 30px; display: flex; flex-direction: column; gap: 16px;">
-          <h3 style="margin: 0; font-size: 18px; font-weight: 700;">特价线路</h3>
-          <div><span style="font-size: 44px; font-weight: 800; letter-spacing: -1px;">0.5 折</span><span style="font-size: 15px; color: #4B5563;"> 起</span></div>
-          <p style="margin: 0; font-size: 15px; line-height: 1.7; color: #4B5563;">个人开发、编码助手、批量任务。</p>
+          <div style="display: flex; justify-content: space-between; align-items: center;"><h3 style="margin: 0; font-size: 18px; font-weight: 700;">国模平价线路</h3><span style="font-size: 12px; font-weight: 600; color: #0E7C66; background: #D1E7E1; padding: 4px 10px; border-radius: 999px;">日常推荐</span></div>
+          <div><span style="font-size: 44px; font-weight: 800; letter-spacing: -1px;">1 折</span><span style="font-size: 15px; color: #4B5563;"> 起</span></div>
+          <p style="margin: 0; font-size: 15px; line-height: 1.7; color: #4B5563;">国产模型日常使用、长对话和编码任务。</p>
           <ul style="margin: 0; padding-left: 20px; font-size: 15px; line-height: 2; color: #374151;">
-            <li>国模平价 1 折起，线路实测、缓存稳定；国模特价 0.5 折起，不保证稳定</li><li>Claude、Grok 0.6 折，GPT 0.5 折</li><li>个别上游附带固定提示词</li>
+            <li>DeepSeek、Qwen Max、GLM 1 折，Qwen Flash、GLM Flash 1.5 折，Kimi 2 折</li><li>每条线路长对话实测筛选</li><li>缓存命中稳定，不容易报错</li>
+          </ul>
+          <a href="/sign-up" style="margin-top: auto; display: flex; justify-content: center; align-items: center; min-height: 46px; border-radius: 8px; border: 1px solid #D1D5DB; text-decoration: none; font-weight: 600;">免费开始</a>
+        </div>
+        <div style="background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px; padding: 30px; display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;"><h3 style="margin: 0; font-size: 18px; font-weight: 700;">特价线路</h3><span style="font-size: 12px; font-weight: 600; color: #92400E; background: #FEF3C7; padding: 4px 10px; border-radius: 999px;">停止维护</span></div>
+          <div><span style="font-size: 44px; font-weight: 800; letter-spacing: -1px;">0.5 折</span><span style="font-size: 15px; color: #4B5563;"> 起</span></div>
+          <p style="margin: 0; font-size: 15px; line-height: 1.7; color: #4B5563;">单价极低，但不算稳定，福利组，能用就用。</p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 15px; line-height: 2; color: #374151;">
+            <li>国模 0.5 折起，Kimi 1.5 折</li><li>Claude、Grok 0.6 折，GPT 0.5 折</li><li>高峰可能卡顿报错，个别上游附带固定提示词</li>
           </ul>
           <a href="/sign-up" style="margin-top: auto; display: flex; justify-content: center; align-items: center; min-height: 46px; border-radius: 8px; border: 1px solid #D1D5DB; text-decoration: none; font-weight: 600;">免费开始</a>
         </div>
@@ -181,7 +190,7 @@
   <section aria-labelledby="faq-title" style="max-width: 860px; margin: 0 auto; padding: 88px 24px; display: flex; flex-direction: column; gap: 24px;">
     <h2 id="faq-title" style="margin: 0; font-size: 34px; font-weight: 800; text-align: center;">常见问题</h2>
     <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">接口地址填什么？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">OpenAI 兼容客户端填 https://api.tokenrocks.ai/v1，Claude Code 等填 https://api.tokenrocks.ai。用 DeepSeek Harness、WorkBuddy、ZCode 的，看<a href="/guide/clients/" style="color: #0E7C66;">客户端图文教程</a>；其他见<a href="/guide/" style="color: #0E7C66;">使用指南</a>。</p></details>
-    <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">特价和企业满血有什么区别？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">特价最便宜，个别上游会附带固定提示词；国模平价的线路经过长对话实测筛选，缓存稳定；企业满血走官方原版模型，稳定优先。</p></details>
+    <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">特价、平价和企业满血有什么区别？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">国模平价的线路经过长对话实测筛选，缓存稳定，国产模型日常用推荐；特价最便宜，但已停止维护，高峰可能卡顿报错，能用就用；企业满血走官方原版模型，稳定优先。</p></details>
     <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">怎么充值？余额会过期吗？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">控制台「钱包」用支付宝在线充值，付完自动到账；有兑换码也可以在钱包页兑换。余额不过期。</p></details>
   </section>
 

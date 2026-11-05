@@ -259,7 +259,25 @@ def write_atomic(path, content):
     os.replace(tmp, path)
 
 
+def server_down(report):
+    # 每项都是 5xx 多半是本站在重启或部署，不是上游问题，这种结果不覆盖旧报告
+    checks = [c for line in report['lines'].values() for c in line['checks'].values()]
+    return bool(checks) and all(str(c.get('text', '')).startswith('HTTP 5') for c in checks)
+
+
+def wait_until_up():
+    # 部署也挑凌晨，开跑前等服务起来，最多等 30 分钟
+    for _ in range(30):
+        try:
+            if http_json(BASE + '/api/status').get('success'):
+                return
+        except Exception as e:
+            log('status not ready', e)
+        time.sleep(60)
+
+
 def main():
+    wait_until_up()
     keys = json.load(open(KEYS_FILE))
     pricing = http_json(BASE + '/api/pricing')
     vendors = {v['id']: v['name'] for v in pricing.get('vendors') or []}
@@ -287,6 +305,9 @@ def main():
             checks['format'], checks['pelican'] = check_pelican(model, fmt, vendor, key, tier)
             report['lines'][tier] = {'group': group, 'api': fmt, 'checks': checks}
             log(model, tier, 'done', {k: v.get('text') for k, v in checks.items()})
+        if server_down(report):
+            log(model, 'all checks 5xx, kept previous report')
+            continue
         write_atomic(os.path.join(OUT, 'models', model + '.json'), json.dumps(report, ensure_ascii=False, indent=1))
     log('all done')
 

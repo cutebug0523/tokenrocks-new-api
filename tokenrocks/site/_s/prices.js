@@ -8,9 +8,15 @@
 
   TR.USD_TO_CNY = 7
   TR.TIERS = {
-    value: { label: '特价线路', short: '特价', match: '特价', tag: '极低售价，停止维护', note: '单价极低，但不算稳定，福利组，能用就用吧' },
+    value: { label: '特价线路', short: '特价', match: '特价', note: '价格最低，个别上游附带固定提示词；标「停止维护」的国产模型不算稳定，能用就用' },
     pingjia: { label: '国模平价线路', short: '平价', match: '平价', note: '国产模型，线路经长对话实测筛选，缓存稳定，推荐' },
     enterprise: { label: '企业满血线路', short: '企业满血', match: '满血', note: '官方原版模型，稳定优先' }
+  }
+  // 只挂在某个分组上的标签（同一条线路里国外特价不挂）
+  TR.GROUP_TAGS = { 国模特价: { tag: '停止维护', note: '单价极低，但不算稳定，福利组，能用就用吧' } }
+  TR.groupTag = function (group, tierNote) {
+    var g = TR.GROUP_TAGS[group]
+    return { el: g ? TR.el('span', { class: 'tier-tag', title: g.note, text: g.tag }) : null, note: g ? g.note : tierNote }
   }
   TR.VENDOR_ORDER = ['Anthropic', 'OpenAI', 'xAI', 'DeepSeek', '月之暗面', '智谱', '阿里巴巴', 'Google']
   TR.PELICAN_PROMPT = 'Generate an SVG of a pelican riding a bicycle'

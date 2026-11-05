@@ -94,7 +94,7 @@
     <a href="#topup">充值</a>
     <span class="label">线路</span>
     <a href="#tiers">选择线路</a>
-    <a href="#tier-diff">特价和企业满血的区别</a>
+    <a href="#tier-diff">特价、平价和企业满血的区别</a>
     <span class="label">接入</span>
     <a href="#chat-clients">聊天客户端</a>
     <a href="/guide/clients/#dsh">DeepSeek Harness 教程</a>
@@ -121,7 +121,7 @@
     <details class="mobile-toc">
       <summary>本页目录</summary>
       <nav aria-label="本页目录（手机）">
-        <a href="#start">快速开始</a><a href="#api">接口地址</a><a href="#topup">充值</a><a href="#tiers">选择线路</a><a href="#tier-diff">特价和企业满血的区别</a><a href="#chat-clients">聊天客户端</a><a href="#coding-clients">编程客户端</a><a href="#claude-code">Claude Code</a><a href="#python">代码调用</a><a href="#faq">常见问题</a>
+        <a href="#start">快速开始</a><a href="#api">接口地址</a><a href="#topup">充值</a><a href="#tiers">选择线路</a><a href="#tier-diff">特价、平价和企业满血的区别</a><a href="#chat-clients">聊天客户端</a><a href="#coding-clients">编程客户端</a><a href="#claude-code">Claude Code</a><a href="#python">代码调用</a><a href="#faq">常见问题</a>
       </nav>
     </details>
 
@@ -176,7 +176,8 @@
           <thead><tr><th scope="col">分组</th><th scope="col">包含模型</th><th scope="col">价格</th><th scope="col">适合</th></tr></thead>
           <tbody>
             <tr><td><b>auto（自动）</b></td><td>全部</td><td>按实际走的分组计费</td><td>不知道选什么就用它，按模型自动选最便宜的可用分组</td></tr>
-            <tr><td>国模特价</td><td>DeepSeek、Qwen、GLM、Kimi</td><td>DeepSeek、Qwen、GLM 0.5 折，GLM Flash 1 折，Kimi 1.5 折</td><td>日常使用、批量任务，性价比最高</td></tr>
+            <tr><td><b>国模平价</b></td><td>DeepSeek、Qwen、GLM、Kimi</td><td>DeepSeek、Qwen Max、GLM 1 折，Qwen Flash、GLM Flash 1.5 折，Kimi 2 折</td><td>日常使用、长对话和编码任务，线路实测筛选，缓存稳定，推荐</td></tr>
+            <tr><td>国模特价</td><td>DeepSeek、Qwen、GLM、Kimi</td><td>DeepSeek、Qwen、GLM 0.5 折，GLM Flash 1 折，Kimi 1.5 折</td><td>价格最低，线路不稳定、不再优化，能用就用，适合能容忍报错的批量任务</td></tr>
             <tr><td>国模企业满血</td><td>DeepSeek、Qwen、GLM、Kimi</td><td>3 折，Qwen Flash 5 折</td><td>对稳定性和效果要求高的生产场景</td></tr>
             <tr><td>国外特价</td><td>Claude、GPT、Grok</td><td>Claude、Grok 0.6 折，GPT 0.5 折</td><td>个人开发、编码助手，性价比优先</td></tr>
             <tr><td>国外企业满血</td><td>Claude、GPT、Grok、Gemini</td><td>Claude 3 折，GPT、Grok 1.2 折，Gemini 2 折</td><td>团队与生产环境，稳定优先</td></tr>
@@ -184,16 +185,17 @@
           </tbody>
         </table>
       </div>
-      <p>auto 的选择顺序：国模特价 → 国外特价 → 生图 → 国模企业满血 → 国外企业满血，取第一个有该模型的分组。所以 auto 默认走特价线路，想用企业满血请手动选分组。</p>
+      <p>auto 的选择顺序：国模特价 → 国外特价 → 生图 → 国模企业满血 → 国外企业满血，取第一个有该模型的分组。所以 auto 默认走特价线路，想用企业满血请手动选分组。近期 auto 的国产模型会改走国模平价，以公告为准。</p>
     </section>
 
     <section id="tier-diff" aria-labelledby="tier-diff-title">
-      <h2 id="tier-diff-title">特价和企业满血的区别</h2>
+      <h2 id="tier-diff-title">特价、平价和企业满血的区别</h2>
       <div class="tier-cards">
         <div class="tier-card"><div class="t">特价线路</div><div class="d">价格最便宜。个别模型的上游会在请求里附带固定的系统提示词，多计少量输入 token（通常能命中缓存，影响很小）；高峰期偶尔会慢。</div></div>
+        <div class="tier-card"><div class="t">平价线路</div><div class="d">每条线路都经过长对话实测筛选，缓存命中和成功率稳定，价格仍远低于官方，日常用推荐。</div></div>
         <div class="tier-card strong"><div class="t">企业满血线路</div><div class="d">保真线路，走官方原版模型，稳定优先，适合正式项目。</div></div>
       </div>
-      <p>同一个模型名在两个分组里都可以用，区别只在线路和价格。报错「分组 xxx 下模型 yyy 无可用渠道」，说明这个密钥所在分组里没有这个模型（例如在「国模特价」里调 Claude），到「API 密钥」页把分组改成 auto 或对应分组即可。</p>
+      <p>同一个模型名在两个分组里都可以用，区别只在线路和价格。报错「分组 xxx 下模型 yyy 无可用渠道」，说明这个密钥所在分组里没有这个模型（例如在「国模平价」里调 Claude），到「API 密钥」页把分组改成 auto 或对应分组即可。</p>
     </section>
 
     <section id="chat-clients" aria-labelledby="chat-title">
@@ -261,7 +263,7 @@ print(reply.choices[0].message.content)</pre>
     <a href="#api">接口地址</a>
     <a href="#topup">充值</a>
     <a href="#tiers">选择线路</a>
-    <a href="#tier-diff">特价和企业满血的区别</a>
+    <a href="#tier-diff">特价、平价和企业满血的区别</a>
     <a href="#chat-clients">聊天客户端</a>
     <a href="#coding-clients">编程客户端</a>
     <a href="#claude-code">Claude Code</a>

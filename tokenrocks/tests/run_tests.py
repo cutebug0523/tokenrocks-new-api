@@ -4,7 +4,8 @@
 服务器上的用法（cron 每周一 04:00）：
     python3 /opt/tokenrocks-tests/run_tests.py [模型名 ...]
 
-- 测哪些模型：MODELS（或命令行参数）。线路和分组每次从 /api/pricing 读，跟着后台配置走。
+- 测哪些模型：/api/pricing 里全部文本模型（或命令行参数）。线路和分组每次从 /api/pricing 读，跟着后台配置走。
+- 特价线路停止维护，不再实测；只测国模平价和企业满血。
 - 密钥：/opt/tokenrocks-tests/keys.json，{"分组名": "sk-..."}，每个分组一把专用测试密钥，权限 600。
 - 输出：/var/www/tokenrocks-site/_s/tests/models/<模型>.json 和 art/<模型>-<线路>.svg|html。
 - 只用标准库。日志不打印密钥。
@@ -24,9 +25,7 @@ BASE = 'https://tokenrocks.ai'
 OUT = '/var/www/tokenrocks-site/_s/tests'
 KEYS_FILE = '/opt/tokenrocks-tests/keys.json'
 PROMPT = 'Generate an SVG of a pelican riding a bicycle'
-MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'gpt-6.1-sol', 'gpt-6-astra', 'grok-4.7', 'deepseek-v4.1-flash', 'qwen3.8-max',
-          'qwen3.8-flash', 'kimi-k3.1-pro', 'glm-5.3', 'glm-5.3-flash']
-TIERS = {'value': '特价', 'enterprise': '满血'}
+TIERS = {'pingjia': '平价', 'enterprise': '满血'}
 MAX_ART_BYTES = 300 * 1024
 HKT = timezone(timedelta(hours=8))
 
@@ -105,7 +104,9 @@ def post(path, key, fmt, body, timeout, stream=False):
 
 def body_for(model, fmt, vendor, prompt, max_tokens, stream, effort=None):
     body = {'model': model, 'messages': [{'role': 'user', 'content': prompt}], 'stream': stream}
-    if fmt == 'anthropic' or vendor != 'OpenAI':
+    if max_tokens is None:
+        pass
+    elif fmt == 'anthropic' or vendor != 'OpenAI':
         body['max_tokens'] = max_tokens
     else:
         body['max_completion_tokens'] = max_tokens
@@ -215,8 +216,10 @@ def external_links(art):
 
 
 def check_pelican(model, fmt, vendor, key, tier):
-    body = body_for(model, fmt, vendor, PROMPT, 16000, True, effort='medium')
-    res = post('/v1/messages' if fmt == 'anthropic' else '/v1/chat/completions', key, fmt, body, 900, stream=True)
+    # GLM-5.3 思考量很大，16000 token 想不完就交不出作品，不设上限、等久一点
+    glm = model.startswith('glm-')
+    body = body_for(model, fmt, vendor, PROMPT, None if glm else 16000, True, effort='medium')
+    res = post('/v1/messages' if fmt == 'anthropic' else '/v1/chat/completions', key, fmt, body, 1800 if glm else 900, stream=True)
     if res['status'] != 200:
         bad = failed(res)
         return bad, bad
@@ -282,7 +285,7 @@ def main():
     pricing = http_json(BASE + '/api/pricing')
     vendors = {v['id']: v['name'] for v in pricing.get('vendors') or []}
     by_name = {m['model_name']: m for m in pricing['data']}
-    for model in sys.argv[1:] or MODELS:
+    for model in sys.argv[1:] or [m['model_name'] for m in pricing['data'] if '生图' not in (m.get('enable_groups') or [])]:
         info = by_name.get(model)
         if not info:
             log(model, 'not on sale, skipped')

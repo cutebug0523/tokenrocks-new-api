@@ -141,13 +141,13 @@
 
     if (TR.isImageModel(model)) {
       meta.textContent = '图片模型暂不做实测。'
-      rows.appendChild(el('tr', {}, [el('td', { colspan: '3', class: 'status', text: '图片模型暂不做实测' })]))
+      rows.appendChild(el('tr', {}, [el('td', { colspan: '4', class: 'status', text: '图片模型暂不做实测' })]))
       document.getElementById('retest-form').hidden = true
       return
     }
     var lines = (report && report.lines) || {}
     if (!report) {
-      meta.textContent = '这个模型还没有实测数据。平台每周一自动实测旗舰模型；也可以用下面的表单，拿你自己的密钥测。'
+      meta.textContent = '这个模型还没有实测数据。平台每周一自动实测全部文本模型；也可以用下面的表单，拿你自己的密钥测。'
     } else {
       var when = new Date(report.ran_at)
       meta.textContent = '最近一次 ' + when.toLocaleString('zh-CN', { hour12: false }) + ' · 平台每周一自动跑一次 · 每项的原始数据可以在下方展开'
@@ -156,12 +156,14 @@
     CHECKS.forEach(function (c) {
       rows.appendChild(el('tr', {}, [
         el('td', {}, [el('div', { class: 'check-name', text: c.name }), el('div', { class: 'check-how', text: c.how })]),
-        el('td', {}, [TR.groupForTier(model, 'value') ? resultChip(lines.value && lines.value.checks[c.id]) : el('span', { class: 'res todo', text: '不提供' })]),
+        // 特价线路停止维护，不再实测
+        el('td', {}, [el('span', { class: 'res todo', text: TR.groupForTier(model, 'value') ? '停止维护' : '不提供' })]),
+        el('td', {}, [TR.groupForTier(model, 'pingjia') ? resultChip(lines.pingjia && lines.pingjia.checks[c.id]) : el('span', { class: 'res todo', text: '不提供' })]),
         el('td', {}, [TR.groupForTier(model, 'enterprise') ? resultChip(lines.enterprise && lines.enterprise.checks[c.id]) : el('span', { class: 'res todo', text: '不提供' })])
       ]))
     })
 
-    ;['value', 'enterprise'].forEach(function (tier) {
+    ;['pingjia', 'enterprise'].forEach(function (tier) {
       if (!TR.groupForTier(model, tier)) return
       var line = lines[tier]
       var pelican = line && line.checks.pelican

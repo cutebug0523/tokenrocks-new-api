@@ -8,12 +8,10 @@
 
   TR.USD_TO_CNY = 7
   TR.TIERS = {
-    value: { label: '特价线路', short: '特价', match: '特价', note: '价格最低，个别上游附带固定提示词；国产模型的特价线路不稳定、不再优化' },
+    value: { label: '特价线路', short: '特价', match: '特价', tag: '极低售价，停止维护', note: '单价极低，但不算稳定，福利组，能用就用吧' },
     pingjia: { label: '国模平价线路', short: '平价', match: '平价', note: '国产模型，线路经长对话实测筛选，缓存稳定，推荐' },
     enterprise: { label: '企业满血线路', short: '企业满血', match: '满血', note: '官方原版模型，稳定优先' }
   }
-  // 单个分组的说明，比线路说明更具体时用它
-  TR.GROUP_NOTES = { 国模特价: '价格最低，线路不稳定、不再优化，能用就用' }
   TR.VENDOR_ORDER = ['Anthropic', 'OpenAI', 'xAI', 'DeepSeek', '月之暗面', '智谱', '阿里巴巴', 'Google']
   TR.PELICAN_PROMPT = 'Generate an SVG of a pelican riding a bicycle'
 

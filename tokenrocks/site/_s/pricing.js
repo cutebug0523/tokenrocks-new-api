@@ -136,6 +136,9 @@
     })
     document.getElementById('tier-name').textContent = TR.TIERS[state.tier].label
     document.getElementById('tier-note').textContent = TR.TIERS[state.tier].note
+    var tag = document.getElementById('tier-tag')
+    tag.textContent = TR.TIERS[state.tier].tag || ''
+    tag.hidden = !TR.TIERS[state.tier].tag
     renderVendors()
     renderText()
   }

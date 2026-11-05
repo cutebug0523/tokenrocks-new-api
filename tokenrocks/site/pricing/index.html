@@ -21,6 +21,8 @@
   .num { font-family: var(--mono); font-weight: 700; white-space: nowrap; }
   .official { font-family: var(--mono); font-size: 12px; color: var(--muted-2); }
   .badge { display: inline-block; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; color: var(--brand-dark); background: var(--brand-soft); }
+  .tier-tag { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; color: #92400E; background: #FEF3C7; vertical-align: middle; white-space: nowrap; }
+  .tier-tag[hidden] { display: none; }
   .badge.off { color: var(--muted); background: #f3f4f6; font-weight: 600; }
   .img-card { border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 8px; }
   .status { padding: 28px 16px; text-align: center; color: var(--muted); }
@@ -88,7 +90,7 @@
 
   <section aria-labelledby="text-title" class="wrap" style="padding-top: 28px; padding-bottom: 8px; display: flex; flex-direction: column; gap: 14px;">
     <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px;">
-      <h2 id="text-title" style="margin: 0; font-size: 20px; font-weight: 700;">文本与编码 · <span id="tier-name">特价线路</span></h2>
+      <h2 id="text-title" style="margin: 0; font-size: 20px; font-weight: 700;">文本与编码 · <span id="tier-name">特价线路</span><span id="tier-tag" class="tier-tag" hidden></span></h2>
       <span id="tier-note" style="font-size: 14px; color: #4B5563;"></span>
     </div>
     <div style="overflow-x: auto; border: 1px solid #E5E7EB; border-radius: 12px;">
@@ -118,8 +120,8 @@
   </div>
 </footer>
 
-<script src="/_s/prices.js?v=20261105"></script>
-<script src="/_s/pricing.js?v=20261105"></script>
+<script src="/_s/prices.js?v=20261105b"></script>
+<script src="/_s/pricing.js?v=20261105b"></script>
 <script src="/_s/wechat.js?v=20261101"></script>
 </body>
 </html>

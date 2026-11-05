@@ -76,6 +76,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"DELETE /api/user/access_tokens/legacy":        accessTokenSessionRule,
 	"POST /api/user/helper/approve":                accessTokenSessionRule,
 	"POST /api/user/helper/logout":                 accessTokenAnyRule,
+	HelperActivityRoute:                            accessTokenScopeRule("usage:read"),
 	"GET /api/user/passkey":                        accessTokenScopeRule("account_security:read"),
 	"POST /api/user/passkey/register/begin":        accessTokenScopeRule("account_security:write"),
 	"POST /api/user/passkey/register/finish":       accessTokenScopeRule("account_security:write"),

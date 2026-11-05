@@ -115,6 +115,7 @@ func SetApiRouter(router *gin.Engine) {
 				}
 				selfRoute.POST("/helper/approve", middleware.CriticalRateLimit(), controller.HelperLoginApprove)
 				selfRoute.POST("/helper/logout", middleware.CriticalRateLimit(), controller.HelperLogout)
+				selfRoute.GET("/helper/activity", controller.HelperActivity)
 				selfRoute.GET("/passkey", controller.PasskeyStatus)
 				selfRoute.POST("/passkey/register/begin", middleware.UserCriticalRateLimit("security-verification"), middleware.DisableCache(), controller.PasskeyRegisterBegin)
 				selfRoute.POST("/passkey/register/finish", middleware.UserCriticalRateLimit("security-verification"), middleware.DisableCache(), controller.PasskeyRegisterFinish)

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"net/http"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
@@ -36,6 +37,11 @@ func (w *auditResponseWriter) Write(b []byte) (int, error) {
 
 func (w *auditResponseWriter) WriteString(s string) (int, error) {
 	return w.Write([]byte(s))
+}
+
+// Unwrap 让 http.ResponseController（流式写超时）和 FlushWriter 的 FlushError 穿过这一层。
+func (w *auditResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 // auditRouteActions 将「METHOD + 路由模板」映射为语言无关的操作标识 action。
@@ -315,5 +321,9 @@ func finishAccessTokenAudit(c *gin.Context) {
 	}
 	audit.entry.Status = audit.writer.Status()
 	audit.entry.Success = auditResponseSuccess(audit.entry.Status, audit.writer.body.Bytes())
+	// 小助手每几秒轮询一次任务动态：成功的不记，否则每个开着小助手的用户一天几万行；被拒、出错的照记。
+	if audit.entry.Success && c.Request.Method+" "+c.FullPath() == HelperActivityRoute {
+		return
+	}
 	model.RecordAuditLog(c, audit.entry)
 }

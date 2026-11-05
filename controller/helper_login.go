@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
@@ -147,4 +148,10 @@ func HelperLogout(c *gin.Context) {
 	}
 	recordUserSecurityAudit(c, userID, "access_token.revoke", map[string]any{"token_id": token.Id, "name": token.Name, "token_ref": token.TokenHash, "client": "helper"})
 	common.ApiSuccess(c, nil)
+}
+
+// HelperActivity lets the helper poll what the user's relay requests are doing.
+// Polling is what turns recording on; see middleware.HelperActivity.
+func HelperActivity(c *gin.Context) {
+	common.ApiSuccess(c, middleware.PollHelperActivity(c.GetInt("id"), c.Query("after")))
 }

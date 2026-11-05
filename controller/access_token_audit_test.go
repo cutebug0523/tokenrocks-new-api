@@ -6,11 +6,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -96,6 +98,7 @@ func newAccessTokenTestRouter() *gin.Engine {
 	userRoute.POST("/helper/token", HelperLoginToken)
 	selfRoute.POST("/helper/approve", HelperLoginApprove)
 	selfRoute.POST("/helper/logout", HelperLogout)
+	selfRoute.GET("/helper/activity", HelperActivity)
 	adminRoute := userRoute.Group("/", middleware.AdminAuth())
 	adminRoute.DELETE("/:id", DeleteUser)
 	return router
@@ -1370,4 +1373,65 @@ func TestHelperLoginIssuesScopedTokenOnce(t *testing.T) {
 	for _, secret := range []string{pat, code, verifier} {
 		assert.NotContains(t, string(encoded), secret)
 	}
+}
+
+// The helper polls its user's relay activity with its usage:read token. The
+// first poll subscribes; later polls return the requests made since, with the
+// error text the client itself received.
+func TestHelperActivityPollReturnsRelayEventsSinceSeq(t *testing.T) {
+	user, _ := setupAccessTokenAudit(t)
+	router := newAccessTokenTestRouter()
+	pat, _ := createScopedAccessToken(t, user.Id, 0, "usage:read")
+	other, _ := createScopedAccessToken(t, user.Id, 0, "profile:read")
+	assert.Contains(t, accessTokenRequest(router, "GET", "/api/user/helper/activity", other, "", "").Body.String(), `"code":"ACCESS_TOKEN_SCOPE_DENIED"`)
+
+	type activityResponse struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Seq      int64            `json:"seq"`
+			Inflight int              `json:"inflight"`
+			Items    []map[string]any `json:"items"`
+		} `json:"data"`
+	}
+	response := accessTokenRequest(router, "GET", "/api/user/helper/activity", pat, "", "")
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	assert.Contains(t, response.Body.String(), `"items":[]`)
+	var first activityResponse
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &first))
+	require.True(t, first.Success)
+
+	relay := gin.New()
+	relay.Use(middleware.RequestId())
+	relay.POST("/v1/chat/completions", func(c *gin.Context) { c.Set("id", user.Id) }, middleware.HelperActivity(), func(c *gin.Context) {
+		c.Set("original_model", "glm-5.3")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"message": "当前分组 default 下对于模型 glm-5.3 无可用渠道", "type": "new_api_error"}})
+	})
+	relayResponse := httptest.NewRecorder()
+	relay.ServeHTTP(relayResponse, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"glm-5.3"}`)))
+	requestID := relayResponse.Header().Get(common.RequestIdKey)
+	require.NotEmpty(t, requestID)
+
+	response = accessTokenRequest(router, "GET", fmt.Sprintf("/api/user/helper/activity?after=%d", first.Data.Seq), pat, "", "")
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var page activityResponse
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &page))
+	assert.Equal(t, first.Data.Seq+2, page.Data.Seq)
+	assert.Equal(t, 0, page.Data.Inflight)
+	require.Len(t, page.Data.Items, 2)
+	start, end := page.Data.Items[0], page.Data.Items[1]
+	assert.ElementsMatch(t, []string{"seq", "at", "phase", "request_id", "model"}, slices.Collect(maps.Keys(start)))
+	assert.Equal(t, map[string]any{"seq": float64(first.Data.Seq + 1), "at": start["at"], "phase": "start", "request_id": requestID, "model": ""}, start)
+	assert.Equal(t, "end", end["phase"])
+	assert.Equal(t, requestID, end["request_id"])
+	assert.Equal(t, "glm-5.3", end["model"])
+	assert.Equal(t, float64(http.StatusServiceUnavailable), end["status"])
+	assert.Equal(t, "当前分组 default 下对于模型 glm-5.3 无可用渠道", end["error"])
+	assert.GreaterOrEqual(t, end["at"], start["at"])
+
+	// 轮询太频繁，成功的不进审计表；被拒的照记。
+	var polls []model.AuditLog
+	require.NoError(t, model.LOG_DB.Where("route = ? AND category = ?", "/api/user/helper/activity", model.AuditCategoryAccessToken).Find(&polls).Error)
+	require.Len(t, polls, 1)
+	assert.False(t, polls[0].Success)
+	assert.Equal(t, http.StatusForbidden, polls[0].Status)
 }

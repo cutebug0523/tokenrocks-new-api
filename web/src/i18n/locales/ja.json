@@ -7401,6 +7401,17 @@
     "Referral commission {{quota}}": "紹介報酬 {{quota}}",
     "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "あなたのリンクから登録した友達がチャージするたびに、支払額の 10% をクレジットとして獲得できます。7 以上で残高に振り替えられます。",
     "Get {{amount}} extra on your first top-up": "初回チャージで {{amount}} 上乗せ",
-    "First top-up bonus {{quota}}": "初回チャージ特典 {{quota}}"
+    "First top-up bonus {{quota}}": "初回チャージ特典 {{quota}}",
+    "Authorize TokenRocks Helper": "TokenRocks Helper を許可",
+    "The helper will be able to:": "ヘルパーができること：",
+    "Read API keys to set them up in AI apps on this computer": "API キーを読み取り、このコンピューターの AI アプリに設定",
+    "Create new API keys": "新しい API キーを作成",
+    "See your account, balance, usage and API keys": "アカウント、残高、使用量、API キーを表示",
+    "Redeem top-up codes": "チャージコードを使う",
+    "Access lasts {{days}} days. You can revoke it anytime in Security & Access → Access tokens.": "許可は {{days}} 日間有効です。「セキュリティとアクセス → アクセストークン」でいつでも取り消せます。",
+    "Only authorize if you just clicked Sign in in the helper.": "ヘルパーで「ログイン」を押した直後の場合のみ許可してください。",
+    "Authorized. You can go back to the helper now.": "許可しました。ヘルパーに戻ってください。",
+    "This sign-in link is incomplete. Click Sign in in the helper again.": "ログインリンクが不完全です。ヘルパーでもう一度「ログイン」を押してください。",
+    "Authorization failed": "許可に失敗しました"
   }
 }

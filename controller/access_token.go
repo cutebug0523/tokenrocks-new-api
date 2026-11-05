@@ -151,29 +151,9 @@ func CreateAccessToken(c *gin.Context) {
 	if middleware.RequireSecurityProof(c, service.VerificationOperation{Scope: service.VerificationScopeAccessTokenGenerate, Context: proofContext}) == nil {
 		return
 	}
-	suffix, err := common.GenerateRandomCharsKey(43)
+	raw, token, err := issueAccessToken(identity.UserID, name, scopes, req.ExpiresAt)
 	if err != nil {
-		writeSecurityOperationError(c, err)
-		return
-	}
-	raw := model.AccessTokenPrefix + suffix
-	token := &model.UserAccessToken{
-		Name:      name,
-		TokenHash: model.AccessTokenFingerprint(raw),
-		TokenHint: model.AccessTokenHint(raw),
-		ExpiresAt: req.ExpiresAt,
-		CreatedAt: now,
-	}
-	if err := token.SetScopes(scopes); err != nil {
-		writeSecurityOperationError(c, err)
-		return
-	}
-	if err := model.CreateUserAccessToken(identity.UserID, token, service.AccessTokenMaxPerUser); err != nil {
-		if errors.Is(err, model.ErrAccessTokenLimit) {
-			writeAccessTokenError(c, http.StatusBadRequest, "ACCESS_TOKEN_LIMIT", "You can create at most {{count}} access tokens", map[string]any{"count": service.AccessTokenMaxPerUser})
-			return
-		}
-		writeSecurityOperationError(c, err)
+		writeIssueAccessTokenError(c, err)
 		return
 	}
 	recordUserSecurityAudit(c, identity.UserID, "access_token.generate", map[string]any{
@@ -184,6 +164,38 @@ func CreateAccessToken(c *gin.Context) {
 		"token_ref":  token.TokenHash,
 	})
 	common.ApiSuccess(c, gin.H{"token": raw, "item": newAccessTokenItem(token)})
+}
+
+// issueAccessToken stores a new access token for userID and returns its
+// plaintext, which is shown once and never stored.
+func issueAccessToken(userID int, name string, scopes []string, expiresAt int64) (string, *model.UserAccessToken, error) {
+	suffix, err := common.GenerateRandomCharsKey(43)
+	if err != nil {
+		return "", nil, err
+	}
+	raw := model.AccessTokenPrefix + suffix
+	token := &model.UserAccessToken{
+		Name:      name,
+		TokenHash: model.AccessTokenFingerprint(raw),
+		TokenHint: model.AccessTokenHint(raw),
+		ExpiresAt: expiresAt,
+		CreatedAt: common.GetTimestamp(),
+	}
+	if err := token.SetScopes(scopes); err != nil {
+		return "", nil, err
+	}
+	if err := model.CreateUserAccessToken(userID, token, service.AccessTokenMaxPerUser); err != nil {
+		return "", nil, err
+	}
+	return raw, token, nil
+}
+
+func writeIssueAccessTokenError(c *gin.Context, err error) {
+	if errors.Is(err, model.ErrAccessTokenLimit) {
+		writeAccessTokenError(c, http.StatusBadRequest, "ACCESS_TOKEN_LIMIT", "You can create at most {{count}} access tokens", map[string]any{"count": service.AccessTokenMaxPerUser})
+		return
+	}
+	writeSecurityOperationError(c, err)
 }
 
 // UpdateAccessToken renames a token without verification. Changing the grant

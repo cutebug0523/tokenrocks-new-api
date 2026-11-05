@@ -7401,6 +7401,17 @@
     "Referral commission {{quota}}": "Commission de parrainage {{quota}}",
     "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "Vos filleuls inscrits via votre lien vous rapportent 10 % de chaque recharge payée, en crédit. Transférable vers votre solde dès 7.",
     "Get {{amount}} extra on your first top-up": "{{amount}} offerts sur votre première recharge",
-    "First top-up bonus {{quota}}": "Bonus de première recharge {{quota}}"
+    "First top-up bonus {{quota}}": "Bonus de première recharge {{quota}}",
+    "Authorize TokenRocks Helper": "Autoriser TokenRocks Helper",
+    "The helper will be able to:": "L’assistant pourra :",
+    "Read API keys to set them up in AI apps on this computer": "Lire les clés API pour les configurer dans les applications d’IA de cet ordinateur",
+    "Create new API keys": "Créer de nouvelles clés API",
+    "See your account, balance, usage and API keys": "Voir votre compte, votre solde, votre utilisation et vos clés API",
+    "Redeem top-up codes": "Utiliser des codes de recharge",
+    "Access lasts {{days}} days. You can revoke it anytime in Security & Access → Access tokens.": "L’accès dure {{days}} jours. Vous pouvez le révoquer à tout moment dans Sécurité et accès → Jetons d’accès.",
+    "Only authorize if you just clicked Sign in in the helper.": "N’autorisez que si vous venez de cliquer sur Se connecter dans l’assistant.",
+    "Authorized. You can go back to the helper now.": "Autorisé. Vous pouvez revenir à l’assistant.",
+    "This sign-in link is incomplete. Click Sign in in the helper again.": "Ce lien de connexion est incomplet. Cliquez à nouveau sur Se connecter dans l’assistant.",
+    "Authorization failed": "Échec de l’autorisation"
   }
 }

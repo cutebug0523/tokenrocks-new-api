@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
@@ -91,6 +93,9 @@ func newAccessTokenTestRouter() *gin.Engine {
 	tokenRoute.PATCH("/:id", UpdateAccessToken)
 	tokenRoute.DELETE("/:id", DeleteAccessToken)
 	tokenRoute.DELETE("/legacy", RevokeLegacyAccessToken)
+	userRoute.POST("/helper/token", HelperLoginToken)
+	selfRoute.POST("/helper/approve", HelperLoginApprove)
+	selfRoute.POST("/helper/logout", HelperLogout)
 	adminRoute := userRoute.Group("/", middleware.AdminAuth())
 	adminRoute.DELETE("/:id", DeleteUser)
 	return router
@@ -1256,3 +1261,113 @@ CREATE TABLE IF NOT EXISTS logs (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(toDateTime(created_at))
 ORDER BY (created_at, request_id)`
+
+// helperPKCE returns a code_verifier and its S256 code_challenge (RFC 7636).
+func helperPKCE(t *testing.T) (string, string) {
+	t.Helper()
+	verifier, err := common.GenerateRandomCharsKey(64)
+	require.NoError(t, err)
+	sum := sha256.Sum256([]byte(verifier))
+	return verifier, base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func approveHelperLogin(t *testing.T, router http.Handler, browser, challenge string) string {
+	t.Helper()
+	response := accessTokenRequest(router, "POST", "/api/user/helper/approve", browser, "", `{"code_challenge":"`+challenge+`"}`)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var body struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Code string `json:"code"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &body))
+	require.True(t, body.Success, response.Body.String())
+	require.NotEmpty(t, body.Data.Code)
+	return body.Data.Code
+}
+
+func redeemHelperLogin(router http.Handler, code, verifier string) *httptest.ResponseRecorder {
+	return accessTokenRequest(router, "POST", "/api/user/helper/token", "", "", `{"code":"`+code+`","code_verifier":"`+verifier+`"}`)
+}
+
+// The helper signs in with an authorization code bound to a PKCE challenge
+// (RFC 8252, RFC 7636). The code is single use, short lived, needs the
+// verifier and a still-live approving session, and the token it yields is
+// limited to the helper's scopes and revocable by the helper itself.
+func TestHelperLoginIssuesScopedTokenOnce(t *testing.T) {
+	user, _ := setupAccessTokenAudit(t)
+	router := newAccessTokenTestRouter()
+	_, browser := createAccessTokenTestSession(t, user.Id, "helper-session")
+
+	verifier, challenge := helperPKCE(t)
+	code := approveHelperLogin(t, router, browser, challenge)
+	response := redeemHelperLogin(router, code, verifier)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var issued struct {
+		Data struct {
+			AccessToken string `json:"access_token"`
+			ExpiresAt   int64  `json:"expires_at"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &issued))
+	pat := issued.Data.AccessToken
+	require.True(t, strings.HasPrefix(pat, model.AccessTokenPrefix))
+	stored, err := model.FindUserAccessTokenByHash(model.AccessTokenFingerprint(pat))
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+	assert.Equal(t, []string{"api_key:read", "api_key:reveal", "api_key:write", "profile:read", "usage:read", "wallet:write"}, stored.GetScopes())
+	assert.Equal(t, stored.ExpiresAt, issued.Data.ExpiresAt)
+	assert.InDelta(t, time.Now().Unix()+int64(service.AccessTokenDefaultExpiryDays)*86400, stored.ExpiresAt, 60)
+
+	assert.Contains(t, redeemHelperLogin(router, code, verifier).Body.String(), `"code":"HELPER_LOGIN_INVALID"`, "a code is redeemed once")
+	assert.Equal(t, http.StatusOK, accessTokenRequest(router, "GET", "/api/user/self", pat, "", "").Code)
+	for _, path := range []string{"/api/user/helper/approve", "/api/user/access_tokens"} {
+		response := accessTokenRequest(router, "POST", path, pat, "", `{"code_challenge":"`+challenge+`","name":"x","scopes":["profile:read"]}`)
+		assert.Contains(t, response.Body.String(), `"code":"AUTH_SESSION_REQUIRED"`, "the helper token cannot mint more tokens via %s", path)
+	}
+
+	t.Run("wrong verifier burns the code", func(t *testing.T) {
+		verifier, challenge := helperPKCE(t)
+		code := approveHelperLogin(t, router, browser, challenge)
+		other, _ := helperPKCE(t)
+		assert.Contains(t, redeemHelperLogin(router, code, other).Body.String(), `"code":"HELPER_LOGIN_INVALID"`)
+		assert.Contains(t, redeemHelperLogin(router, code, verifier).Body.String(), `"code":"HELPER_LOGIN_INVALID"`, "the right verifier is too late")
+	})
+	t.Run("expired code", func(t *testing.T) {
+		verifier, challenge := helperPKCE(t)
+		code := approveHelperLogin(t, router, browser, challenge)
+		require.NoError(t, model.DB.Model(&model.AuthFlow{}).Where("purpose = ? AND consumed_at IS NULL", model.AuthFlowPurposeHelperLogin).Update("expires_at", time.Now().Add(-time.Second)).Error)
+		assert.Contains(t, redeemHelperLogin(router, code, verifier).Body.String(), `"code":"HELPER_LOGIN_INVALID"`)
+	})
+	t.Run("approving session ended before redemption", func(t *testing.T) {
+		_, otherBrowser := createAccessTokenTestSession(t, user.Id, "helper-session-2")
+		verifier, challenge := helperPKCE(t)
+		code := approveHelperLogin(t, router, otherBrowser, challenge)
+		revoked, err := model.RevokeUserSession(user.Id, "helper-session-2", "test")
+		require.NoError(t, err)
+		require.True(t, revoked)
+		assert.Contains(t, redeemHelperLogin(router, code, verifier).Body.String(), `"code":"HELPER_LOGIN_INVALID"`)
+	})
+	t.Run("malformed challenge or verifier", func(t *testing.T) {
+		response := accessTokenRequest(router, "POST", "/api/user/helper/approve", browser, "", `{"code_challenge":"plain-text-challenge"}`)
+		assert.Equal(t, http.StatusBadRequest, response.Code)
+		assert.Equal(t, http.StatusBadRequest, redeemHelperLogin(router, code, "short").Code)
+	})
+
+	assert.Contains(t, accessTokenRequest(router, "POST", "/api/user/helper/logout", browser, "", "").Body.String(), `"code":"ACCESS_TOKEN_REQUIRED"`, "a browser session has no helper token to revoke")
+	require.Equal(t, http.StatusOK, accessTokenRequest(router, "POST", "/api/user/helper/logout", pat, "", "").Code)
+	assert.Equal(t, http.StatusUnauthorized, accessTokenRequest(router, "GET", "/api/user/self", pat, "", "").Code, "signing out revokes the token on the server")
+	tokens, err := model.ListUserAccessTokens(user.Id)
+	require.NoError(t, err)
+	assert.Empty(t, tokens)
+
+	var audits []model.AuditLog
+	require.NoError(t, model.LOG_DB.Where("action IN ?", []string{"access_token.generate", "access_token.revoke"}).Order("id").Find(&audits).Error)
+	require.Len(t, audits, 2)
+	encoded, err := common.Marshal(audits)
+	require.NoError(t, err)
+	for _, secret := range []string{pat, code, verifier} {
+		assert.NotContains(t, string(encoded), secret)
+	}
+}

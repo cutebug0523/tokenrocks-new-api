@@ -7401,6 +7401,17 @@
     "Referral commission {{quota}}": "Hoa hồng giới thiệu {{quota}}",
     "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "Bạn bè đăng ký qua liên kết của bạn mang lại cho bạn 10% mỗi lần nạp tiền họ thanh toán, dưới dạng tín dụng. Chuyển vào số dư khi đạt 7.",
     "Get {{amount}} extra on your first top-up": "Tặng thêm {{amount}} cho lần nạp đầu tiên",
-    "First top-up bonus {{quota}}": "Thưởng nạp lần đầu {{quota}}"
+    "First top-up bonus {{quota}}": "Thưởng nạp lần đầu {{quota}}",
+    "Authorize TokenRocks Helper": "Ủy quyền cho TokenRocks Helper",
+    "The helper will be able to:": "Trình trợ giúp sẽ có thể:",
+    "Read API keys to set them up in AI apps on this computer": "Đọc khóa API để cài đặt vào các ứng dụng AI trên máy tính này",
+    "Create new API keys": "Tạo khóa API mới",
+    "See your account, balance, usage and API keys": "Xem tài khoản, số dư, mức sử dụng và khóa API",
+    "Redeem top-up codes": "Đổi mã nạp tiền",
+    "Access lasts {{days}} days. You can revoke it anytime in Security & Access → Access tokens.": "Quyền truy cập có hiệu lực {{days}} ngày. Bạn có thể thu hồi bất cứ lúc nào trong Bảo mật và truy cập → Token truy cập.",
+    "Only authorize if you just clicked Sign in in the helper.": "Chỉ ủy quyền nếu bạn vừa bấm Đăng nhập trong trình trợ giúp.",
+    "Authorized. You can go back to the helper now.": "Đã ủy quyền. Bạn có thể quay lại trình trợ giúp.",
+    "This sign-in link is incomplete. Click Sign in in the helper again.": "Liên kết đăng nhập không đầy đủ. Hãy bấm Đăng nhập trong trình trợ giúp lần nữa.",
+    "Authorization failed": "Ủy quyền thất bại"
   }
 }

@@ -66,14 +66,14 @@
     if (cache.read != null) cols.push(['缓存命中', cache.read])
     if (cache.write != null) cols.push(['缓存写入', cache.write])
     var rows = [['官方价', 1, '—']]
-    ;['value', 'enterprise'].forEach(function (tier) {
+    ;['value', 'pingjia', 'enterprise'].forEach(function (tier) {
       var group = TR.groupForTier(model, tier)
       if (!group) return
       var ratio = TR.ratioFor(pricing, name, group)
       cards.appendChild(el('div', { class: 'card' }, [
         el('div', { class: 'card-head' }, [el('span', { text: TR.TIERS[tier].label }), el('span', { class: 'badge', text: TR.discountLabel(ratio), title: group })]),
         el('div', { class: 'price-pair' }, cols.map(function (c) { return priceBlock(c[0] + ' / 百万 token', c[1], ratio) })),
-        el('span', { class: 'card-note', text: TR.TIERS[tier].note + '。分组：' + group })
+        el('span', { class: 'card-note', text: (TR.GROUP_NOTES[group] || TR.TIERS[tier].note) + '。分组：' + group })
       ]))
       rows.push([TR.TIERS[tier].label, ratio, TR.discountLabel(ratio)])
     })

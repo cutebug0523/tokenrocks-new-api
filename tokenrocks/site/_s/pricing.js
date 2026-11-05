@@ -13,6 +13,7 @@
 
   var params = new URLSearchParams(window.location.search)
   if (/满血/.test(params.get('group') || '')) state.tier = 'enterprise'
+  if (/平价/.test(params.get('group') || '')) state.tier = 'pingjia'
   if (params.get('search')) state.query = params.get('search')
 
   function detailHref(name) {
@@ -45,8 +46,10 @@
   function renderVendors() {
     var names = [ALL]
     textModels.forEach(function (m) {
+      if (state.tier === 'pingjia' && !TR.groupForTier(m.raw, 'pingjia')) return
       if (names.indexOf(m.vendor) < 0) names.push(m.vendor)
     })
+    if (names.indexOf(state.vendor) < 0) state.vendor = ALL
     var box = document.getElementById('vendor-chips')
     box.textContent = ''
     names.forEach(function (name) {
@@ -73,6 +76,8 @@
     var q = state.query.trim().toLowerCase()
     var rows = textModels.filter(function (m) {
       if (state.vendor !== ALL && m.vendor !== state.vendor) return false
+      // 平价只有国产模型，没有的不列，免得满屏「暂不可用」
+      if (tier === 'pingjia' && !TR.groupForTier(m.raw, tier)) return false
       if (q && m.name.toLowerCase().indexOf(q) < 0 && m.desc.toLowerCase().indexOf(q) < 0) return false
       return true
     })

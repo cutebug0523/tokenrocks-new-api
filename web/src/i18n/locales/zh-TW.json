@@ -7402,16 +7402,16 @@
     "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "好友透過你的連結註冊後，之後他每次儲值，你都能拿到實付金額 10% 的額度，滿 ¥7 可轉入餘額。",
     "Get {{amount}} extra on your first top-up": "首次儲值額外送 {{amount}}",
     "First top-up bonus {{quota}}": "首儲多送 {{quota}}",
-    "Authorize TokenRocks Helper": "授權 TokenRocks 小助手",
-    "The helper will be able to:": "授權後小助手可以：",
+    "Authorize TokenRocks Helper": "授權 TR助手",
+    "The helper will be able to:": "授權後 TR助手可以：",
     "Read API keys to set them up in AI apps on this computer": "讀取令牌，設定到這台電腦上的 AI 軟體",
     "Create new API keys": "新建令牌",
     "See your account, balance, usage and API keys": "查看你的帳戶、餘額、用量和令牌",
     "Redeem top-up codes": "用兌換碼儲值",
     "Access lasts {{days}} days. You can revoke it anytime in Security & Access → Access tokens.": "授權 {{days}} 天有效，隨時可以在「安全與存取 → 存取令牌」裡撤銷。",
-    "Only authorize if you just clicked Sign in in the helper.": "只有你剛剛在小助手裡點了登入，才點授權。",
-    "Authorized. You can go back to the helper now.": "已授權，回到小助手就行。",
-    "This sign-in link is incomplete. Click Sign in in the helper again.": "登入連結不完整，請回到小助手重新點登入。",
+    "Only authorize if you just clicked Sign in in the helper.": "只有你剛剛在 TR助手裡點了登入，才點授權。",
+    "Authorized. You can go back to the helper now.": "已授權，回到 TR助手就行。",
+    "This sign-in link is incomplete. Click Sign in in the helper again.": "登入連結不完整，請回到 TR助手重新點登入。",
     "Authorization failed": "授權失敗"
   }
 }

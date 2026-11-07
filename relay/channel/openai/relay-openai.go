@@ -324,13 +324,6 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 
 	applyUsagePostProcessing(info, &simpleResponse.Usage, responseBody)
 
-	if info.IsStream && info.RelayFormat == types.RelayFormatOpenAI {
-		if err := writeTextResponseAsStream(c, info, &simpleResponse); err != nil {
-			return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
-		}
-		return &simpleResponse.Usage, nil
-	}
-
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
 		if usageModified {
@@ -375,49 +368,4 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 
 	return &simpleResponse.Usage, nil
-}
-
-// writeTextResponseAsStream sends a complete chat completion to a streaming
-// client as one content chunk, an optional usage chunk, and [DONE].
-func writeTextResponseAsStream(c *gin.Context, info *relaycommon.RelayInfo, response *dto.OpenAITextResponse) error {
-	chunk := dto.ChatCompletionsStreamResponse{
-		Id:      response.Id,
-		Object:  "chat.completion.chunk",
-		Created: common.GetTimestamp(),
-		Model:   response.Model,
-		Choices: make([]dto.ChatCompletionsStreamResponseChoice, 0, len(response.Choices)),
-	}
-	for _, choice := range response.Choices {
-		delta := dto.ChatCompletionsStreamResponseChoiceDelta{
-			Role:             "assistant",
-			ReasoningContent: choice.Message.ReasoningContent,
-			Reasoning:        choice.Message.Reasoning,
-		}
-		if content := choice.Message.StringContent(); content != "" {
-			delta.SetContentString(content)
-		}
-		if len(choice.Message.ToolCalls) > 0 {
-			if err := common.Unmarshal(choice.Message.ToolCalls, &delta.ToolCalls); err != nil {
-				return err
-			}
-			for i := range delta.ToolCalls {
-				delta.ToolCalls[i].SetIndex(i)
-			}
-		}
-		finishReason := choice.FinishReason
-		chunk.Choices = append(chunk.Choices, dto.ChatCompletionsStreamResponseChoice{Index: choice.Index, Delta: delta, FinishReason: &finishReason})
-	}
-	helper.SetEventStreamHeaders(c)
-	if err := helper.ObjectData(c, chunk); err != nil {
-		return err
-	}
-	if info.ShouldIncludeUsage {
-		chunk.Choices = []dto.ChatCompletionsStreamResponseChoice{}
-		chunk.Usage = &response.Usage
-		if err := helper.ObjectData(c, chunk); err != nil {
-			return err
-		}
-	}
-	helper.Done(c)
-	return nil
 }

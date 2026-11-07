@@ -74,17 +74,10 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	adaptor.Init(info)
 
 	passThroughGlobal := model_setting.GetGlobalSettings().PassThroughRequestEnabled
-	// Non-streaming upstream needs a rebuilt OpenAI chat body and the openai
-	// response handlers; any other path keeps streaming as requested.
-	if passThroughGlobal || info.ChannelSetting.PassThroughBodyEnabled ||
-		(info.ApiType != constant.APITypeOpenAI && info.ApiType != constant.APITypeAdvancedCustom) {
-		info.UpstreamNonStream = false
-	}
 	if info.RelayMode == relayconstant.RelayModeChatCompletions &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
-		info.UpstreamNonStream = false
 		applySystemPromptIfNeeded(c, info, request)
 		usage, newApiErr := textRequestViaResponses(c, info, adaptor, request)
 		if newApiErr != nil {
@@ -124,13 +117,8 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 
 		if req, ok := convertedRequest.(*dto.GeneralOpenAIRequest); ok {
 			applySystemPromptIfNeeded(c, info, req)
-			if info.UpstreamNonStream {
-				req.Stream = lo.ToPtr(false)
-				req.StreamOptions = nil
-			}
-		} else {
-			info.UpstreamNonStream = false
 		}
+		convertedRequest = prepareUpstreamNonStream(info, convertedRequest)
 
 		jsonData, err := common.Marshal(convertedRequest)
 		if err != nil {
@@ -176,6 +164,10 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		if httpResp.StatusCode != http.StatusOK {
 			newApiErr := service.RelayErrorHandler(c.Request.Context(), httpResp, false)
 			// reset status code 重置状态码
+			service.ResetStatusCode(newApiErr, statusCodeMappingStr)
+			return newApiErr
+		}
+		if newApiErr := replayUpstreamNonStream(info, httpResp); newApiErr != nil {
 			service.ResetStatusCode(newApiErr, statusCodeMappingStr)
 			return newApiErr
 		}

@@ -148,6 +148,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if relayFormat != types.RelayFormatOpenAIRealtime {
 			perfmetrics.RecordRelayResult(c.Request.Context(), relayInfo, resultErr)
 		}
+		if relayInfo.IsStream && recovered == nil {
+			service.ObserveStreamOutput(relayInfo.UserId, relayInfo.PerformanceOutputTokens)
+		}
 		if recovered != nil {
 			panic(recovered)
 		}
@@ -159,8 +162,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		defer stopKeepAlive()
 	}
 
-	if relayFormat == types.RelayFormatOpenAI && relayInfo.IsStream && relayInfo.RelayMode == relayconstant.RelayModeChatCompletions &&
-		slices.Contains(generalSettings.NonStreamUpstreamUserIds, relayInfo.UserId) {
+	replayableStream := (relayFormat == types.RelayFormatOpenAI && relayInfo.RelayMode == relayconstant.RelayModeChatCompletions) ||
+		(relayFormat == types.RelayFormatOpenAIResponses && relayInfo.RelayMode == relayconstant.RelayModeResponses) ||
+		relayFormat == types.RelayFormatClaude
+	if relayInfo.IsStream && replayableStream &&
+		(slices.Contains(generalSettings.NonStreamUpstreamUserIds, relayInfo.UserId) ||
+			(!slices.Contains(generalSettings.NonStreamExemptUserIds, relayInfo.UserId) && service.IsBulkStreamUser(relayInfo.UserId))) {
 		// Upstream sends nothing until the whole reply is ready; keep the client connection alive meanwhile.
 		relayInfo.UpstreamNonStream = true
 		stopKeepAlive := helper.StartStreamKeepAlive(c, 15*time.Second)
@@ -188,6 +195,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.StreamStatus = nil
 		relayInfo.PerformanceBusinessRejection = false
 		relayInfo.PerformanceOutputTokens = 0
+		relayInfo.UpstreamNonStreamFormat = ""
 		relayInfo.RetryIndex = retryParam.GetRetry()
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {

@@ -69,6 +69,10 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 			return newAPIError
 		}
+		if newAPIError = replayUpstreamNonStream(info, httpResp); newAPIError != nil {
+			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
+			return newAPIError
+		}
 	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)

@@ -20,10 +20,16 @@ type GeneralSetting struct {
 	CustomCurrencySymbol string `json:"custom_currency_symbol"`
 	// 自定义货币与美元汇率（1 USD = X Custom）
 	CustomCurrencyExchangeRate float64 `json:"custom_currency_exchange_rate"`
-	// TokenRocks: streaming chat requests from these users are sent upstream
-	// as non-streaming and returned to the client as one SSE chunk. Bulk
-	// clients that refuse gzip otherwise pull ~400KB of SSE per reply.
+	// TokenRocks: streaming chat, Responses and Claude Messages requests from
+	// these users are sent upstream as non-streaming and replayed to the
+	// client as SSE. Bulk clients that refuse gzip otherwise pull ~250 bytes
+	// of SSE per output token.
 	NonStreamUpstreamUserIds []int `json:"non_stream_upstream_user_ids"`
+	// Users never switched automatically (resellers whose own users watch the stream).
+	NonStreamExemptUserIds []int `json:"non_stream_exempt_user_ids"`
+	// A user whose streamed output tokens within one 10-minute window reach
+	// this many is switched for 24 hours; 0 turns the automatic switch off.
+	NonStreamAutoOutputTokens int `json:"non_stream_auto_output_tokens"`
 }
 
 // 默认配置
@@ -34,6 +40,7 @@ var generalSetting = GeneralSetting{
 	QuotaDisplayType:           QuotaDisplayTypeUSD,
 	CustomCurrencySymbol:       "¤",
 	CustomCurrencyExchangeRate: 1.0,
+	NonStreamAutoOutputTokens:  1000000,
 }
 
 func init() {

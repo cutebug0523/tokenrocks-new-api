@@ -60,7 +60,7 @@ func SetupApiRequestHeader(info *common.RelayInfo, c *gin.Context, req *http.Hea
 	} else {
 		req.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 		req.Set("Accept", c.Request.Header.Get("Accept"))
-		if info.IsStream && !info.UpstreamNonStream && c.Request.Header.Get("Accept") == "" {
+		if info.IsStream && info.UpstreamNonStreamFormat == "" && c.Request.Header.Get("Accept") == "" {
 			req.Set("Accept", "text/event-stream")
 		}
 	}
@@ -634,7 +634,7 @@ var streamFirstDataTimeoutMax = 300 * time.Second
 // audio streams are left alone because their first event can legitimately
 // take minutes.
 func streamFirstDataTimeout(info *common.RelayInfo) time.Duration {
-	if !info.IsStream || info.UpstreamNonStream {
+	if !info.IsStream || info.UpstreamNonStreamFormat != "" {
 		return 0
 	}
 	switch info.RelayFormat {

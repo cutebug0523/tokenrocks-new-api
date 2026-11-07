@@ -93,15 +93,19 @@ type RelayInfo struct {
 	isFirstResponse   bool
 	//SendLastReasoningResponse bool
 	IsStream bool
-	// UpstreamNonStream asks upstream for a non-streaming chat completion while
-	// the client still receives SSE (general_setting.non_stream_upstream_user_ids).
-	UpstreamNonStream      bool
-	IsGeminiBatchEmbedding bool
-	IsPlayground           bool
-	UsePrice               bool
-	RelayMode              int
-	OriginModelName        string
-	ResponseModel          *ResponseModel
+	// UpstreamNonStream asks upstream for a non-streaming reply while the
+	// client still receives SSE (general_setting non_stream_* settings).
+	UpstreamNonStream bool
+	// UpstreamNonStreamFormat is the protocol of the current attempt's upstream
+	// request when it was sent with stream=false; its JSON reply is replayed as
+	// that protocol's SSE. Empty when the attempt streams upstream.
+	UpstreamNonStreamFormat types.RelayFormat
+	IsGeminiBatchEmbedding  bool
+	IsPlayground            bool
+	UsePrice                bool
+	RelayMode               int
+	OriginModelName         string
+	ResponseModel           *ResponseModel
 
 	// BillingModelName is the pricing identity for this request. It is kept
 	// separate from OriginModelName and UpstreamModelName so virtual pricing

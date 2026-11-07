@@ -164,6 +164,9 @@ export interface SystemStatus {
   WeChatAccountQRCodeImageURL?: string
   turnstile_check?: boolean
   turnstile_site_key?: string
+  // 过不了 Turnstile 时换用的阿里云验证码；服务端配全了才下发
+  aliyun_captcha_prefix?: string
+  aliyun_captcha_scene_id?: string
   email_verification?: boolean
   self_use_mode_enabled?: boolean
   display_in_currency?: boolean

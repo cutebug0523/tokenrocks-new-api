@@ -143,6 +143,10 @@ func InitOptionMap() {
 	common.OptionMap["WeChatAccountQRCodeImageURL"] = ""
 	common.OptionMap["TurnstileSiteKey"] = ""
 	common.OptionMap["TurnstileSecretKey"] = ""
+	common.OptionMap["AliyunCaptchaPrefix"] = ""
+	common.OptionMap["AliyunCaptchaSceneId"] = ""
+	common.OptionMap["AliyunCaptchaAccessKeyId"] = ""
+	common.OptionMap["AliyunCaptchaAccessKeySecret"] = ""
 	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
 	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
@@ -635,6 +639,14 @@ func updateOptionMap(key string, value string) (err error) {
 		common.TurnstileSiteKey = value
 	case "TurnstileSecretKey":
 		common.TurnstileSecretKey = value
+	case "AliyunCaptchaPrefix":
+		common.AliyunCaptchaPrefix = value
+	case "AliyunCaptchaSceneId":
+		common.AliyunCaptchaSceneId = value
+	case "AliyunCaptchaAccessKeyId":
+		common.AliyunCaptchaAccessKeyId = value
+	case "AliyunCaptchaAccessKeySecret":
+		common.AliyunCaptchaAccessKeySecret = value
 	case "QuotaForNewUser":
 		common.QuotaForNewUser, _ = strconv.Atoi(value)
 	case "QuotaForInviter":

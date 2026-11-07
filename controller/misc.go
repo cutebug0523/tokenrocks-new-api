@@ -129,6 +129,11 @@ func GetStatus(c *gin.Context) {
 	}
 
 	// 根据启用状态注入可选内容
+	// 阿里云验证码只给前端身份标和场景，密钥留在服务端；没配全就不下发，前端也就不会换过去
+	if common.TurnstileCheckEnabled && common.AliyunCaptchaReady() {
+		data["aliyun_captcha_prefix"] = common.AliyunCaptchaPrefix
+		data["aliyun_captcha_scene_id"] = common.AliyunCaptchaSceneId
+	}
 	if cs.ApiInfoEnabled {
 		data["api_info"] = console_setting.GetApiInfo()
 	}

@@ -124,6 +124,16 @@ var WeChatAccountQRCodeImageURL = ""
 var TurnstileSiteKey = ""
 var TurnstileSecretKey = ""
 
+// 阿里云验证码 2.0：浏览器过不了 Turnstile 时前端换成它，四项都填了才启用
+var AliyunCaptchaPrefix = ""
+var AliyunCaptchaSceneId = ""
+var AliyunCaptchaAccessKeyId = ""
+var AliyunCaptchaAccessKeySecret = ""
+
+func AliyunCaptchaReady() bool {
+	return AliyunCaptchaPrefix != "" && AliyunCaptchaSceneId != "" && AliyunCaptchaAccessKeyId != "" && AliyunCaptchaAccessKeySecret != ""
+}
+
 var TelegramBotToken = ""
 var TelegramBotName = ""
 

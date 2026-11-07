@@ -7,14 +7,72 @@
 <meta name="description" content="一套接口接入 DeepSeek、Qwen、Claude、GPT 等主流模型，价格低至官方的 0.5 折，按量付费，余额不过期。">
 <link rel="icon" href="/_s/favicon.ico">
 <link rel="stylesheet" href="/_s/site.css">
+<script>
+  // 首屏小助手下载按钮按系统显示：给 <html> 加 os-mac / os-win / os-phone，Mac 包没传上去加 no-mac。和 /guide/clients/ 页头那段一样，改认法两处一起改
+  ;(function (ua) {
+    var os = /Android|iPhone|iPad|iPod|Mobile/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? 'phone' : /Windows/.test(ua) ? 'win' : /Macintosh/.test(ua) ? 'mac' : ''
+    if (os) document.documentElement.classList.add('os-' + os)
+    // ponytail: 每次打开多一个 HEAD 请求，Mac 包长期在了可以删
+    fetch('/_s/helper/TokenRocks-helper.dmg', { method: 'HEAD', cache: 'no-store' }).then(function (r) { if (!r.ok) document.documentElement.classList.add('no-mac') }, function () {})
+  })(navigator.userAgent)
+</script>
 <style>
-  .hero-inner { max-width: 1200px; margin: 0 auto; padding: 80px 24px 72px; display: flex; flex-wrap: wrap; gap: 56px; align-items: center; }
+  .hero-inner { max-width: 1200px; margin: 0 auto; padding: 64px 24px 56px; display: flex; flex-wrap: wrap; gap: 56px; align-items: flex-start; }
   .stat-grid { padding: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; white-space: nowrap; }
   .section { max-width: 1200px; margin: 0 auto; padding: 88px 24px; }
   .h2 { margin: 0; font-size: 38px; font-weight: 800; letter-spacing: -0.8px; }
   .cta-box { max-width: 1200px; margin: 0 auto; background: var(--brand); color: #fff; border-radius: 20px; padding: 56px 48px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 24px; }
+  /* 首屏右边：控制台示意在后面，小助手窗口从统计数字下面开始，压住它右下半边。两个放进同一张网格里叠，高度自己撑开 */
+  .hero-visual { flex: 1 1 560px; max-width: 700px; min-width: 0; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 110px; grid-template-rows: 172px auto; }
+  .hero-console { grid-area: 1 / 1 / 3 / 2; align-self: start; margin: 0; }
+  .hp { grid-area: 2 / 1 / 3 / 3; justify-self: end; position: relative; width: 370px; margin: 0; }
+  .hp-win { overflow: hidden; background: #F6F7F9; border: 1px solid #E5E7EB; border-radius: 14px; box-shadow: 0 32px 64px -24px rgba(11,18,32,0.4); font-size: 13.5px; line-height: 1.5; color: #0B1220; }
+  .hp-bar { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; background: #FFFFFF; border-bottom: 1px solid #ECEEF1; font-size: 12px; font-weight: 600; color: #374151; }
+  .hp-bar i { width: 9px; height: 9px; border-radius: 50%; background: #E2E5E9; }
+  .hp-bar i:last-of-type { margin-right: 6px; }
+  .hp-body { padding: 14px; }
+  /* 窗口顶上的绿卡片（真软件里是打招呼）换成介绍和下载：小果冻趴右上角，按钮那行占满整宽 */
+  .hp-hello { position: relative; overflow: hidden; padding: 18px; border-radius: 14px; background: linear-gradient(135deg, #0E7C66, #0B5D4D); color: #FFFFFF; box-shadow: 0 10px 24px -12px rgba(11,93,77,0.6); }
+  .hp-wm { position: absolute; right: -12px; bottom: -44px; width: 124px; opacity: 0.22; transform: rotate(-14deg); pointer-events: none; }
+  #hero-buddy { position: absolute; right: 6px; top: 6px; width: 84px; height: 84px; cursor: pointer; }
+  .hp-hi, .hp-intro { position: relative; margin: 0 80px 0 0; }
+  .hp-hi { font-size: 21px; font-weight: 800; line-height: 1.3; letter-spacing: -0.3px; }
+  .hp-intro { margin-top: 6px; font-size: 14px; line-height: 1.6; }
+  .hp-hello :focus-visible { outline-color: #FFFFFF; }
+  .hp-intro a { color: #FFFFFF; font-weight: 600; white-space: nowrap; text-underline-offset: 2px; }
+  .hp-dl { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 14px; }
+  .hp-get { display: inline-flex; align-items: center; height: 38px; padding: 0 18px; border-radius: 9px; background: #FFFFFF; color: #0B5D4D; font-size: 15px; font-weight: 700; text-decoration: none; box-shadow: 0 8px 16px -10px rgba(0,0,0,0.5); }
+  .hp-get:hover { background: #F0FAF7; }
+  /* 本系统的包排前面当大按钮，另一个系统缩成一行小字；认不出系统两个都给大按钮 */
+  .os-mac .hp-get[data-os="mac"], .os-win .hp-get[data-os="win"] { order: -1; }
+  .os-mac .hp-get[data-os="win"], .os-win .hp-get[data-os="mac"] { height: auto; padding: 0; background: none; box-shadow: none; color: #FFFFFF; font-size: 13px; font-weight: 500; text-decoration: underline; }
+  .hp-soon, .hp-mac-soon, .os-phone .hp-get, .no-mac .hp-get[data-os="mac"], .os-mac .hp-wintip, .os-phone .hp-wintip { display: none; }
+  .no-mac .hp-mac-soon { display: inline; font-size: 13px; }
+  .no-mac.os-mac .hp-mac-soon { display: inline-block; padding: 8px 16px; border-radius: 999px; background: rgba(0,0,0,0.18); font-size: 15px; font-weight: 700; }
+  .os-phone .hp-mac-soon { display: none; }
+  .os-phone .hp-soon { display: inline-block; padding: 8px 14px; border-radius: 10px; background: rgba(0,0,0,0.18); font-size: 13.5px; font-weight: 600; }
+  /* 安装包没有 Windows 代码签名，浏览器和系统都会拦一下：和教程页一样把怎么放行写在按钮下面 */
+  .hp-wintip { flex-basis: 100%; font-size: 12px; line-height: 1.5; }
+  .hp-h { margin: 16px 2px 7px; font-size: 11.5px; font-weight: 600; color: #6B7280; }
+  .hp-panel { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 10px; }
+  .hp-panel + .hp-panel { margin-top: 10px; }
+  .hp-panel > * + * { border-top: 1px solid #E5E7EB; }
+  .hp-row { display: flex; align-items: center; gap: 11px; padding: 10px 13px; }
+  .hp-row img { flex: none; width: 30px; height: 30px; }
+  .hp-name { flex: 1; min-width: 0; font-weight: 500; }
+  .hp-name small { display: block; overflow: hidden; font-size: 11.5px; font-weight: 400; color: #6B7280; white-space: nowrap; text-overflow: ellipsis; }
+  .hp-name small b { font-weight: 500; color: #0E7C66; }
+  .hp-btn { flex: none; height: 28px; padding: 0 12px; border: 1px solid #E5E7EB; border-radius: 7px; background: #FFFFFF; font-size: 12.5px; font-weight: 600; line-height: 26px; }
+  .hp-btn.hp-main { background: #0E7C66; border-color: #0E7C66; color: #FFFFFF; }
   @media (max-width: 640px) {
+    /* 手机上两张图上下叠：控制台下面几行反正会被小助手挡住，藏掉省一屏 */
+    .hero-visual { display: block; }
+    .hero-rows { display: none; }
+    .hp { width: 340px; max-width: 92%; margin: -40px 0 0 auto; }
+    #hero-buddy { width: 68px; height: 68px; }
+    .hp-hi, .hp-intro { margin-right: 62px; }
+    .hp-hi { font-size: 18px; }
     .hero-inner { padding: 48px 16px 40px; gap: 36px; }
     .stat-grid { gap: 8px; padding: 12px; }
     .stat-value { font-size: 17px; }
@@ -63,7 +121,8 @@
         </div>
       </div>
 
-      <figure aria-label="控制台界面示意（示例数据）" style="flex: 1 1 480px; min-width: 0; margin: 0; background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 14px; box-shadow: 0 24px 48px -24px rgba(11,18,32,0.25); overflow: hidden;">
+      <div class="hero-visual">
+      <figure class="hero-console" aria-label="控制台界面示意（示例数据）" style="background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 14px; box-shadow: 0 24px 48px -24px rgba(11,18,32,0.25); overflow: hidden;">
         <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid #F0F1F3; font-size: 13px; color: #6B7280;">
           <span style="font-weight: 600; color: #0B1220;">用量概览 · 本月</span><span>示例数据</span>
         </div>
@@ -81,7 +140,7 @@
           <div style="flex: 1; height: 88%; background: #0E7C66; border-radius: 4px;"></div>
           <div style="flex: 1; height: 76%; background: #D1E7E1; border-radius: 4px;"></div>
         </div>
-        <div style="border-top: 1px solid #F0F1F3;">
+        <div class="hero-rows" style="border-top: 1px solid #F0F1F3;">
           <div style="display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #F6F7F9; font-size: 14px;">
             <span style="flex: 1 1 auto; font-weight: 500;">研发 · 编码助手</span>
             <span style="font-size: 12px; color: #374151; background: #F3F4F6; padding: 2px 8px; border-radius: 6px;">auto</span>
@@ -99,6 +158,39 @@
           </div>
         </div>
       </figure>
+
+      <figure class="hp" aria-label="TR助手界面示意（示例数据）">
+        <div class="hp-win">
+          <div class="hp-bar" aria-hidden="true"><i></i><i></i><i></i>TR助手</div>
+          <div class="hp-body">
+            <div class="hp-hello">
+              <img class="hp-wm" src="/_s/logo.png" alt="">
+              <canvas id="hero-buddy" title="戳一下" aria-hidden="true"></canvas>
+              <h2 class="hp-hi">主流智能体一键接入</h2>
+              <p class="hp-intro">登录 TR助手点一下就配好，不用复制密钥、一项项填。<a href="/guide/clients/#helper">怎么用</a></p>
+              <div class="hp-dl">
+                <a class="hp-get" data-os="mac" href="/_s/helper/TokenRocks-helper.dmg">下载 Mac 版</a>
+                <span class="hp-mac-soon">Mac 版即将上线</span>
+                <a class="hp-get" data-os="win" href="/_s/helper/TokenRocks-helper-setup.exe">下载 Windows 版</a>
+                <span class="hp-soon">手机版即将上线，请在电脑上下载</span>
+                <span class="hp-wintip">浏览器提示文件不常见，选「保留」；打开时被拦，点「更多信息」→「仍要运行」</span>
+              </div>
+            </div>
+            <div aria-hidden="true">
+            <div class="hp-h">本机客户端</div>
+            <div class="hp-panel">
+              <div class="hp-row"><img src="/_s/clients/dsh.png" alt=""><span class="hp-name">DeepSeek Harness<small><b>已接入</b> · 默认令牌 · 8 个模型</small></span><span class="hp-btn">修改</span></div>
+              <div class="hp-row"><img src="/_s/clients/zcode.png" alt=""><span class="hp-name">ZCode<small><b>已接入</b> · 默认令牌 · 8 个模型</small></span><span class="hp-btn">修改</span></div>
+              <div class="hp-row"><img src="/_s/clients/workbuddy.png" alt=""><span class="hp-name">WorkBuddy<small>已安装，还没接入</small></span><span class="hp-btn hp-main">接入</span></div>
+            </div>
+            <div class="hp-panel">
+              <div class="hp-row"><span class="hp-name">余额 <b>¥36.80</b><small>今日已用 ¥1.24 · 明细</small></span><span class="hp-btn">充值</span></div>
+            </div>
+            </div>
+          </div>
+        </div>
+      </figure>
+      </div>
     </div>
   </section>
 
@@ -161,7 +253,7 @@
           <div><span style="font-size: 44px; font-weight: 800; letter-spacing: -1px;">0.5 折</span><span style="font-size: 15px; color: #4B5563;"> 起</span></div>
           <p style="margin: 0; font-size: 15px; line-height: 1.7; color: #4B5563;">单价极低，但不算稳定，福利组，能用就用。</p>
           <ul style="margin: 0; padding-left: 20px; font-size: 15px; line-height: 2; color: #374151;">
-            <li>国模 0.5 折起，Kimi 1.5 折</li><li>Claude、Grok 0.6 折，GPT 0.5 折</li><li>高峰可能卡顿报错，个别上游附带固定提示词</li>
+            <li>国模 0.5 折起，Kimi 1.5 折</li><li>Claude、Grok、Gemini 0.6 折，GPT 0.5 折（Luna 1 折）</li><li>高峰可能卡顿报错，个别上游附带固定提示词</li>
           </ul>
           <a href="/sign-up" style="margin-top: auto; display: flex; justify-content: center; align-items: center; min-height: 46px; border-radius: 8px; border: 1px solid #D1D5DB; text-decoration: none; font-weight: 600;">免费开始</a>
         </div>
@@ -190,6 +282,7 @@
   <section aria-labelledby="faq-title" style="max-width: 860px; margin: 0 auto; padding: 88px 24px; display: flex; flex-direction: column; gap: 24px;">
     <h2 id="faq-title" style="margin: 0; font-size: 34px; font-weight: 800; text-align: center;">常见问题</h2>
     <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">接口地址填什么？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">OpenAI 兼容客户端填 https://api.tokenrocks.ai/v1，Claude Code 等填 https://api.tokenrocks.ai。用 DeepSeek Harness、WorkBuddy、ZCode 的，看<a href="/guide/clients/" style="color: #0E7C66;">客户端图文教程</a>；其他见<a href="/guide/" style="color: #0E7C66;">使用指南</a>。</p></details>
+    <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">DeepSeek Harness、ZCode、WorkBuddy 能一键接入吗？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">能。装 <a href="/guide/clients/#helper" style="color: #0E7C66;">TR助手</a>，登录后点一下就把这三个客户端配好，菜单栏（Windows 是右下角托盘）里还能看余额。不想装软件，也可以照<a href="/guide/clients/#prep" style="color: #0E7C66;">图文教程</a>手动添加。</p></details>
     <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">特价、平价和企业满血有什么区别？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">国模平价的线路经过长对话实测筛选，缓存稳定，国产模型日常用推荐；特价最便宜，但已停止维护，高峰可能卡顿报错，能用就用；企业满血走官方原版模型，稳定优先。</p></details>
     <details style="border-bottom: 1px solid #E5E7EB; padding: 18px 0;"><summary style="font-size: 17px; font-weight: 600;">怎么充值？余额会过期吗？</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.75; color: #4B5563;">控制台「钱包」用支付宝在线充值，付完自动到账；有兑换码也可以在钱包页兑换。余额不过期。</p></details>
   </section>
@@ -223,6 +316,44 @@
       document.querySelectorAll('[data-model-count]').forEach(function (el) { el.textContent = j.data.length })
     })
     .catch(function () {})
+</script>
+<script src="/_s/buddy.js"></script>
+<script>
+  // 首屏小助手窗口里的小果冻：转头看鼠标，点它会弹一下
+  ;(function () {
+    var c = document.getElementById('hero-buddy')
+    if (!window.TRBuddy) return
+    var bot = new TRBuddy({ morphEvery: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 30 })
+    var unit = function (v) { return Math.max(-1, Math.min(1, v)) }
+    var mouse = null, seen = false, raf = 0, last = 0
+    addEventListener('mousemove', function (e) { mouse = { x: e.clientX, y: e.clientY } })
+    document.documentElement.addEventListener('mouseleave', function () { mouse = null; bot.lookX = bot.lookY = 0 })
+    c.onclick = function () { bot.poke() }
+    function frame(now) {
+      // 滚出屏幕就停，滚回来再接着画
+      raf = seen ? requestAnimationFrame(frame) : 0
+      var dt = Math.min(0.05, (now - last) / 1000)
+      last = now
+      var r = c.getBoundingClientRect()
+      if (!r.width) return
+      // 同小助手：lookY 朝上为正，鼠标在小果冻上面就是正的
+      if (mouse) {
+        bot.lookX = unit((mouse.x - (r.left + r.width / 2)) / 300)
+        bot.lookY = unit((r.top + r.height * 0.55 - mouse.y) / 300)
+      }
+      bot.update(dt)
+      var dpr = Math.min(2, devicePixelRatio || 1)
+      if (c.width !== Math.round(r.width * dpr)) c.width = c.height = Math.round(r.width * dpr)
+      var x = c.getContext('2d')
+      x.setTransform(dpr, 0, 0, dpr, 0, 0)
+      x.clearRect(0, 0, r.width, r.width)
+      bot.draw(x, r.width, r.width)
+    }
+    new IntersectionObserver(function (es) {
+      seen = es[es.length - 1].isIntersecting // 一次可能来好几条，最后一条才是现在的状态
+      if (seen && !raf) { last = performance.now(); raf = requestAnimationFrame(frame) }
+    }).observe(c)
+  })()
 </script>
 <script src="/_s/wechat.js?v=20261101"></script>
 </body>

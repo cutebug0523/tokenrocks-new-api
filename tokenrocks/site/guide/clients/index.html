@@ -4,9 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>编程客户端配置 · TokenRocks</title>
-<meta name="description" content="在 DeepSeek Harness、ZCode、WorkBuddy 里手动添加 TokenRocks：接口地址、Responses 协议、上下文、图片和思考设置，每一步都有截图。">
+<meta name="description" content="在 DeepSeek Harness、ZCode、WorkBuddy 里接入 TokenRocks：装 TR助手点一下就配好，或者手动添加接口地址、Responses 协议、上下文、图片和思考设置，每一步都有截图。">
 <link rel="icon" href="/_s/favicon.ico">
 <link rel="stylesheet" href="/_s/site.css">
+<script>
+  // 按系统给 <html> 加 os-mac / os-win / os-phone，小助手下载卡片第一次画出来就只突出本系统的按钮（认法和 /_s/helper.js 控制台横幅一致；iPad 的 Safari 也自称 Macintosh，靠触屏分开）
+  ;(function (ua) {
+    var os = /Android|iPhone|iPad|iPod|Mobile/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? 'phone' : /Windows/.test(ua) ? 'win' : /Macintosh/.test(ua) ? 'mac' : ''
+    if (os) document.documentElement.classList.add('os-' + os)
+    // Mac 安装包还没传上去（404）就先写「Mac 版即将上线」，传上去以后自动恢复，不用改页面。ponytail: 每次打开多一个 HEAD 请求，两个包都长期在了可以删
+    fetch('/_s/helper/TokenRocks-helper.dmg', { method: 'HEAD', cache: 'no-store' }).then(function (r) { if (!r.ok) document.documentElement.classList.add('no-mac') }, function () {})
+  })(navigator.userAgent)
+</script>
 <style>
   .doc { --key: #e8590c; max-width: 1200px; margin: 0 auto; padding: 0 24px; display: flex; gap: 40px; align-items: flex-start; }
   .doc-nav { flex: 0 0 220px; position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: 36px 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
@@ -46,6 +55,20 @@
     .doc-main h1 { font-size: 32px !important; }
     .brand-sub { display: none; }
   }
+  /* 小助手下载卡片：本系统的按钮排前面、填主色，另一个系统缩成小字；手机上不给安装包，写即将上线。认不出系统或没有脚本时两个按钮一样 */
+  .trh-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .doc-main .trh-btn { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: none; }
+  .doc-main .trh-btn:hover { border-color: var(--brand); color: var(--brand-dark); }
+  .os-mac .trh-btn[data-os="mac"], .os-win .trh-btn[data-os="win"] { order: -1; background: var(--brand); border-color: var(--brand); color: #fff; }
+  .os-mac .trh-btn[data-os="mac"]:hover, .os-win .trh-btn[data-os="win"]:hover { background: var(--brand-dark); color: #fff; }
+  .os-mac .trh-btn[data-os="win"], .os-win .trh-btn[data-os="mac"] { min-height: 0; padding: 0; border: 0; background: none; color: var(--muted); font-size: 13px; font-weight: 400; text-decoration: underline; }
+  .trh-soon, .os-phone .trh-btn, .os-mac [data-tip="win"], .os-win [data-tip="mac"], .os-phone [data-tip] { display: none; }
+  .os-phone .trh-soon { display: block; font-size: 13px; color: var(--muted); }
+  .trh-mac-soon, .no-mac .trh-btn[data-os="mac"], .no-mac [data-tip="mac"] { display: none; }
+  .no-mac .trh-mac-soon { display: inline; font-size: 13px; color: var(--muted); }
+  .no-mac.os-mac .trh-mac-soon { display: inline-block; padding: 6px 14px; border-radius: 999px; background: #fff; border: 1px solid var(--brand-border); color: var(--brand); font-size: 14px; font-weight: 600; }
+  .os-phone .trh-mac-soon { display: none; }
+  .trh-soon b { display: inline-block; margin: 0 8px 4px 0; padding: 4px 12px; border-radius: 999px; background: #fff; border: 1px solid var(--brand-border); color: var(--brand); }
 </style>
 </head>
 <body>
@@ -77,6 +100,7 @@
     <a href="/guide/">使用指南</a>
     <a href="/guide/clients/" aria-current="page">编程客户端</a>
     <span class="label">本页</span>
+    <a href="#helper">一键接入</a>
     <a href="#prep">先准备好</a>
     <a href="#dsh">DeepSeek Harness</a>
     <a href="#zcode">ZCode</a>
@@ -86,15 +110,27 @@
   <main class="doc-main">
     <div style="display: flex; flex-direction: column; gap: 10px;">
       <h1 style="margin: 0; font-size: 40px; font-weight: 800; letter-spacing: -0.8px; line-height: 1.2;">编程客户端配置</h1>
-      <p style="font-size: 18px; color: var(--muted);">DeepSeek Harness、ZCode、WorkBuddy 没有一键导入，需要手动添加一次，以后打开就能用。截图里<b>绿色框</b>是要点或要填的地方，<b>橙色框</b>是 API 密钥，粘贴你自己的。看不清就点图片看大图。</p>
+      <p style="font-size: 18px; color: var(--muted);">DeepSeek Harness、ZCode、WorkBuddy 自己没有一键导入。最省事的是装 <a href="#helper">TR助手</a>，点一下就配好；也可以按下面的步骤手动添加一次，以后打开就能用。截图里<b>绿色框</b>是要点或要填的地方，<b>橙色框</b>是 API 密钥，粘贴你自己的。看不清就点图片看大图。</p>
     </div>
 
     <details class="mobile-toc">
       <summary>本页目录</summary>
       <nav aria-label="本页目录（手机）">
-        <a href="#prep">先准备好</a><a href="#dsh">DeepSeek Harness</a><a href="#zcode">ZCode</a><a href="#workbuddy">WorkBuddy</a><a href="/guide/">返回使用指南</a>
+        <a href="#helper">一键接入</a><a href="#prep">先准备好</a><a href="#dsh">DeepSeek Harness</a><a href="#zcode">ZCode</a><a href="#workbuddy">WorkBuddy</a><a href="/guide/">返回使用指南</a>
       </nav>
     </details>
+
+    <section id="helper" class="note" aria-labelledby="helper-title">
+      <h2 id="helper-title">装 TR助手，一键接入</h2>
+      <p>TR助手装在电脑上，登录后点「接入」，就把 TokenRocks 写进本机的 DeepSeek Harness、ZCode、WorkBuddy：模型、上下文、看图、思考都设好，不用复制密钥、一项项填。菜单栏（Windows 是右下角托盘）里还能看余额，快用完了会提醒。</p>
+      <div class="trh-links">
+        <a class="trh-btn" data-os="mac" href="/_s/helper/TokenRocks-helper.dmg">下载 Mac 版</a>
+        <span class="trh-mac-soon">Mac 版即将上线</span>
+        <a class="trh-btn" data-os="win" href="/_s/helper/TokenRocks-helper-setup.exe">下载 Windows 版</a>
+        <span class="trh-soon"><b>手机版即将上线</b>现在只有电脑版，在电脑上打开这个页面下载</span>
+      </div>
+      <p style="font-size: 14px;"><span data-tip="mac">Mac 版 Apple 芯片和 Intel 都能用，打开后照窗口里的箭头，把图标拖进「应用程序」。</span><span data-tip="win">Windows 版下载时，浏览器如果提示这个文件不常见，选「保留」（Edge 是点下载项右边的「…」→「保留」，弹出提示后点「显示更多」→「仍然保留」）；第一次打开如果提示「Windows 已保护你的电脑」，点「更多信息」再点「仍要运行」。</span>不想装软件，就照下面的步骤手动添加。</p>
+    </section>
 
     <section id="prep" aria-labelledby="prep-title">
       <h2 id="prep-title">先准备好</h2>

@@ -48,6 +48,7 @@ const STYLE = '【回复风格】先直接答买家问的那一点，一到两�
 // 读买家发的截图。客服令牌在国模企业满血分组，这个分组能看图的是 glm-5.3-flash；不开思考 12 秒左右，开了要 20~40 秒，读得差不多
 const VISION_MODEL = process.env.XYCS_VISION_MODEL || 'glm-5.3-flash'
 const TAKEOVER_MS = 30 * 60 * 1000 // 店主 30 分钟内亲自回过，这个买家不插话
+const RETRY_FOR_MS = 20 * 60 * 1000 // 调模型失败每 90 秒重答，买家第一条发出 20 分钟后还不成就不回了，免得隔太久冒出一句
 const RECENT = 16 // 给模型看的最近聊天条数，更早的靠总结
 const SUMMARIZE_AT = 30 // 最近之外还没总结的超过这么多条，就更新一次总结
 const GAP_MS = 6 * 3600 * 1000 // 两条消息隔这么久，聊天记录里标一行「隔了多久」
@@ -323,7 +324,9 @@ async function draftOnce(s) {
   // 截图先让看图模型读成文字，档案里那条「[图片]」也换掉，后面每次出草稿都看得到（放回来重答的已经读过）
   for (const m of msgs.filter((x) => x.image && !x.text.startsWith('[图片，'))) {
     try {
-      m.text = `[图片，系统读出来的内容：${maskSecrets(await describeImage(m.image))}]`
+      // 读图失败多半是看图模型超时、上游鉴权失败或网关过载，隔 5 秒再读一次
+      const seen = await describeImage(m.image).catch(() => new Promise((r) => setTimeout(r, 5000)).then(() => describeImage(m.image)))
+      m.text = `[图片，系统读出来的内容：${maskSecrets(seen)}]`
     } catch (err) {
       m.text = '[图片，没读出来]'
       log('读图失败', String(err.message || err).slice(0, 160))
@@ -350,7 +353,7 @@ async function draftOnce(s) {
     rec.trError = String(err.message || err).slice(0, 120)
   }
   const t0 = Date.now()
-  // 模型偶尔超时或上游维护，等一会儿再试一次；还不行就回兜底那句并提醒店主，不让买家干等
+  // 模型偶尔超时、上游鉴权失败或网关过载，等 8 秒再试一次；还不行就放回去过 90 秒重答（见下面），不发兜底那句
   for (let attempt = 1; attempt <= 2 && rec.raw === undefined; attempt++) {
     try {
       rec.raw = await chat(`${prompt()}\n\n${STYLE}`, buyerContext(b, s, mine, msgs, paid, tr))
@@ -371,8 +374,16 @@ async function draftOnce(s) {
       rec.wouldSend = false
       rec.why = '买家只是附和，不用回'
     }
-  } else if (lastBotText(b, s.sid) !== FALLBACK) {
-    rec.draft = FALLBACK
+  } else if (Date.now() - msgs[0].ts < RETRY_FOR_MS) {
+    // 11-03～11-06 一店 17 次调模型连着失败都发了「记下了」，店主不想再接。这几条放回去 90 秒后重答，期间买家再发就合起来答
+    s.pending.unshift(...msgs)
+    clearTimeout(s.timer)
+    s.timer = setTimeout(() => draft(s), 90000)
+    rec.wouldSend = false
+    rec.why = '调模型失败，90 秒后重答'
+  } else {
+    rec.wouldSend = false
+    rec.why = '调模型 20 分钟都没成，不回了'
     rec.alert = true
   }
   // 「记下了，等店主」一段对话只说一次，店主回过之后才能再说
@@ -425,11 +436,6 @@ function saidNoted(b, sid) {
     if (h.who === 'bot' && /记下了/.test(h.text)) return true
   }
   return false
-}
-
-// 这个会话里机器人最近一次说的话；模型连续失败时，同一句兜底不重复发
-function lastBotText(b, sid) {
-  return b.timeline.findLast((h) => h.sid === sid && h.who === 'bot')?.text
 }
 
 async function deliver(rec, s, b, msgs) {
@@ -526,6 +532,8 @@ function trLine(t) {
   parts.push(t.last_used ? `最近一次调用 ${t.last_used}` : '还没调用过')
   if (t.models_7d) parts.push(`近 7 天用过 ${t.models_7d}`)
   parts.push(`近 24 小时报错 ${t.errors_24h} 次`)
+  // 最近几条报错原文、请求地址和模型名，机器人照知识库第六节直接判断（多了 /v1、模型名写错），不用买家截图
+  for (const e of t.recent_errors || []) parts.push(`${e.at} 报错（模型 ${e.model || '空'}，请求地址 ${e.path || '未知'}）：${maskSecrets(e.text || '')}`)
   return `${head}：${parts.join('，')}`
 }
 
@@ -1154,7 +1162,9 @@ async function selftest() {
   record(b2, { id: 'x', ts: 1, who: 'buyer', text: '1', sid: 's1' })
   assert(!hasReplied(b2, 's1'), '买家刚开口，还没人回过')
   record(b2, { id: 'y', ts: 2, who: 'bot', text: FALLBACK, sid: 's1' })
-  assert(hasReplied(b2, 's1') && !hasReplied(b2, 's2') && lastBotText(b2, 's1') === FALLBACK && lastBotText(b2, 's2') === undefined, '有人回过、机器人最近一句')
+  assert(hasReplied(b2, 's1') && !hasReplied(b2, 's2'), '有人回过')
+  const line = trLine({ key: 'abcd', status: 3, errors_24h: 1, recent_errors: [{ at: '11-07 10:00', model: 'glm-5.3', path: '/v1/v1/messages', text: 'Invalid URL sk-abcDEF123456' }] })
+  assert(line.includes('11-07 10:00 报错（模型 glm-5.3，请求地址 /v1/v1/messages）：Invalid URL <已打码>'), '账号那行带最近报错，遮密钥')
   assert(saidNoted(b2, 's1') && !saidNoted(b2, 's2'), '说过记下了')
   record(b2, { id: 'z', ts: 3, who: 'owner', text: '我看看', sid: 's1' })
   assert(!saidNoted(b2, 's1'), '店主回过之后可以再说记下了')

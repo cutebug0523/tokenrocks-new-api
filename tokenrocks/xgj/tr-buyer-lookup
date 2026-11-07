@@ -24,6 +24,12 @@ SELECT coalesce(jsonb_agg(x), '[]'::jsonb) FROM (  -- jsonb 输出是单行，js
     u.username, round(u.quota / {YUAN}, 2) AS balance_yuan, round(u.used_quota / {YUAN}, 2) AS used_yuan, u.request_count,
     (SELECT to_char(to_timestamp(max(l.created_at)) AT TIME ZONE 'Asia/Shanghai', 'MM-DD HH24:MI') FROM logs l WHERE l.user_id = u.id AND l.type = 2) AS last_used,
     (SELECT count(*) FROM logs l WHERE {recent} - 86400 AND l.type = 5) AS errors_24h,
+    (SELECT jsonb_agg(e) FROM (  -- 最近 3 条报错：原文（去掉请求号）、请求地址、模型名。other 用正则取，不转 jsonb，坏 JSON 也不报错
+      SELECT to_char(to_timestamp(l.created_at) AT TIME ZONE 'Asia/Shanghai', 'MM-DD HH24:MI') AS at, l.model_name AS model,
+        substring(l.other from '"request_path":"([^"]*)"') AS path,
+        left(regexp_replace(l.content, '\\s*\\(request id: [^)]*\\)', '', 'g'), 200) AS text
+      FROM logs l WHERE {recent} - 86400 AND l.type = 5 ORDER BY l.created_at DESC LIMIT 3
+    ) e) AS recent_errors,
     (SELECT string_agg(DISTINCT l.model_name, ',') FROM logs l WHERE {recent} - 7 * 86400 AND l.type = 2) AS models_7d
   FROM redemptions r LEFT JOIN users u ON u.id = r.used_user_id
   WHERE r.key IN ({",".join(f"'{c}'" for c in codes)})

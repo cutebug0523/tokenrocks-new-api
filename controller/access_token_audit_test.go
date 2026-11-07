@@ -26,6 +26,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -44,7 +45,7 @@ func setupAccessTokenAudit(t *testing.T) (*model.User, string) {
 	require.NoError(t, err)
 	require.NoError(t, i18n.Init())
 	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.Log{}, &model.AuditLog{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.UserAccessToken{}, &model.Option{},
-		&model.AuthFlow{}, &model.TwoFA{}, &model.TwoFABackupCode{}, &model.PasskeyCredential{}, &model.UserOAuthBinding{}))
+		&model.AuthFlow{}, &model.TwoFA{}, &model.TwoFABackupCode{}, &model.PasskeyCredential{}, &model.UserOAuthBinding{}, &model.Checkin{}))
 	model.DB, model.LOG_DB = db, db
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 	require.NoError(t, model.EnsureLegacyAccessTokenRetireAt(time.Now().Unix()))
@@ -99,6 +100,9 @@ func newAccessTokenTestRouter() *gin.Engine {
 	selfRoute.POST("/helper/approve", HelperLoginApprove)
 	selfRoute.POST("/helper/logout", HelperLogout)
 	selfRoute.GET("/helper/activity", HelperActivity)
+	selfRoute.GET("/helper/checkin", HelperCheckinStatus)
+	selfRoute.POST("/helper/checkin", HelperCheckin)
+	selfRoute.POST("/checkin", middleware.TurnstileCheck(), DoCheckin)
 	adminRoute := userRoute.Group("/", middleware.AdminAuth())
 	adminRoute.DELETE("/:id", DeleteUser)
 	return router
@@ -1434,4 +1438,61 @@ func TestHelperActivityPollReturnsRelayEventsSinceSeq(t *testing.T) {
 	require.Len(t, polls, 1)
 	assert.False(t, polls[0].Success)
 	assert.Equal(t, http.StatusForbidden, polls[0].Status)
+}
+
+// 小助手的签到不过人机验证，靠的是只认小助手登录发的令牌：别的令牌、浏览器会话都拿不到这条路，
+// 原来的签到接口照旧要验证，一天也只能签一次。
+func TestHelperCheckinSkipsTurnstileOnlyForTheHelperToken(t *testing.T) {
+	user, _ := setupAccessTokenAudit(t)
+	router := newAccessTokenTestRouter()
+	setting := operation_setting.GetCheckinSetting()
+	previousSetting, previousTurnstile := *setting, common.TurnstileCheckEnabled
+	*setting = operation_setting.CheckinSetting{Enabled: true, MinQuota: 500, MaxQuota: 500}
+	common.TurnstileCheckEnabled = true
+	t.Cleanup(func() { *setting, common.TurnstileCheckEnabled = previousSetting, previousTurnstile })
+
+	_, browser := createAccessTokenTestSession(t, user.Id, "checkin-session")
+	verifier, challenge := helperPKCE(t)
+	response := redeemHelperLogin(router, approveHelperLogin(t, router, browser, challenge), verifier)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var issued struct {
+		Data struct {
+			AccessToken string `json:"access_token"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &issued))
+	helper := issued.Data.AccessToken
+	other, _ := createScopedAccessToken(t, user.Id, 0, "wallet:read", "wallet:write")
+
+	for _, credential := range []string{other, browser} {
+		for _, method := range []string{"GET", "POST"} {
+			response := accessTokenRequest(router, method, "/api/user/helper/checkin", credential, "", "")
+			assert.Contains(t, response.Body.String(), `"code":"HELPER_TOKEN_REQUIRED"`, "%s by a non-helper credential", method)
+		}
+	}
+	assert.Contains(t, accessTokenRequest(router, "POST", "/api/user/checkin", other, "", "").Body.String(), "Turnstile token is empty", "the original route still verifies")
+
+	type statusResponse struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Stats struct {
+				CheckedInToday bool `json:"checked_in_today"`
+			} `json:"stats"`
+		} `json:"data"`
+	}
+	var status statusResponse
+	require.NoError(t, common.Unmarshal(accessTokenRequest(router, "GET", "/api/user/helper/checkin", helper, "", "").Body.Bytes(), &status))
+	require.True(t, status.Success)
+	assert.False(t, status.Data.Stats.CheckedInToday)
+
+	response = accessTokenRequest(router, "POST", "/api/user/helper/checkin", helper, "", "")
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	assert.Contains(t, response.Body.String(), `"quota_awarded":500`)
+	assert.Contains(t, accessTokenRequest(router, "POST", "/api/user/helper/checkin", helper, "", "").Body.String(), "Already checked in today")
+	reloaded, err := model.GetUserById(user.Id, true)
+	require.NoError(t, err)
+	assert.Equal(t, user.Quota+500, reloaded.Quota, "awarded once")
+
+	require.NoError(t, common.Unmarshal(accessTokenRequest(router, "GET", "/api/user/helper/checkin", helper, "", "").Body.Bytes(), &status))
+	assert.True(t, status.Data.Stats.CheckedInToday)
 }

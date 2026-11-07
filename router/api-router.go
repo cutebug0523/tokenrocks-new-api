@@ -116,6 +116,9 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/helper/approve", middleware.CriticalRateLimit(), controller.HelperLoginApprove)
 				selfRoute.POST("/helper/logout", middleware.CriticalRateLimit(), controller.HelperLogout)
 				selfRoute.GET("/helper/activity", controller.HelperActivity)
+				// 小助手里的签到：只认小助手登录发的令牌，不过人机验证（见 controller/helper_checkin.go）
+				selfRoute.GET("/helper/checkin", controller.HelperCheckinStatus)
+				selfRoute.POST("/helper/checkin", middleware.CriticalRateLimit(), controller.HelperCheckin)
 				selfRoute.GET("/passkey", controller.PasskeyStatus)
 				selfRoute.POST("/passkey/register/begin", middleware.UserCriticalRateLimit("security-verification"), middleware.DisableCache(), controller.PasskeyRegisterBegin)
 				selfRoute.POST("/passkey/register/finish", middleware.UserCriticalRateLimit("security-verification"), middleware.DisableCache(), controller.PasskeyRegisterFinish)

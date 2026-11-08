@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -9,9 +10,13 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
 func setupUserUpdateTestState(t *testing.T) {
@@ -360,6 +365,109 @@ func TestValidateAndFillRejectsPasswordlessUser(t *testing.T) {
 	var stored User
 	require.NoError(t, DB.Where("username = ?", "passwordless-user").First(&stored).Error)
 	assert.Empty(t, stored.Password)
+}
+
+// TestValidateAndFillEmailCaseDatabaseMatrix covers sign-in with an email typed in another letter case.
+// Registration and password reset store emails lowercased; legacy rows may still differ only by case.
+func TestValidateAndFillEmailCaseDatabaseMatrix(t *testing.T) {
+	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
+		t.Run(dialect, func(t *testing.T) {
+			var driver gorm.Dialector
+			switch dialect {
+			case "sqlite":
+				driver = sqlite.Open(":memory:")
+			case "mysql":
+				dsn := os.Getenv("TEST_MYSQL_DSN")
+				if dsn == "" {
+					t.Skip("TEST_MYSQL_DSN not configured")
+				}
+				driver = mysql.Open(dsn)
+			case "postgres":
+				dsn := os.Getenv("TEST_POSTGRES_DSN")
+				if dsn == "" {
+					t.Skip("TEST_POSTGRES_DSN not configured")
+				}
+				driver = postgres.Open(dsn)
+			}
+			db, err := gorm.Open(driver, &gorm.Config{NamingStrategy: schema.NamingStrategy{TablePrefix: "login_case_test_"}})
+			require.NoError(t, err)
+			sqlDB, err := db.DB()
+			require.NoError(t, err)
+			sqlDB.SetMaxOpenConns(1)
+			previousDB, previousType := DB, common.MainDatabaseType()
+			DB = db
+			common.SetMainDatabaseType(common.DatabaseType(dialect))
+			initCol()
+			t.Cleanup(func() {
+				DB = previousDB
+				common.SetMainDatabaseType(previousType)
+				initCol()
+				assert.NoError(t, db.Migrator().DropTable(&User{}))
+				assert.NoError(t, sqlDB.Close())
+			})
+			require.NoError(t, db.Migrator().DropTable(&User{}))
+			require.NoError(t, db.AutoMigrate(&User{}))
+
+			hash, err := common.Password2Hash("Secret123")
+			require.NoError(t, err)
+			otherHash, err := common.Password2Hash("Other456")
+			require.NoError(t, err)
+			users := []User{
+				{Username: "buyer", Email: "buyer@example.com", AffCode: "case1", Status: common.UserStatusEnabled},
+				{Username: "legacy-1", Email: "legacy@example.com", AffCode: "case2", Status: common.UserStatusEnabled},
+				{Username: "legacy-2", Email: "LEGACY@example.com", AffCode: "case3", Status: common.UserStatusEnabled},
+				{Username: "banned", Email: "banned@example.com", AffCode: "case4", Status: common.UserStatusDisabled},
+				{Username: "deleted", Email: "deleted@example.com", AffCode: "case5", Status: common.UserStatusEnabled},
+				// An email-shaped username must win over another user's email that matches only after lowercasing.
+				{Username: "Shop@Mail.com", Email: "owner@example.com", AffCode: "case6", Status: common.UserStatusEnabled},
+				{Username: "shopper", Email: "shop@mail.com", AffCode: "case7", Status: common.UserStatusEnabled},
+			}
+			for i := range users {
+				users[i].Password = hash
+			}
+			users[6].Password = otherHash
+			require.NoError(t, db.Create(&users).Error)
+			require.NoError(t, db.Delete(&users[4]).Error)
+
+			// MySQL's default collation already compares username and email case-insensitively,
+			// so cases that depend on a case-sensitive first lookup only apply to SQLite and PostgreSQL.
+			cases := []struct {
+				name          string
+				input         string
+				password      string
+				wantId        int
+				caseSensitive bool
+			}{
+				{"capitalized email", "Buyer@Example.com", "Secret123", users[0].Id, false},
+				{"exact email", "buyer@example.com", "Secret123", users[0].Id, false},
+				{"capitalized email with spaces", " BUYER@example.com ", "Secret123", users[0].Id, false},
+				{"capitalized email with wrong password", "Buyer@Example.com", "wrong", 0, false},
+				{"username stays case-sensitive", "BUYER", "Secret123", 0, true},
+				{"exact legacy email", "LEGACY@example.com", "Secret123", users[2].Id, true},
+				{"ambiguous legacy email", "Legacy@Example.com", "Secret123", 0, true},
+				{"disabled user", "Banned@example.com", "Secret123", 0, false},
+				{"deleted user", "Deleted@example.com", "Secret123", 0, false},
+				{"email-shaped username exact match", "Shop@Mail.com", "Secret123", users[5].Id, false},
+				{"email-shaped username keeps other user's password out", "Shop@Mail.com", "Other456", 0, false},
+				{"capitalized email of other user", "SHOP@MAIL.COM", "Other456", users[6].Id, true},
+			}
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					if tc.caseSensitive && dialect == "mysql" {
+						t.Skip("MySQL default collation is case-insensitive")
+					}
+					login := User{Username: tc.input, Password: tc.password}
+					err := login.ValidateAndFill()
+					if tc.wantId == 0 {
+						require.ErrorIs(t, err, ErrInvalidCredentials)
+						return
+					}
+					require.NoError(t, err)
+					assert.Equal(t, tc.wantId, login.Id)
+				})
+			}
+		})
+	}
 }
 
 func TestResetUserPasswordByEmailRequiresSingleActiveMatch(t *testing.T) {

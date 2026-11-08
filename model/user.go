@@ -1067,6 +1067,17 @@ func (user *User) ValidateAndFill() (err error) {
 	}
 	// find by username or email
 	err = DB.Where("username = ? OR email = ?", username, username).First(user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) && strings.Contains(username, "@") {
+		// Emails are stored lowercased, so an email typed with capitals must still sign in.
+		var emailUser *User
+		emailUser, err = GetUniqueUserByEmail(username)
+		switch {
+		case err == nil:
+			*user = *emailUser
+		case errors.Is(err, ErrEmailNotFound), errors.Is(err, ErrEmailAmbiguous):
+			err = gorm.ErrRecordNotFound
+		}
+	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrInvalidCredentials

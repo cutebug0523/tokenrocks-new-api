@@ -59,6 +59,21 @@ func TestSanitizeUpstreamJSON(t *testing.T) {
 			want: `{"type":"message_start","message":{"model":"deepseek-v4.1-flash","usage":{"input_tokens":3}}}`,
 		},
 		{
+			name: "claude body keeps only anthropic usage",
+			in:   `{"type":"message","model":"m","usage":{"input_tokens":3,"output_tokens":2,"cache_read_input_tokens":1,"cache_creation_input_tokens":0,"claude_cache_creation_5_m_tokens":0,"claude_cache_creation_1_h_tokens":0,"billing_usage":{"source":"oai_chat","semantic":"openai","openai_usage":{"prompt_tokens":4,"cost":0.02}},"cost":0.02}}`,
+			want: `{"type":"message","model":"deepseek-v4.1-flash","usage":{"input_tokens":3,"output_tokens":2,"cache_read_input_tokens":1,"cache_creation_input_tokens":0}}`,
+		},
+		{
+			name: "claude message_start usage",
+			in:   `{"type":"message_start","message":{"model":"m","usage":{"input_tokens":3,"billing_usage":{"source":"oai_chat"}}}}`,
+			want: `{"type":"message_start","message":{"model":"deepseek-v4.1-flash","usage":{"input_tokens":3}}}`,
+		},
+		{
+			name: "responses completed usage",
+			in:   `{"type":"response.completed","response":{"id":"r","usage":{"input_tokens":3,"output_tokens":2,"usage_source":"oai_chat","usage_semantic":"openai"}}}`,
+			want: `{"type":"response.completed","response":{"id":"r","usage":{"input_tokens":3,"output_tokens":2}}}`,
+		},
+		{
 			name: "gemini model version",
 			in:   `{"modelVersion":"gemini-upstream-001"}`,
 			want: `{"modelVersion":"deepseek-v4.1-flash"}`,

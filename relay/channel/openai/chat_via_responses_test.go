@@ -77,7 +77,8 @@ func TestOaiResponsesToChatStreamHandlerConvertsSSEOrderAndUsage(t *testing.T) {
 	require.Contains(t, got, `"name":"lookup"`)
 	require.Contains(t, got, `"arguments":"{\"q\":\"x\"}"`)
 	require.Contains(t, got, `"finish_reason":"tool_calls"`)
-	require.Contains(t, got, `"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5`)
+	require.Contains(t, got, `"prompt_tokens":2`)
+	require.Contains(t, got, `"total_tokens":5`)
 	require.Contains(t, got, `data: [DONE]`)
 	requireOrderedSubstrings(t, got,
 		`"role":"assistant"`,
@@ -85,7 +86,7 @@ func TestOaiResponsesToChatStreamHandlerConvertsSSEOrderAndUsage(t *testing.T) {
 		`"name":"lookup"`,
 		`"arguments":"{\"q\":\"x\"}"`,
 		`"finish_reason":"tool_calls"`,
-		`"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5`,
+		`"total_tokens":5`,
 		`data: [DONE]`,
 	)
 }

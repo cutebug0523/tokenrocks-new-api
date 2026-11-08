@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -286,6 +287,36 @@ func TestNoAvailableChannelMessageWithoutPlugin(t *testing.T) {
 	generic := noAvailableChannelMessage(plain, "default", "gpt-4o")
 	assert.NotContains(t, generic, "task plugin")
 	assert.Contains(t, generic, "gpt-4o")
+}
+
+func TestRejectionOnClaudeRouteUsesAnthropicFormat(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		path   string
+		status int
+		code   types.ErrorCode
+		want   string
+		final  int
+	}{
+		{"/v1/messages", http.StatusServiceUnavailable, types.ErrorCodeModelNotFound,
+			`{"type":"error","error":{"type":"not_found_error","message":"MSG"}}`, http.StatusNotFound},
+		{"/v1/messages", http.StatusUnauthorized, "",
+			`{"type":"error","error":{"type":"authentication_error","message":"MSG"}}`, http.StatusUnauthorized},
+		{"/v1/messages", http.StatusServiceUnavailable, "",
+			`{"type":"error","error":{"type":"api_error","message":"MSG"}}`, http.StatusServiceUnavailable},
+		{"/v1/chat/completions", http.StatusServiceUnavailable, types.ErrorCodeModelNotFound,
+			`{"error":{"message":"MSG","type":"new_api_error","code":"model_not_found"}}`, http.StatusServiceUnavailable},
+	} {
+		router := gin.New()
+		router.POST(tc.path, func(c *gin.Context) {
+			c.Set(common.RequestIdKey, "tr-1")
+			abortWithOpenAiMessage(c, tc.status, "no model x", tc.code)
+		})
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, tc.path, nil))
+		assert.Equal(t, tc.final, recorder.Code, tc.path)
+		assert.JSONEq(t, strings.ReplaceAll(tc.want, "MSG", "no model x (request id: tr-1)"), recorder.Body.String(), tc.path)
+	}
 }
 
 func TestSharedEndpointRebindsToSelectedType61Plugin(t *testing.T) {

@@ -27,17 +27,14 @@ import (
 var upstreamHeaderAllowlist = []string{"Content-Type", "Content-Disposition", "X-Reasoning-Included", "X-Codex-Turn-State"}
 
 // clientUsageFields lists the usage keys of the OpenAI, DeepSeek, Responses and
-// Claude formats, plus the ones dto.Usage always writes, so usage this gateway
-// builds passes untouched. Other keys in an upstream usage object are the
-// upstream's own bookkeeping and are dropped.
+// Claude formats. Every other key is bookkeeping, the upstream's or this
+// gateway's (billing_usage, usage_semantic, usage_source, cost and the
+// claude_cache_creation_* copies), and is dropped.
 var clientUsageFields = []string{
 	"prompt_tokens", "completion_tokens", "total_tokens", "prompt_tokens_details", "completion_tokens_details",
 	"prompt_cache_hit_tokens", "prompt_cache_miss_tokens",
 	"input_tokens", "output_tokens", "input_tokens_details", "output_tokens_details",
 	"cache_creation_input_tokens", "cache_read_input_tokens", "cache_creation", "server_tool_use", "service_tier",
-	"claude_cache_creation_5_m_tokens", "claude_cache_creation_1_h_tokens",
-	"usage_semantic", "usage_source", "billing_usage",
-	"cost",
 }
 
 var (
@@ -48,8 +45,9 @@ var (
 
 // SanitizeUpstreamJSON rewrites one JSON response body or stream event before
 // it reaches the client: an upstream error message becomes the fixed one,
-// every "model" field becomes the model the client requested, and a top-level
-// usage object keeps only clientUsageFields.
+// every "model" field becomes the model the client requested, and the usage
+// object, at the top level or inside the "message" of a Claude message_start or
+// the "response" of a Responses event, keeps only clientUsageFields.
 func SanitizeUpstreamJSON(c *gin.Context, data string) string {
 	if c == nil {
 		return data
@@ -69,9 +67,32 @@ func SanitizeUpstreamJSON(c *gin.Context, data string) string {
 	if common.UnmarshalJsonStr(data, &body) != nil {
 		return data
 	}
-	var usage map[string]json.RawMessage
-	if common.Unmarshal(body["usage"], &usage) != nil || usage == nil {
+	changed := keepClientUsageFields(body)
+	for _, key := range []string{"message", "response"} {
+		var inner map[string]json.RawMessage
+		if common.GetJsonType(body[key]) != "object" || common.Unmarshal(body[key], &inner) != nil || !keepClientUsageFields(inner) {
+			continue
+		}
+		if cleaned, err := common.Marshal(inner); err == nil {
+			body[key], changed = cleaned, true
+		}
+	}
+	if !changed {
 		return data
+	}
+	out, err := common.Marshal(body)
+	if err != nil {
+		return data
+	}
+	return string(out)
+}
+
+// keepClientUsageFields drops the keys outside clientUsageFields from the
+// "usage" object of fields, and reports whether it dropped any.
+func keepClientUsageFields(fields map[string]json.RawMessage) bool {
+	var usage map[string]json.RawMessage
+	if common.GetJsonType(fields["usage"]) != "object" || common.Unmarshal(fields["usage"], &usage) != nil {
+		return false
 	}
 	dropped := false
 	for key := range usage {
@@ -81,18 +102,14 @@ func SanitizeUpstreamJSON(c *gin.Context, data string) string {
 		}
 	}
 	if !dropped {
-		return data
+		return false
 	}
 	cleaned, err := common.Marshal(usage)
 	if err != nil {
-		return data
+		return false
 	}
-	body["usage"] = cleaned
-	out, err := common.Marshal(body)
-	if err != nil {
-		return data
-	}
-	return string(out)
+	fields["usage"] = cleaned
+	return true
 }
 
 // upstreamErrorCode replaces an upstream error code, which can name the

@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"cmp"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -23,16 +25,41 @@ func abortWithOpenAiMessage(c *gin.Context, statusCode int, message string, code
 		Message:    message,
 		StatusCode: statusCode,
 	}) {
-		c.JSON(statusCode, gin.H{
-			"error": gin.H{
-				"message": common.MessageWithRequestId(message, c.GetString(common.RequestIdKey)),
-				"type":    "new_api_error",
-				"code":    codeStr,
-			},
-		})
+		shown := common.MessageWithRequestId(message, c.GetString(common.RequestIdKey))
+		if strings.HasPrefix(c.Request.URL.Path, "/v1/messages") {
+			// Claude clients retry every 5xx (Claude Code ten times), so a model
+			// this gateway does not serve gets Anthropic's final 404 instead.
+			if codeStr == string(types.ErrorCodeModelNotFound) {
+				statusCode = http.StatusNotFound
+			}
+			c.JSON(statusCode, gin.H{
+				"type":  "error",
+				"error": gin.H{"type": cmp.Or(claudeErrorTypes[statusCode], "api_error"), "message": shown},
+			})
+		} else {
+			c.JSON(statusCode, gin.H{
+				"error": gin.H{
+					"message": shown,
+					"type":    "new_api_error",
+					"code":    codeStr,
+				},
+			})
+		}
 	}
 	c.Abort()
 	logger.LogError(c.Request.Context(), common.LogText("user %d | %s", userId, message))
+}
+
+// claudeErrorTypes maps a status to Anthropic's error type; other statuses
+// are api_error.
+var claudeErrorTypes = map[int]string{
+	http.StatusBadRequest:            "invalid_request_error",
+	http.StatusUnauthorized:          "authentication_error",
+	http.StatusPaymentRequired:       "billing_error",
+	http.StatusForbidden:             "permission_error",
+	http.StatusNotFound:              "not_found_error",
+	http.StatusRequestEntityTooLarge: "request_too_large",
+	http.StatusTooManyRequests:       "rate_limit_error",
 }
 
 // invalidRequestStatus is the status of a request whose body could not be

@@ -76,6 +76,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	defer service.CloseResponseBodyGracefully(resp)
 
 	accumulator := service.NewResponsesUsageAccumulator(info)
+	// Some upstreams send item_id only on output_item.added/done. ai-sdk clients
+	// (ZCode, etc.) drop delta/done events without it and show a blank reply,
+	// so fill it from the item that opened the same output_index.
+	itemIDs := map[int]string{}
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 
@@ -88,6 +92,18 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		}
 		if streamResponse.Response != nil {
 			data = string(rewriteSGLangResponsesCreatedAt(info, []byte(data), "response.created_at", streamResponse.Response.CreatedAt))
+		}
+		if index := streamResponse.OutputIndex; index != nil {
+			if streamResponse.Item != nil {
+				if streamResponse.Item.ID != "" {
+					itemIDs[*index] = streamResponse.Item.ID
+				}
+			} else if id := itemIDs[*index]; streamResponse.ItemID == "" && id != "" {
+				if patched, err := sjson.Set(data, "item_id", id); err == nil {
+					data = patched
+					streamResponse.ItemID = id
+				}
+			}
 		}
 		accumulator.Observe(&streamResponse, common.StringToByteSlice(data))
 		if err := helper.ResponseChunkData(c, streamResponse, data); err != nil {

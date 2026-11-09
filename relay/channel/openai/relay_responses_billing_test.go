@@ -612,6 +612,64 @@ func TestOaiResponsesStreamHandlerKeepsNonSGLangCreatedAt(t *testing.T) {
 	assert.Contains(t, w.Body.String(), `1786588600.0`)
 }
 
+// Captured from an upstream that only puts the id on output_item.added/done;
+// ai-sdk clients drop deltas without item_id and render an empty reply.
+func TestOaiResponsesStreamHandlerFillsMissingItemID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	oldTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() {
+		constant.StreamingTimeout = oldTimeout
+	})
+
+	events := []string{
+		`{"item":{"type":"message","id":"msg_a"},"output_index":0,"type":"response.output_item.added"}`,
+		`{"content_index":0,"output_index":0,"type":"response.output_text.delta","delta":"OK"}`,
+		`{"item":{"type":"function_call","id":"fc_b","call_id":"call_1","name":"Bash","arguments":""},"output_index":1,"type":"response.output_item.added"}`,
+		`{"output_index":1,"type":"response.function_call_arguments.delta","delta":"{}","item_id":"fc_keep"}`,
+		`{"output_index":2,"type":"response.output_text.delta","delta":"x"}`,
+		`{"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[]}}`,
+	}
+	var body strings.Builder
+	for _, event := range events {
+		body.WriteString("data: " + event + "\n\n")
+	}
+	body.WriteString("data: [DONE]\n\n")
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Set(common.RequestIdKey, "fill-item-id-test")
+	info := &relaycommon.RelayInfo{
+		DisablePing: true,
+		ChannelMeta: &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeOpenAI, UpstreamModelName: "deepseek-flash"},
+	}
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body.String())),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+	}
+
+	_, apiErr := OaiResponsesStreamHandler(c, info, resp)
+	require.Nil(t, apiErr)
+
+	var got []map[string]any
+	for line := range strings.SplitSeq(w.Body.String(), "\n") {
+		payload, ok := strings.CutPrefix(line, "data: ")
+		if !ok || payload == "[DONE]" {
+			continue
+		}
+		var event map[string]any
+		require.NoError(t, common.UnmarshalJsonStr(payload, &event))
+		got = append(got, event)
+	}
+	require.Len(t, got, len(events))
+	assert.Equal(t, "msg_a", got[1]["item_id"])
+	assert.Equal(t, "fc_keep", got[3]["item_id"])
+	assert.NotContains(t, got[4], "item_id")
+	assert.NotContains(t, got[0], "item_id")
+}
+
 // A converted hosted web search reaches Azure and Xinference Chat Completions
 // as web_search_options, like OpenAI; the upstream decides whether it applies.
 // Azure Responses bills web search by tool_usage.web_search.num_requests (Bing

@@ -3,6 +3,7 @@ package relay
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -58,8 +59,8 @@ func prepareUpstreamNonStream(info *relaycommon.RelayInfo, request any) any {
 // request into SSE in place. An error object in the reply is returned so the
 // attempt can be retried; a reply that is already SSE is left alone. The body
 // decides, not Content-Type: some Responses upstreams label a JSON reply
-// text/event-stream.
-func replayUpstreamNonStream(info *relaycommon.RelayInfo, resp *http.Response) *types.NewAPIError {
+// text/event-stream. clientCtx is the client request's context.
+func replayUpstreamNonStream(clientCtx context.Context, info *relaycommon.RelayInfo, resp *http.Response) *types.NewAPIError {
 	if info.UpstreamNonStreamFormat == "" || resp == nil || resp.Body == nil {
 		return nil
 	}
@@ -82,6 +83,15 @@ func replayUpstreamNonStream(info *relaycommon.RelayInfo, resp *http.Response) *
 	service.CloseResponseBodyGracefully(resp)
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+	}
+	// The client left while upstream was generating, and upstream charges for
+	// the reply anyway. Hand it to the adaptor's non-stream handler, which
+	// bills its usage as for any non-stream request; replayed as SSE, the
+	// stream handler would stop at the closed connection and bill nothing.
+	if clientCtx.Err() != nil {
+		info.IsStream = false
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+		return nil
 	}
 	var sse []byte
 	switch info.UpstreamNonStreamFormat {

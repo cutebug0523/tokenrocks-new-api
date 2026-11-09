@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -40,7 +41,7 @@ func replayToClient(t *testing.T, info *relaycommon.RelayInfo, adaptor relaychan
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/test", nil)
 	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}
 
-	require.Nil(t, replayUpstreamNonStream(info, resp))
+	require.Nil(t, replayUpstreamNonStream(c.Request.Context(), info, resp))
 	assert.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
 	usage, apiErr := adaptor.DoResponse(c, resp, info)
 	require.Nil(t, apiErr)
@@ -196,9 +197,52 @@ func TestUpstreamNonStreamErrorReplyIsRetryable(t *testing.T) {
 	} {
 		info := &relaycommon.RelayInfo{UpstreamNonStreamFormat: tc.format}
 		resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(tc.body))}
-		apiErr := replayUpstreamNonStream(info, resp)
+		apiErr := replayUpstreamNonStream(context.Background(), info, resp)
 		require.NotNil(t, apiErr, tc.format)
 		assert.Contains(t, apiErr.Error(), "overloaded", tc.format)
+	}
+}
+
+// TestUpstreamNonStreamClientGoneStillBills covers a client that left while
+// upstream was generating: upstream charges for the reply, so it is billed
+// from the reply's usage instead of stopping at the closed connection.
+func TestUpstreamNonStreamClientGoneStillBills(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	if constant.StreamingTimeout == 0 {
+		constant.StreamingTimeout = 30
+	}
+	chatBody := `{"id":"r1","object":"chat.completion","model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"hello"},"finish_reason":"stop"}],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}`
+	for _, tc := range []struct {
+		name       string
+		info       *relaycommon.RelayInfo
+		adaptor    relaychannel.Adaptor
+		body       string
+		prompt     int
+		completion int
+	}{
+		{"chat", &relaycommon.RelayInfo{IsStream: true, RelayFormat: types.RelayFormatOpenAI, RelayMode: relayconstant.RelayModeChatCompletions, UpstreamNonStreamFormat: types.RelayFormatOpenAI, ChannelMeta: &relaycommon.ChannelMeta{}},
+			&openai.Adaptor{}, chatBody, 11, 7},
+		{"chat to claude client", &relaycommon.RelayInfo{IsStream: true, RelayFormat: types.RelayFormatClaude, RelayMode: relayconstant.RelayModeChatCompletions, UpstreamNonStreamFormat: types.RelayFormatOpenAI, ChannelMeta: &relaycommon.ChannelMeta{}},
+			&openai.Adaptor{}, chatBody, 11, 7},
+		{"responses", &relaycommon.RelayInfo{IsStream: true, RelayFormat: types.RelayFormatOpenAIResponses, RelayMode: relayconstant.RelayModeResponses, UpstreamNonStreamFormat: types.RelayFormatOpenAIResponses, ChannelMeta: &relaycommon.ChannelMeta{}},
+			&openai.Adaptor{}, `{"id":"resp_1","object":"response","status":"completed","model":"m","output":[{"id":"msg_1","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"hello","annotations":[]}]}],"usage":{"input_tokens":20,"output_tokens":9,"total_tokens":29}}`, 20, 9},
+		{"claude", &relaycommon.RelayInfo{IsStream: true, RelayFormat: types.RelayFormatClaude, UpstreamNonStreamFormat: types.RelayFormatClaude, ChannelMeta: &relaycommon.ChannelMeta{}},
+			&claude.Adaptor{}, `{"id":"msg_1","type":"message","role":"assistant","model":"claude-x","content":[{"type":"text","text":"hi"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`, 10, 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			clientCtx, leave := context.WithCancel(context.Background())
+			leave()
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/test", nil).WithContext(clientCtx)
+			resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(tc.body))}
+
+			require.Nil(t, replayUpstreamNonStream(c.Request.Context(), tc.info, resp))
+			assert.False(t, tc.info.IsStream)
+			usage, apiErr := tc.adaptor.DoResponse(c, resp, tc.info)
+			require.Nil(t, apiErr)
+			assert.Equal(t, tc.prompt, usage.(*dto.Usage).PromptTokens)
+			assert.Equal(t, tc.completion, usage.(*dto.Usage).CompletionTokens)
+		})
 	}
 }
 
@@ -262,7 +306,7 @@ func TestUpstreamNonStreamReplayDecidesByBody(t *testing.T) {
 	info := &relaycommon.RelayInfo{UpstreamNonStreamFormat: types.RelayFormatOpenAIResponses}
 	labelledSSE := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}},
 		Body: io.NopCloser(strings.NewReader("\n {\"id\":\"resp_1\",\"object\":\"response\",\"status\":\"completed\",\"output\":[]}"))}
-	require.Nil(t, replayUpstreamNonStream(info, labelledSSE))
+	require.Nil(t, replayUpstreamNonStream(context.Background(), info, labelledSSE))
 	replayed, err := io.ReadAll(labelledSSE.Body)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(string(replayed), "data: "), string(replayed))
@@ -270,7 +314,7 @@ func TestUpstreamNonStreamReplayDecidesByBody(t *testing.T) {
 
 	stream := "data: {\"type\":\"response.created\"}\n\n"
 	realSSE := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(stream))}
-	require.Nil(t, replayUpstreamNonStream(info, realSSE))
+	require.Nil(t, replayUpstreamNonStream(context.Background(), info, realSSE))
 	passed, err := io.ReadAll(realSSE.Body)
 	require.NoError(t, err)
 	assert.Equal(t, stream, string(passed))

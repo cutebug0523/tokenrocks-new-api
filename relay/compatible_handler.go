@@ -167,7 +167,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			service.ResetStatusCode(newApiErr, statusCodeMappingStr)
 			return newApiErr
 		}
-		if newApiErr := replayUpstreamNonStream(info, httpResp); newApiErr != nil {
+		if newApiErr := replayUpstreamNonStream(c.Request.Context(), info, httpResp); newApiErr != nil {
 			service.ResetStatusCode(newApiErr, statusCodeMappingStr)
 			return newApiErr
 		}

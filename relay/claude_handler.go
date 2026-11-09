@@ -144,7 +144,7 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 			return newAPIError
 		}
-		if newAPIError = replayUpstreamNonStream(info, httpResp); newAPIError != nil {
+		if newAPIError = replayUpstreamNonStream(c.Request.Context(), info, httpResp); newAPIError != nil {
 			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 			return newAPIError
 		}

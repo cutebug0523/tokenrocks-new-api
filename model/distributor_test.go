@@ -1,0 +1,183 @@
+package model
+
+import (
+	"os"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
+)
+
+// TestDistributorDatabaseMatrix 覆盖分销买码在三种库上的两条约定：
+// 付款回调重复到达也只出一批码、不加余额；合计口径和 中转/分销月结.sh 的自测数据一致。
+func TestDistributorDatabaseMatrix(t *testing.T) {
+	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
+		t.Run(dialect, func(t *testing.T) {
+			var driver gorm.Dialector
+			dbType := common.DatabaseTypeSQLite
+			switch dialect {
+			case "sqlite":
+				driver = sqlite.Open(":memory:")
+			case "mysql":
+				dsn := os.Getenv("TEST_MYSQL_DSN")
+				if dsn == "" {
+					t.Skip("TEST_MYSQL_DSN is not configured")
+				}
+				driver = mysql.Open(dsn)
+				dbType = common.DatabaseTypeMySQL
+			case "postgres":
+				dsn := os.Getenv("TEST_POSTGRES_DSN")
+				if dsn == "" {
+					t.Skip("TEST_POSTGRES_DSN is not configured")
+				}
+				driver = postgres.Open(dsn)
+				dbType = common.DatabaseTypePostgreSQL
+			}
+			db, err := gorm.Open(driver, &gorm.Config{NamingStrategy: schema.NamingStrategy{TablePrefix: "fx_test_"}})
+			require.NoError(t, err)
+			sqlDB, err := db.DB()
+			require.NoError(t, err)
+			sqlDB.SetMaxOpenConns(1)
+			versionSQL := "SELECT version()"
+			if dialect == "sqlite" {
+				versionSQL = "SELECT sqlite_version()"
+			}
+			var version string
+			require.NoError(t, db.Raw(versionSQL).Scan(&version).Error)
+			t.Logf("database version: %s", version)
+
+			previousDB, previousMain, previousLog := DB, common.MainDatabaseType(), common.LogDatabaseType()
+			previousQuotaPerUnit, previousRate := common.QuotaPerUnit, operation_setting.USDExchangeRate
+			previousDisplay := operation_setting.GetGeneralSetting().QuotaDisplayType
+			DB = db
+			common.SetDatabaseTypes(dbType, dbType)
+			common.QuotaPerUnit = 500000
+			operation_setting.USDExchangeRate = 7
+			operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeCNY
+			t.Cleanup(func() {
+				DB = previousDB
+				common.SetDatabaseTypes(previousMain, previousLog)
+				common.QuotaPerUnit, operation_setting.USDExchangeRate = previousQuotaPerUnit, previousRate
+				operation_setting.GetGeneralSetting().QuotaDisplayType = previousDisplay
+				assert.NoError(t, sqlDB.Close())
+			})
+			tables := []any{&User{}, &Redemption{}, &TopUp{}, &DistributorOrder{}}
+			for _, table := range tables {
+				require.False(t, db.Migrator().HasTable(table), "use an empty test database")
+			}
+			// 跑两遍迁移，第二遍不该报错也不该改表
+			require.NoError(t, db.AutoMigrate(tables...))
+			require.NoError(t, db.AutoMigrate(tables...))
+			t.Cleanup(func() { assert.NoError(t, db.Migrator().DropTable(tables...)) })
+
+			t.Run("fulfill", func(t *testing.T) {
+				distributor := User{Username: "fx-distributor", Password: "unused", Status: common.UserStatusEnabled, Group: "default", Quota: 0}
+				require.NoError(t, db.Create(&distributor).Error)
+				order := DistributorOrder{UserId: distributor.Id, DistributorNo: 9, TradeNo: "FX1NOtest1", FaceValue: 2, Count: 10, Money: 20, PaymentMethod: "alipay", Status: common.TopUpStatusPending, CreateTime: 1}
+				require.NoError(t, db.Create(&order).Error)
+
+				alreadyDone, err := FulfillDistributorOrder(order.TradeNo, "wxpay")
+				require.NoError(t, err)
+				assert.False(t, alreadyDone)
+				alreadyDone, err = FulfillDistributorOrder(order.TradeNo, "wxpay")
+				require.NoError(t, err)
+				assert.True(t, alreadyDone)
+
+				paid, keys, err := GetDistributorOrderCodes(distributor.Id, order.Id)
+				require.NoError(t, err)
+				assert.Equal(t, common.TopUpStatusSuccess, paid.Status)
+				assert.Equal(t, "wxpay", paid.PaymentMethod)
+				assert.Regexp(t, `^分销-9号-\d{4}-`+strconv.Itoa(order.Id)+`$`, paid.BatchName)
+				assert.Len(t, keys, 10)
+				var quotas []int
+				require.NoError(t, db.Model(&Redemption{}).Where("name = ?", paid.BatchName).Pluck("quota", &quotas).Error)
+				for _, q := range quotas {
+					assert.Equal(t, 142857, q) // ¥2 ÷ 7 × 500000
+				}
+				var reloaded User
+				require.NoError(t, db.First(&reloaded, distributor.Id).Error)
+				assert.Zero(t, reloaded.Quota, "买码不加余额")
+
+				_, _, err = GetDistributorOrderCodes(distributor.Id+1, order.Id)
+				assert.ErrorIs(t, err, ErrTopUpNotFound, "别人的订单拿不到码")
+				_, err = FulfillDistributorOrder("FX1NOmissing", "alipay")
+				assert.ErrorIs(t, err, ErrTopUpNotFound)
+			})
+
+			t.Run("stats", func(t *testing.T) {
+				ts := func(s string) int64 {
+					v, err := time.ParseInLocation("2006-01-02 15:04", s, distributorZone)
+					require.NoError(t, err)
+					return v.Unix()
+				}
+				// 和 中转/分销月结-自测.sh 同一份数据：A 新人、B 第一张码是别家的、C 一个月前充过、D 被邀请、E 先充一小时再兑
+				const a, b, c, d, e = 101, 102, 103, 104, 105
+				codes := []Redemption{
+					{Name: "分销-7号-1106", UsedUserId: a, RedeemedTime: ts("2026-11-02 10:00")},
+					{Name: "闲鱼1元体验卡", UsedUserId: b, RedeemedTime: ts("2026-10-20 10:00")},
+					{Name: "分销-7号-1106", UsedUserId: b, RedeemedTime: ts("2026-11-03 10:00")},
+					{Name: "分销-7号-1106", UsedUserId: c, RedeemedTime: ts("2026-11-03 10:00")},
+					{Name: "分销-7号-1120", UsedUserId: d, RedeemedTime: ts("2026-11-04 10:00")},
+					{Name: "分销-7号-1106", UsedUserId: e, RedeemedTime: ts("2026-11-07 10:00")},
+					{Name: "分销-7号-1106"},
+					{Name: "分销-7号-1101"},
+					{Name: "分销-7号-1101", UsedUserId: a, RedeemedTime: ts("2026-11-02 11:00")},
+					{Name: "分销-77号-1106", UsedUserId: 106, RedeemedTime: ts("2026-11-02 10:00")},
+				}
+				for i := range codes {
+					codes[i].Key = "fxstats" + strconv.Itoa(i)
+				}
+				require.NoError(t, db.Create(&codes).Error)
+				require.NoError(t, db.Delete(&codes[7]).Error)
+				require.NoError(t, db.Delete(&codes[8]).Error)
+				topUps := []TopUp{
+					{UserId: a, TradeNo: "a1", Money: 100, CompleteTime: ts("2026-11-05 10:00"), Status: common.TopUpStatusSuccess},
+					{UserId: a, TradeNo: "a2", Money: 50, CompleteTime: ts("2026-11-30 23:59"), Status: common.TopUpStatusSuccess},
+					{UserId: a, TradeNo: "a3", Money: 30, CompleteTime: ts("2026-11-06 10:00"), Status: "failed"},
+					{UserId: a, TradeNo: "a4", Money: 40, CompleteTime: ts("2026-12-01 00:00"), Status: common.TopUpStatusSuccess},
+					{UserId: b, TradeNo: "b1", Money: 100, CompleteTime: ts("2026-11-05 10:00"), Status: common.TopUpStatusSuccess},
+					{UserId: c, TradeNo: "c0", Money: 10, CompleteTime: ts("2026-10-01 10:00"), Status: common.TopUpStatusSuccess},
+					{UserId: c, TradeNo: "c1", Money: 100, CompleteTime: ts("2026-11-05 10:00"), Status: common.TopUpStatusSuccess},
+					{UserId: d, TradeNo: "d1", Money: 20, CompleteTime: ts("2026-11-06 10:00"), Status: common.TopUpStatusSuccess},
+					{UserId: e, TradeNo: "e1", Money: 30, CompleteTime: ts("2026-11-07 09:00"), Status: common.TopUpStatusSuccess},
+					{UserId: e, TradeNo: "e2", Money: 10, CompleteTime: ts("2026-11-08 10:00"), Status: common.TopUpStatusSuccess},
+				}
+				require.NoError(t, db.Create(&topUps).Error)
+
+				stats, err := GetDistributorStats(7, time.Unix(ts("2026-11-15 12:00"), 0))
+				require.NoError(t, err)
+				assert.Equal(t, &DistributorStats{
+					CodesTotal:    7, // 6 张有效 + 1 张兑过后作废的；作废没兑的不算；77 号的不算
+					CodesRedeemed: 6,
+					Users:         3, // A、D、E
+					Months: []DistributorMonth{
+						{Month: "2026-11", Count: 5, Money: 210, Commission: 21},
+						{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
+					},
+				}, stats)
+
+				// 12 月看：本月是 A 的 a4，上月是 11 月那 5 笔
+				stats, err = GetDistributorStats(7, time.Unix(ts("2026-12-01 00:00"), 0))
+				require.NoError(t, err)
+				assert.Equal(t, []DistributorMonth{
+					{Month: "2026-12", Count: 1, Money: 40, Commission: 4},
+					{Month: "2026-11", Count: 5, Money: 210, Commission: 21},
+				}, stats.Months)
+
+				stats, err = GetDistributorStats(8, time.Unix(ts("2026-11-15 12:00"), 0))
+				require.NoError(t, err)
+				assert.Zero(t, stats.CodesTotal)
+				assert.Zero(t, stats.Users)
+			})
+		})
+	}
+}

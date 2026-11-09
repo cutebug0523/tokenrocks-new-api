@@ -69,6 +69,11 @@
   .no-mac.os-mac .trh-mac-soon { display: inline-block; padding: 6px 14px; border-radius: 999px; background: #fff; border: 1px solid var(--brand-border); color: var(--brand); font-size: 14px; font-weight: 600; }
   .os-phone .trh-mac-soon { display: none; }
   .trh-soon b { display: inline-block; margin: 0 8px 4px 0; padding: 4px 12px; border-radius: 999px; background: #fff; border: 1px solid var(--brand-border); color: var(--brand); }
+  .code { background: var(--ink); border-radius: 12px; overflow: hidden; }
+  .code-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; border-bottom: 1px solid #1f2937; font-size: 13px; color: #9ca3af; }
+  .code-head button { background: transparent; border: 1px solid #374151; color: #e5e7eb; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-family: inherit; cursor: pointer; }
+  .code pre { margin: 0; padding: 16px; color: #e5e7eb; font-size: 13px; line-height: 1.75; white-space: pre-wrap; word-break: break-all; }
+  .code { margin: 10px 0; }
 </style>
 </head>
 <body>
@@ -105,6 +110,7 @@
     <a href="#dsh">DeepSeek Harness</a>
     <a href="#zcode">ZCode</a>
     <a href="#workbuddy">WorkBuddy</a>
+    <a href="#claude-code">Claude Code</a>
   </nav>
 
   <main class="doc-main">
@@ -116,7 +122,7 @@
     <details class="mobile-toc">
       <summary>本页目录</summary>
       <nav aria-label="本页目录（手机）">
-        <a href="#helper">一键接入</a><a href="#prep">先准备好</a><a href="#dsh">DeepSeek Harness</a><a href="#zcode">ZCode</a><a href="#workbuddy">WorkBuddy</a><a href="/guide/">返回使用指南</a>
+        <a href="#helper">一键接入</a><a href="#prep">先准备好</a><a href="#dsh">DeepSeek Harness</a><a href="#zcode">ZCode</a><a href="#workbuddy">WorkBuddy</a><a href="#claude-code">Claude Code</a><a href="/guide/">返回使用指南</a>
       </nav>
     </details>
 
@@ -305,6 +311,28 @@
       <ol class="marks"><li data-n="1">在「自定义模型」分组里选，别选成上面 WorkBuddy 自带的同名模型</li><li data-n="2">输入框右下角点这里切换模型</li></ol>
     </section>
 
+    <section id="claude-code" aria-labelledby="cc-install-title">
+      <h2 id="cc-install-title">Claude Code 国内怎么装</h2>
+      <p>Claude Code 官网的安装命令（<code>claude.ai/install.sh</code>）在国内会跳到「所在地区不可用」，装不上。用 npm 从国内镜像装，不用梯子：</p>
+      <ol>
+        <li>装 Node.js：打开 <a href="https://nodejs.org/zh-cn/download" target="_blank" rel="noopener">nodejs.org/zh-cn/download</a>，下载「LTS」版的安装包（Windows 是 .msi，Mac 是 .pkg），双击一路「下一步」装好。装过的跳过这步。</li>
+        <li>打开命令行：Windows 在开始菜单搜「命令提示符」打开（别用 PowerShell，它默认不让运行 npm）；Mac 打开「终端」。</li>
+        <li>粘贴下面这行回车，等它装完（一两分钟）：
+          <div class="code">
+            <div class="code-head"><span>Windows（命令提示符）</span><button type="button" data-copy="cc-win">复制</button></div>
+            <pre id="cc-win">npm install -g @anthropic-ai/claude-code --registry=https://registry.npmmirror.com</pre>
+          </div>
+          <div class="code">
+            <div class="code-head"><span>Mac（终端，会让你输开机密码，输的时候不显示，输完回车）</span><button type="button" data-copy="cc-mac">复制</button></div>
+            <pre id="cc-mac">sudo npm install -g @anthropic-ai/claude-code --registry=https://registry.npmmirror.com</pre>
+          </div>
+        </li>
+        <li>输入 <code>claude --version</code> 回车，出来版本号就装好了。</li>
+        <li>回 <a href="#helper">TR助手</a> 点「接入」，勾上 Claude Code；以后在 TR助手 首页点它的图标就能打开。不用 TR助手 的，按<a href="/guide/#claude-code">使用指南</a>设环境变量。</li>
+      </ol>
+      <p style="font-size: 14px;">Windows 上提示「npm 不是内部或外部命令」：Node.js 刚装完，把命令提示符关掉重新打开再试。</p>
+    </section>
+
     <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 20px; font-size: 15px;">
       <span style="color: var(--muted-2);">配不上？进<a href="#wechat">官方交流群</a>问</span>
       <a href="/guide/" style="text-decoration: none; font-weight: 600;">返回使用指南 →</a>
@@ -321,6 +349,19 @@
   </div>
 </footer>
 
+<script>
+  // 代码块复制按钮（同使用指南）
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = document.getElementById(btn.getAttribute('data-copy')).textContent
+      if (!navigator.clipboard) return
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = '已复制'
+        setTimeout(function () { btn.textContent = '复制' }, 1500)
+      })
+    })
+  })
+</script>
 <script src="/_s/wechat.js?v=20261101"></script>
 </body>
 </html>

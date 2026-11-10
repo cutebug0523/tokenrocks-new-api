@@ -15,6 +15,12 @@
     // Mac 安装包还没传上去（404）就先写「Mac 版即将上线」，传上去以后自动恢复，不用改页面。ponytail: 每次打开多一个 HEAD 请求，两个包都长期在了可以删
     fetch('/_s/helper/TokenRocks-helper.dmg', { method: 'HEAD', cache: 'no-store' }).then(function (r) { if (!r.ok) document.documentElement.classList.add('no-mac') }, function () {})
   })(navigator.userAgent)
+  // TR助手里「邀请好友」复制的链接落在这页（?aff=邀请码#helper）：记进 localStorage 的 aff，和控制台注册页同一个键，
+  // 好友下载 TR助手、登录时在网站上注册（含第三方登录），就算这个邀请人的
+  try {
+    var aff = new URLSearchParams(location.search).get('aff')
+    if (aff && /^[A-Za-z0-9]{1,32}$/.test(aff)) localStorage.setItem('aff', aff)
+  } catch (e) {}
 </script>
 <style>
   .doc { --key: #e8590c; max-width: 1200px; margin: 0 auto; padding: 0 24px; display: flex; gap: 40px; align-items: flex-start; }

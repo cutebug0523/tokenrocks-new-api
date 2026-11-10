@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 )
@@ -32,10 +33,15 @@ func requireHelperAccessToken(c *gin.Context) bool {
 }
 
 // HelperCheckinStatus 和 GET /api/user/checkin 一样，返回本月签到情况和今天签没签（checked_in_today）。
+// 小助手每次回首页都会查，顺带给登录还没过期的老用户补上 TR助手送的钱（GrantHelperWelcome 每个账号只送一次）。
 func HelperCheckinStatus(c *gin.Context) {
-	if requireHelperAccessToken(c) {
-		GetCheckinStatus(c)
+	if !requireHelperAccessToken(c) {
+		return
 	}
+	if _, err := model.GrantHelperWelcome(c.GetInt("id")); err != nil {
+		common.SysError(common.LogText("helper welcome bonus failed for user %d: %s", c.GetInt("id"), err.Error()))
+	}
+	GetCheckinStatus(c)
 }
 
 // HelperCheckin 签到，返回和 POST /api/user/checkin 一样（quota_awarded、checkin_date）。

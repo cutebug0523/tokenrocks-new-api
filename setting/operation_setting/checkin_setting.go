@@ -7,6 +7,8 @@ type CheckinSetting struct {
 	Enabled  bool `json:"enabled"`   // 是否启用签到功能
 	MinQuota int  `json:"min_quota"` // 签到最小额度奖励
 	MaxQuota int  `json:"max_quota"` // 签到最大额度奖励
+	// HelperWelcomeYuan 第一次用 TR助手登录送多少元（每个账号一次），0 不送
+	HelperWelcomeYuan int `json:"helper_welcome_yuan"`
 }
 
 // 默认配置

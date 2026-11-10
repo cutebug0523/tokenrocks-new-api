@@ -125,7 +125,11 @@ func HelperLoginToken(c *gin.Context) {
 		"token_ref":  token.TokenHash,
 		"client":     "helper",
 	})
-	common.ApiSuccess(c, gin.H{"access_token": raw, "expires_at": token.ExpiresAt})
+	welcome, err := model.GrantHelperWelcome(user.Id)
+	if err != nil {
+		common.SysError(common.LogText("helper welcome bonus failed for user %d: %s", user.Id, err.Error()))
+	}
+	common.ApiSuccess(c, gin.H{"access_token": raw, "expires_at": token.ExpiresAt, "welcome_quota": welcome})
 }
 
 // HelperLogout revokes the access token the request was made with, so signing

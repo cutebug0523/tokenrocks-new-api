@@ -7401,6 +7401,7 @@
     "Referral commission {{quota}}": "邀請返佣 {{quota}}",
     "Friends who sign up through your link earn you 10% of every top-up they pay, as balance credit. Transfer it to your balance once it reaches 7.": "好友透過你的連結註冊後，之後他每次儲值，你都能拿到實付金額 10% 的額度，滿 ¥7 可轉入餘額。",
     "Get {{amount}} extra on your first top-up": "首次儲值額外送 {{amount}}",
+    "TR helper welcome bonus {{quota}}": "TR助手送 {{quota}}",
     "First top-up bonus {{quota}}": "首儲多送 {{quota}}",
     "Authorize TokenRocks Helper": "授權 TR助手",
     "The helper will be able to:": "授權後 TR助手可以：",

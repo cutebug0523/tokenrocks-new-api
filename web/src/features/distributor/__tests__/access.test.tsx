@@ -51,3 +51,23 @@ it('tells an account that is not a distributor that the page is not for it', asy
   expect(screen.queryByLabelText('Quantity')).not.toBeInTheDocument()
   client.clear()
 })
+
+it('shows a retryable error instead of the distributor-only notice when loading fails', async () => {
+  vi.spyOn(api, 'get').mockRejectedValue(new Error('network down'))
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <Distributor />
+    </QueryClientProvider>
+  )
+
+  expect(
+    await screen.findByRole('button', { name: 'Retry' })
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByText('This page is only for distributors')
+  ).not.toBeInTheDocument()
+  client.clear()
+})

@@ -22,6 +22,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
 import { LoadingState } from '@/components/loading-state'
 import { requireServerSuccess } from '@/lib/server-error-message'
@@ -48,6 +49,8 @@ export function Distributor() {
   let content: ReactNode
   if (query.isLoading) {
     content = <LoadingState />
+  } else if (query.isError && !self) {
+    content = <ErrorState onRetry={() => query.refetch()} />
   } else if (!self?.enabled) {
     content = (
       <EmptyState

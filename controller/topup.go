@@ -488,7 +488,7 @@ func EpayNotify(c *gin.Context) {
 		var err error
 		// TokenRocks：分销买码订单（FX 开头）只出兑换码，不走充值
 		if strings.HasPrefix(verifyInfo.ServiceTradeNo, model.DistributorTradeNoPrefix) {
-			alreadyDone, err = model.FulfillDistributorOrder(verifyInfo.ServiceTradeNo, verifyInfo.Type)
+			alreadyDone, err = model.FulfillDistributorOrder(verifyInfo.ServiceTradeNo, verifyInfo.Type, verifyInfo.Money)
 		} else {
 			alreadyDone, err = model.RechargeEpay(verifyInfo.ServiceTradeNo, verifyInfo.Type, c.ClientIP())
 		}
@@ -616,7 +616,14 @@ func AdminCompleteTopUp(c *gin.Context) {
 	LockOrder(req.TradeNo)
 	defer UnlockOrder(req.TradeNo)
 
-	if err := model.ManualCompleteTopUp(req.TradeNo, c.ClientIP()); err != nil {
+	// TokenRocks：分销买码订单（FX 开头）补单只出码；实付金额管理员已在易支付后台核过
+	var err error
+	if strings.HasPrefix(req.TradeNo, model.DistributorTradeNoPrefix) {
+		_, err = model.FulfillDistributorOrder(req.TradeNo, "", "")
+	} else {
+		err = model.ManualCompleteTopUp(req.TradeNo, c.ClientIP())
+	}
+	if err != nil {
 		common.ApiError(c, err)
 		return
 	}

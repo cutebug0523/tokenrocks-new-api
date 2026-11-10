@@ -85,10 +85,19 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 				order := DistributorOrder{UserId: distributor.Id, DistributorNo: 9, TradeNo: "FX1NOtest1", FaceValue: 2, Count: 10, Money: 20, PaymentMethod: "alipay", Status: common.TopUpStatusPending, CreateTime: 1}
 				require.NoError(t, db.Create(&order).Error)
 
-				alreadyDone, err := FulfillDistributorOrder(order.TradeNo, "wxpay")
+				// 实付金额对不上的回调不出码，订单还是待付款
+				_, err := FulfillDistributorOrder(order.TradeNo, "wxpay", "2.00")
+				require.ErrorIs(t, err, ErrDistributorMoneyMismatch)
+				var codeCount int64
+				require.NoError(t, db.Model(&Redemption{}).Where("user_id = ?", distributor.Id).Count(&codeCount).Error)
+				assert.Zero(t, codeCount)
+
+				// 额度显示改成美元也按元给额度
+				operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+				alreadyDone, err := FulfillDistributorOrder(order.TradeNo, "wxpay", "20.00")
 				require.NoError(t, err)
 				assert.False(t, alreadyDone)
-				alreadyDone, err = FulfillDistributorOrder(order.TradeNo, "wxpay")
+				alreadyDone, err = FulfillDistributorOrder(order.TradeNo, "wxpay", "20.00")
 				require.NoError(t, err)
 				assert.True(t, alreadyDone)
 
@@ -103,13 +112,39 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 				for _, q := range quotas {
 					assert.Equal(t, 142857, q) // ¥2 ÷ 7 × 500000
 				}
+				// 后台手建的同名批次不会跟着被下载
+				require.NoError(t, db.Create(&Redemption{Name: paid.BatchName, UserId: distributor.Id + 100, Key: "fxadminsame"}).Error)
+				_, keys, err = GetDistributorOrderCodes(distributor.Id, order.Id)
+				require.NoError(t, err)
+				assert.Len(t, keys, 10)
+				assert.NotContains(t, keys, "fxadminsame")
+
+				// 订单列表：已付款的全给，没付的只给一天内的；后台补单（不带实付金额）照样出码
+				now := common.GetTimestamp()
+				stale := DistributorOrder{UserId: distributor.Id, DistributorNo: 9, TradeNo: "FX1NOstale", FaceValue: 1, Count: 10, Money: 10, Status: common.TopUpStatusPending, CreateTime: now - 2*86400}
+				fresh := DistributorOrder{UserId: distributor.Id, DistributorNo: 9, TradeNo: "FX1NOfresh", FaceValue: 1, Count: 10, Money: 10, Status: common.TopUpStatusPending, CreateTime: now}
+				require.NoError(t, db.Create(&stale).Error)
+				require.NoError(t, db.Create(&fresh).Error)
+				orders, err := GetDistributorOrders(distributor.Id, now)
+				require.NoError(t, err)
+				var ids []int
+				for _, o := range orders {
+					ids = append(ids, o.Id)
+				}
+				assert.Equal(t, []int{fresh.Id, order.Id}, ids)
+				alreadyDone, err = FulfillDistributorOrder(fresh.TradeNo, "", "")
+				require.NoError(t, err)
+				assert.False(t, alreadyDone)
+				_, keys, err = GetDistributorOrderCodes(distributor.Id, fresh.Id)
+				require.NoError(t, err)
+				assert.Len(t, keys, 10)
 				var reloaded User
 				require.NoError(t, db.First(&reloaded, distributor.Id).Error)
 				assert.Zero(t, reloaded.Quota, "买码不加余额")
 
 				_, _, err = GetDistributorOrderCodes(distributor.Id+1, order.Id)
 				assert.ErrorIs(t, err, ErrTopUpNotFound, "别人的订单拿不到码")
-				_, err = FulfillDistributorOrder("FX1NOmissing", "alipay")
+				_, err = FulfillDistributorOrder("FX1NOmissing", "alipay", "1.00")
 				assert.ErrorIs(t, err, ErrTopUpNotFound)
 			})
 
@@ -179,5 +214,35 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 				assert.Zero(t, stats.Users)
 			})
 		})
+	}
+}
+
+// TestDistributorOptionValidation：名单和面额写错要当场拒绝，不然配置加载会悄悄沿用旧值。
+func TestDistributorOptionValidation(t *testing.T) {
+	for _, tc := range []struct {
+		key   string
+		value string
+		ok    bool
+	}{
+		{"payment_setting.distributor_users", `{"535":1,"7":2}`, true},
+		{"payment_setting.distributor_users", `{}`, true},
+		{"payment_setting.distributor_users", `{"535":1,}`, false},
+		{"payment_setting.distributor_users", ``, false},
+		{"payment_setting.distributor_users", `null`, false},
+		{"payment_setting.distributor_users", `{"535":"1"}`, false},
+		{"payment_setting.distributor_users", `{"535":0}`, false},
+		{"payment_setting.distributor_face_values", `[1,2,5]`, true},
+		{"payment_setting.distributor_face_values", `[]`, true},
+		{"payment_setting.distributor_face_values", `[0,2]`, false},
+		{"payment_setting.distributor_face_values", `[1001]`, false},
+		{"payment_setting.distributor_face_values", `null`, false},
+		{"payment_setting.distributor_face_values", `["2"]`, false},
+	} {
+		err := validateOptionValue(tc.key, tc.value)
+		if tc.ok {
+			assert.NoError(t, err, tc.key+" "+tc.value)
+		} else {
+			assert.Error(t, err, tc.key+" "+tc.value)
+		}
 	}
 }

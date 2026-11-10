@@ -2,6 +2,7 @@ package model
 
 import (
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -274,6 +275,24 @@ func validateOptionValue(key string, value string) error {
 	}
 	if key == "MaxTokenAutoGroups" {
 		return setting.ValidateMaxTokenAutoGroups(value)
+	}
+	// TokenRocks：分销名单 {"用户ID":编号} 和面额 [元]。写错时配置加载会悄悄沿用旧值，所以在这里拒绝
+	if key == "payment_setting.distributor_users" {
+		var users map[int]int
+		if common.UnmarshalJsonStr(value, &users) != nil || users == nil {
+			return common.NewMessage("Invalid parameters")
+		}
+		for _, no := range users {
+			if no <= 0 {
+				return common.NewMessage("Invalid parameters")
+			}
+		}
+	}
+	if key == "payment_setting.distributor_face_values" {
+		var faces []int
+		if common.UnmarshalJsonStr(value, &faces) != nil || faces == nil || slices.ContainsFunc(faces, func(face int) bool { return face <= 0 || face > 1000 }) {
+			return common.NewMessage("Invalid parameters")
+		}
 	}
 	return nil
 }

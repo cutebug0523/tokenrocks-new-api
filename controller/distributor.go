@@ -43,7 +43,7 @@ func GetDistributorSelf(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	orders, err := model.GetDistributorOrders(id, 50)
+	orders, err := model.GetDistributorOrders(id, time.Now().Unix())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -92,7 +92,8 @@ func RequestDistributorOrder(c *gin.Context) {
 		return
 	}
 	client := GetEpayClient()
-	if client == nil {
+	// 汇率没配好就出不了码，别让人先付钱
+	if client == nil || operation_setting.USDExchangeRate <= 0 {
 		paymentError(c, common.NewMessage("Payment information has not been configured by administrator"))
 		return
 	}

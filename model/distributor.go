@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -19,6 +21,9 @@ const DistributorTradeNoPrefix = "FX"
 
 // DistributorCommissionRate 是分销商的人在线充值返给分销商的比例，按实付算，现金月结。
 const DistributorCommissionRate = 0.1
+
+// ErrDistributorMoneyMismatch 是付款回调的实付金额和订单金额对不上，不出码。
+var ErrDistributorMoneyMismatch = errors.New("distributor order paid amount mismatch")
 
 type DistributorOrder struct {
 	Id            int     `json:"id"`
@@ -45,7 +50,8 @@ func DistributorBatchPrefix(no int) string {
 
 // FulfillDistributorOrder 原子完成分销买码订单：订单行锁、状态校验、生成兑换码、更新订单在同一事务里，
 // 同一订单的重复或并发回调最多出一批码。alreadyDone=true 表示之前已经出过码。
-func FulfillDistributorOrder(tradeNo string, actualPaymentMethod string) (alreadyDone bool, err error) {
+// paidMoney 是付款回调里的实付金额，和订单金额对不上就不出码；后台补单传空串，不核对。
+func FulfillDistributorOrder(tradeNo string, actualPaymentMethod string, paidMoney string) (alreadyDone bool, err error) {
 	if tradeNo == "" {
 		return false, errors.New("payment order number not provided")
 	}
@@ -61,7 +67,18 @@ func FulfillDistributorOrder(tradeNo string, actualPaymentMethod string) (alread
 		if order.Status != common.TopUpStatusPending {
 			return ErrTopUpStatusInvalid
 		}
-		quota, quotaErr := EpayTopUpQuota(int64(order.FaceValue))
+		if paidMoney != "" {
+			paid, parseErr := decimal.NewFromString(paidMoney)
+			if parseErr != nil || !paid.Equal(decimal.NewFromFloat(order.Money)) {
+				return ErrDistributorMoneyMismatch
+			}
+		}
+		// 码按元给额度（¥1 = QuotaPerUnit ÷ 汇率），不跟着额度显示方式走：显示改成美元也不会多给
+		rate := operation_setting.USDExchangeRate
+		if rate <= 0 {
+			return ErrInvalidTopUpQuota
+		}
+		quota, quotaErr := common.WalletQuotaFromDecimalStrict(decimal.NewFromInt(int64(order.FaceValue)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).Div(decimal.NewFromFloat(rate)))
 		if quotaErr != nil || quota <= 0 {
 			return ErrInvalidTopUpQuota
 		}
@@ -100,10 +117,10 @@ func FulfillDistributorOrder(tradeNo string, actualPaymentMethod string) (alread
 	return alreadyDone, nil
 }
 
-// GetDistributorOrders 返回用户最近的买码订单，新的在前。
-func GetDistributorOrders(userId int, limit int) ([]DistributorOrder, error) {
+// GetDistributorOrders 返回用户全部已付款的买码订单和一天内下的没付的，新的在前。
+func GetDistributorOrders(userId int, now int64) ([]DistributorOrder, error) {
 	var orders []DistributorOrder
-	err := DB.Where("user_id = ?", userId).Order("id desc").Limit(limit).Find(&orders).Error
+	err := DB.Where("user_id = ? AND (status = ? OR create_time > ?)", userId, common.TopUpStatusSuccess, now-86400).Order("id desc").Find(&orders).Error
 	return orders, err
 }
 
@@ -121,7 +138,8 @@ func GetDistributorOrderCodes(userId int, orderId int) (*DistributorOrder, []str
 		return nil, nil, ErrTopUpNotFound
 	}
 	var keys []string
-	err := DB.Model(&Redemption{}).Where("name = ?", order.BatchName).Order("id").Pluck("key", &keys).Error
+	// 后台手建的批次万一同名，也只拿这个分销商自己的
+	err := DB.Model(&Redemption{}).Where("name = ? AND user_id = ?", order.BatchName, order.UserId).Order("id").Pluck("key", &keys).Error
 	return order, keys, err
 }
 

@@ -159,6 +159,14 @@ export function SignUpForm({
 
     if (!validateTurnstile()) return
 
+    // The server consumes the captcha token even when registration fails,
+    // so a retry needs a fresh one.
+    const submittedTurnstileToken = turnstileToken
+    if (isTurnstileEnabled) {
+      setTurnstileToken('')
+      setTurnstileWidgetKey((current) => current + 1)
+    }
+
     setIsLoading(true)
     try {
       const res = await register({
@@ -167,7 +175,7 @@ export function SignUpForm({
         email: data.email || undefined,
         verification_code: verificationCode || undefined,
         aff_code: getAffiliateCode(),
-        turnstile: turnstileToken,
+        turnstile: submittedTurnstileToken,
       })
 
       if (res?.success) {
@@ -186,7 +194,10 @@ export function SignUpForm({
   }
 
   async function handleSendVerificationCode() {
-    if (await sendCode(emailValue || '')) {
+    const usesTurnstileToken = Boolean(emailValue && turnstileToken)
+    await sendCode(emailValue || '')
+    // Sent or not, the server has consumed this captcha token.
+    if (usesTurnstileToken) {
       setTurnstileToken('')
       setTurnstileWidgetKey((current) => current + 1)
     }

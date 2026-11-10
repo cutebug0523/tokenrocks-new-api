@@ -19,7 +19,10 @@
   // 好友下载 TR助手、登录时在网站上注册（含第三方登录），就算这个邀请人的
   try {
     var aff = new URLSearchParams(location.search).get('aff')
-    if (aff && /^[A-Za-z0-9]{1,32}$/.test(aff)) localStorage.setItem('aff', aff)
+    if (aff && /^[A-Za-z0-9]{1,32}$/.test(aff)) {
+      localStorage.setItem('aff', aff)
+      document.documentElement.classList.add('invited') // 下载区的「送 ¥5」换成「好友邀请你」那句
+    }
   } catch (e) {}
 </script>
 <style>
@@ -62,6 +65,10 @@
     .brand-sub { display: none; }
   }
   /* 小助手下载卡片：本系统的按钮排前面、填主色，另一个系统缩成小字；手机上不给安装包，写即将上线。认不出系统或没有脚本时两个按钮一样 */
+  .trh-gift { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; font-size: 16px; font-weight: 600; color: var(--brand-dark); }
+  .trh-gift b { padding: 3px 12px; border-radius: 999px; background: #e8590c; color: #fff; font-size: 15px; }
+  .trh-gift .by-friend, .invited .trh-gift .by-site { display: none; }
+  .invited .trh-gift .by-friend { display: inline; }
   .trh-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
   .doc-main .trh-btn { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: none; }
   .doc-main .trh-btn:hover { border-color: var(--brand); color: var(--brand-dark); }
@@ -134,6 +141,8 @@
 
     <section id="helper" class="note" aria-labelledby="helper-title">
       <h2 id="helper-title">装 TR助手，一键接入</h2>
+      <!-- 金额跟后台 checkin_setting.helper_welcome_yuan 一起改 -->
+      <p class="trh-gift"><b>送 ¥5</b><span class="by-site">下载 TR助手并登录，每个账号送 ¥5，新老用户都有</span><span class="by-friend">好友邀请你：下载 TR助手并登录，送你 ¥5</span></p>
       <p>TR助手装在电脑上，登录后点「接入」，就把 TokenRocks 写进本机的 DeepSeek Harness、ZCode、WorkBuddy：模型、上下文、看图、思考都设好，不用复制密钥、一项项填。菜单栏（Windows 是右下角托盘）里还能看余额，快用完了会提醒。</p>
       <div class="trh-links">
         <a class="trh-btn" data-os="mac" href="/_s/helper/TokenRocks-helper.dmg">下载 Mac 版</a>

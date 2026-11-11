@@ -3,8 +3,11 @@ package model
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -24,7 +27,7 @@ const DistributorTradeNoPrefix = "FX"
 const DistributorCommissionRate = 0.1
 
 // DistributorParentCommissionRate 是上级分销商另拿的比例：下级分销商的人每笔在线充值按实付再返上级这么多，
-// 和下级自己的 10% 分开算，现金月结。谁是谁的上级见支付设置 distributor_parents（店主 11-11 定，只算一级上级）。
+// 和下级自己的 10% 分开算，现金月结。只算直接上级，上级的上级不拿（店主 11-11 定）。谁是谁的上级见 distributorParents。
 const DistributorParentCommissionRate = 0.05
 
 // ErrDistributorMoneyMismatch 是付款回调的实付金额和订单金额对不上，不出码。
@@ -176,8 +179,12 @@ func GetDistributorStats(no int, now time.Time) (*DistributorStats, error) {
 	if err != nil {
 		return nil, err
 	}
+	parents, err := distributorParents()
+	if err != nil {
+		return nil, err
+	}
 	stats.Children = []DistributorChild{}
-	for child, parent := range operation_setting.GetPaymentSetting().DistributorParents {
+	for child, parent := range parents {
 		if parent != no || child == no {
 			continue
 		}
@@ -191,9 +198,47 @@ func GetDistributorStats(no int, now time.Time) (*DistributorStats, error) {
 	return stats, nil
 }
 
+// distributorParents 返回下级编号 → 上级编号。分销商本人的号兑的第一张别家的码（自己批次的不算）是哪个分销商的，
+// 那个分销商就是他上级，不用手写；支付设置 distributor_parents 手写的优先，拉人不靠码的时候用。
+func distributorParents() (map[int]int, error) {
+	setting := operation_setting.GetPaymentSetting()
+	parents := map[int]int{}
+	ids := slices.Collect(maps.Keys(setting.DistributorUsers))
+	if len(ids) > 0 {
+		var used []Redemption
+		if err := DB.Unscoped().Select("used_user_id", "name").Where("used_user_id IN ?", ids).Order("redeemed_time, id").Find(&used).Error; err != nil {
+			return nil, err
+		}
+		decided := map[int]bool{}
+		for _, r := range used {
+			self := setting.DistributorUsers[r.UsedUserId]
+			if decided[r.UsedUserId] || strings.HasPrefix(r.Name, DistributorBatchPrefix(self)) {
+				continue
+			}
+			decided[r.UsedUserId] = true
+			rest, ok := strings.CutPrefix(r.Name, "分销-")
+			if !ok {
+				continue
+			}
+			noText, _, ok := strings.Cut(rest, "号-")
+			parent, err := strconv.Atoi(noText)
+			if !ok || err != nil || parent <= 0 || parent == self {
+				continue
+			}
+			// ponytail: 一个编号挂了几个号时，按兑码先后取第一个认出来的上级
+			if _, exists := parents[self]; !exists {
+				parents[self] = parent
+			}
+		}
+	}
+	maps.Copy(parents, setting.DistributorParents)
+	return parents, nil
+}
+
 // distributorStats 算一个分销商名下的合计，返佣按 rate 算，口径和 中转/分销月结.sh 一样：
 // 用户兑的第一张码是他的就算他的人；兑码前 24 小时以外就充过值的不算；
 // 兑码前 24 小时起的成功充值都算，按北京时间分本月、上月。退款这里看不到，月结时扣。
+// 分销商本人的号算他自己的人、充值全算；别的分销商本人的号不算他的人（店主 11-11：3 号本人归 3 号）。
 func distributorStats(no int, now time.Time, rate float64) (*DistributorStats, error) {
 	prefix := DistributorBatchPrefix(no) + "%"
 	stats := &DistributorStats{}
@@ -224,35 +269,41 @@ func distributorStats(no int, now time.Time, rate float64) (*DistributorStats, e
 	start := time.Date(now.In(distributorZone).Year(), now.In(distributorZone).Month(), 1, 0, 0, 0, 0, distributorZone)
 	lastStart := start.AddDate(0, -1, 0)
 	stats.Months = []DistributorMonth{{Month: start.Format("2006-01")}, {Month: lastStart.Format("2006-01")}}
-	if len(ids) == 0 {
-		return stats, nil
-	}
 
-	// ponytail: 名单整个塞进 IN，他的人上万再分批
-	var first []firstUse
-	if err := DB.Unscoped().Model(&Redemption{}).Select("used_user_id AS user_id, MIN(redeemed_time) AS t").
-		Where("used_user_id IN ?", ids).Group("used_user_id").Scan(&first).Error; err != nil {
-		return nil, err
-	}
-	var paidFirst []firstUse
-	if err := DB.Model(&TopUp{}).Select("user_id, MIN(complete_time) AS t").
-		Where("user_id IN ? AND status = ?", ids, common.TopUpStatusSuccess).Group("user_id").Scan(&paidFirst).Error; err != nil {
-		return nil, err
-	}
-	firstPaid := make(map[int]int64, len(paidFirst))
-	for _, p := range paidFirst {
-		firstPaid[p.UserId] = p.T
-	}
-	mine := make([]int, 0, len(first))
-	for _, f := range first {
-		s := since[f.UserId]
-		if f.T != s {
-			continue
+	distributors := operation_setting.GetPaymentSetting().DistributorUsers
+	mine := make([]int, 0, len(ids))
+	if len(ids) > 0 {
+		// ponytail: 名单整个塞进 IN，他的人上万再分批
+		var first []firstUse
+		if err := DB.Unscoped().Model(&Redemption{}).Select("used_user_id AS user_id, MIN(redeemed_time) AS t").
+			Where("used_user_id IN ?", ids).Group("used_user_id").Scan(&first).Error; err != nil {
+			return nil, err
 		}
-		if t, ok := firstPaid[f.UserId]; ok && t < s-86400 {
-			continue
+		var paidFirst []firstUse
+		if err := DB.Model(&TopUp{}).Select("user_id, MIN(complete_time) AS t").
+			Where("user_id IN ? AND status = ?", ids, common.TopUpStatusSuccess).Group("user_id").Scan(&paidFirst).Error; err != nil {
+			return nil, err
 		}
-		mine = append(mine, f.UserId)
+		firstPaid := make(map[int]int64, len(paidFirst))
+		for _, p := range paidFirst {
+			firstPaid[p.UserId] = p.T
+		}
+		for _, f := range first {
+			s := since[f.UserId]
+			if _, isDistributor := distributors[f.UserId]; isDistributor || f.T != s {
+				continue
+			}
+			if t, ok := firstPaid[f.UserId]; ok && t < s-86400 {
+				continue
+			}
+			mine = append(mine, f.UserId)
+		}
+	}
+	for userId, n := range distributors {
+		if n == no {
+			mine = append(mine, userId)
+			since[userId] = 0
+		}
 	}
 	stats.Users = len(mine)
 	if len(mine) == 0 {

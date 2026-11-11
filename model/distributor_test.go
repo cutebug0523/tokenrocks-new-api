@@ -186,27 +186,42 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 					{UserId: e, TradeNo: "e1", Money: 30, CompleteTime: ts("2026-11-07 09:00"), Status: common.TopUpStatusSuccess},
 					{UserId: e, TradeNo: "e2", Money: 10, CompleteTime: ts("2026-11-08 10:00"), Status: common.TopUpStatusSuccess},
 					{UserId: 106, TradeNo: "f1", Money: 40, CompleteTime: ts("2026-11-09 10:00"), Status: common.TopUpStatusSuccess},
+					{UserId: 201, TradeNo: "g1", Money: 20, CompleteTime: ts("2026-11-09 10:00"), Status: common.TopUpStatusSuccess},
+					{UserId: 202, TradeNo: "h1", Money: 60, CompleteTime: ts("2026-11-09 10:00"), Status: common.TopUpStatusSuccess},
 				}
 				require.NoError(t, db.Create(&topUps).Error)
-				// 77 号是 7 号拉来的：7 号另拿 77 号的人充值的 5%；自己当自己上级的写法不算
-				previousParents := operation_setting.GetPaymentSetting().DistributorParents
-				operation_setting.GetPaymentSetting().DistributorParents = map[int]int{77: 7, 7: 7}
-				t.Cleanup(func() { operation_setting.GetPaymentSetting().DistributorParents = previousParents })
+				// 201 是 7 号本人的号，没兑过码；202 是 78 号本人的号，先兑自己批次的码、再兑 7 号的码，所以 78 号自动认 7 号当上级。
+				// 77 号是手写的 7 号下级；自己当自己上级的写法不算
+				require.NoError(t, db.Create(&[]Redemption{
+					{Name: "分销-78号-本人", UsedUserId: 202, RedeemedTime: ts("2026-11-01 10:00"), Key: "fxself78"},
+					{Name: "分销-7号-1106", UsedUserId: 202, RedeemedTime: ts("2026-11-03 09:00"), Key: "fxchild78"},
+				}).Error)
+				payment := operation_setting.GetPaymentSetting()
+				previousUsers, previousParents := payment.DistributorUsers, payment.DistributorParents
+				payment.DistributorUsers = map[int]int{201: 7, 202: 78}
+				payment.DistributorParents = map[int]int{77: 7, 7: 7}
+				t.Cleanup(func() { payment.DistributorUsers, payment.DistributorParents = previousUsers, previousParents })
 
 				stats, err := GetDistributorStats(7, time.Unix(ts("2026-11-15 12:00"), 0))
 				require.NoError(t, err)
 				assert.Equal(t, &DistributorStats{
-					CodesTotal:    7, // 6 张有效 + 1 张兑过后作废的；作废没兑的不算；77 号的不算
-					CodesRedeemed: 6,
-					Users:         3, // A、D、E
+					CodesTotal:    8, // 7 张有效 + 1 张兑过后作废的；作废没兑的不算；77、78 号的不算
+					CodesRedeemed: 7,
+					Users:         4, // A、D、E 和 7 号本人；78 号本人兑过 7 号的码也不算 7 号的人
 					Months: []DistributorMonth{
-						{Month: "2026-11", Count: 5, Money: 210, Commission: 21},
+						{Month: "2026-11", Count: 6, Money: 230, Commission: 23},
 						{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
 					},
-					Children: []DistributorChild{{No: 77, Users: 1, Months: []DistributorMonth{
-						{Month: "2026-11", Count: 1, Money: 40, Commission: 2},
-						{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
-					}}},
+					Children: []DistributorChild{
+						{No: 77, Users: 1, Months: []DistributorMonth{
+							{Month: "2026-11", Count: 1, Money: 40, Commission: 2},
+							{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
+						}},
+						{No: 78, Users: 1, Months: []DistributorMonth{
+							{Month: "2026-11", Count: 1, Money: 60, Commission: 3},
+							{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
+						}},
+					},
 				}, stats)
 
 				// 下级自己看：自己的人照拿 10%，没有下级
@@ -216,13 +231,31 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 				assert.Equal(t, 4.0, stats.Months[0].Commission)
 				assert.Empty(t, stats.Children)
 
-				// 12 月看：本月是 A 的 a4，上月是 11 月那 5 笔
+				// 12 月看：本月是 A 的 a4，上月是 11 月那 6 笔
 				stats, err = GetDistributorStats(7, time.Unix(ts("2026-12-01 00:00"), 0))
 				require.NoError(t, err)
 				assert.Equal(t, []DistributorMonth{
 					{Month: "2026-12", Count: 1, Money: 40, Commission: 4},
-					{Month: "2026-11", Count: 5, Money: 210, Commission: 21},
+					{Month: "2026-11", Count: 6, Money: 230, Commission: 23},
 				}, stats.Months)
+
+				// 下级自己看：本人照拿 10%，上级的上级不拿
+				stats, err = GetDistributorStats(78, time.Unix(ts("2026-11-15 12:00"), 0))
+				require.NoError(t, err)
+				assert.Equal(t, 1, stats.Users)
+				assert.Equal(t, 6.0, stats.Months[0].Commission)
+				assert.Empty(t, stats.Children)
+
+				// 手写的上级优先于按码认的
+				payment.DistributorParents = map[int]int{77: 7, 78: 77}
+				stats, err = GetDistributorStats(7, time.Unix(ts("2026-11-15 12:00"), 0))
+				require.NoError(t, err)
+				require.Len(t, stats.Children, 1)
+				assert.Equal(t, 77, stats.Children[0].No)
+				stats, err = GetDistributorStats(77, time.Unix(ts("2026-11-15 12:00"), 0))
+				require.NoError(t, err)
+				require.Len(t, stats.Children, 1)
+				assert.Equal(t, 78, stats.Children[0].No)
 
 				stats, err = GetDistributorStats(8, time.Unix(ts("2026-11-15 12:00"), 0))
 				require.NoError(t, err)

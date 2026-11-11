@@ -38,12 +38,12 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-it('lists each own user with their top-ups and marks the distributor as yourself', () => {
+it('lists each own user with top-ups and spent amount and marks the distributor as yourself', () => {
   render(
     <DistributorMembersCard
       members={[
-        { name: 'zkzy', since: 1794128000, this_month: 20, last_month: 0 },
-        { name: '304***@qq.com', since: 0, this_month: 70, last_month: 5 },
+        { name: 'zkzy', since: 1794128000, paid: 20, spent: 0 },
+        { name: '304***@qq.com', since: 0, paid: 70, spent: 12.5 },
       ]}
     />
   )
@@ -53,6 +53,7 @@ it('lists each own user with their top-ups and marks the distributor as yourself
   expect(self).toBeDefined()
   expect(within(self as HTMLElement).getByText('Yourself')).toBeInTheDocument()
   expect(within(self as HTMLElement).getByText('¥70')).toBeInTheDocument()
+  expect(within(self as HTMLElement).getByText('¥12.5')).toBeInTheDocument()
   expect(screen.getByText('zkzy')).toBeInTheDocument()
 })
 

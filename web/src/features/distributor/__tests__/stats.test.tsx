@@ -39,14 +39,9 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-const month = (money: number, commission: number) => ({
-  month: '2026-11',
-  count: 1,
-  money,
-  commission,
-})
+const month = (money: number) => ({ month: '2026-11', count: 1, money })
 
-it('adds the sub-distributor share to the commission tile and lists each sub-distributor', () => {
+it('shows the settlement numbers and each sub-distributor share', () => {
   const self: DistributorSelf = {
     enabled: true,
     no: 1,
@@ -56,19 +51,30 @@ it('adds the sub-distributor share to the commission tile and lists each sub-dis
       codes_total: 50,
       codes_redeemed: 13,
       users: 12,
-      months: [month(160, 16), month(0, 0)],
-      children: [{ no: 3, users: 3, months: [month(90, 4.5), month(0, 0)] }],
+      months: [month(160), month(0)],
+      paid: 160,
+      pending: 7.25,
+      withdrawable: 13.5,
+      withdrawn: 6,
+      payouts: [{ date: '2026-12-01', amount: 6 }],
+      children: [{ no: 3, users: 3, paid: 90, earned: 1.5, pending: 3 }],
     },
   }
   render(<DistributorStats self={self} />)
 
+  expect(screen.getByText('¥7.25')).toBeInTheDocument()
+  expect(screen.getByText('¥13.5')).toBeInTheDocument()
   const section = screen.getByRole('region', { name: 'Sub-distributors' })
-  expect(section).toHaveTextContent('No. 3 · 3 users')
-  expect(section).toHaveTextContent('your share ¥4.5')
-  expect(screen.getByText('¥20.5')).toBeInTheDocument()
+  expect(section).toHaveTextContent('No. 3 · 3 users · top-ups ¥90')
+  expect(section).toHaveTextContent(
+    'your share ¥1.5 from money spent, ¥3 pending'
+  )
+  expect(screen.getByRole('region', { name: 'Payouts' })).toHaveTextContent(
+    '2026-12-01 · ¥6'
+  )
 })
 
-it('shows no sub-distributor section when the distributor has none', () => {
+it('shows no sub-distributor or payout section when there are none', () => {
   const self: DistributorSelf = {
     enabled: true,
     no: 3,
@@ -76,7 +82,12 @@ it('shows no sub-distributor section when the distributor has none', () => {
       codes_total: 51,
       codes_redeemed: 3,
       users: 3,
-      months: [month(90, 9), month(0, 0)],
+      months: [month(90), month(0)],
+      paid: 90,
+      pending: 0,
+      withdrawable: 9,
+      withdrawn: 0,
+      payouts: [],
       children: [],
     },
   }
@@ -85,5 +96,9 @@ it('shows no sub-distributor section when the distributor has none', () => {
   expect(
     screen.queryByRole('region', { name: 'Sub-distributors' })
   ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Payouts' })
+  ).not.toBeInTheDocument()
   expect(screen.getByText('¥9')).toBeInTheDocument()
+  expect(screen.getByText('No payouts yet')).toBeInTheDocument()
 })

@@ -24,11 +24,11 @@ import (
 // DistributorTradeNoPrefix 是分销买码订单号的前缀，充值订单号是 USR 开头。
 const DistributorTradeNoPrefix = "FX"
 
-// DistributorCommissionRate 是分销商的人在线充值返给分销商的比例，按实付算，现金月结。
+// DistributorCommissionRate 是分销商的人在线充值返给分销商的比例，按实付里已经用掉的部分算，对公打款。
 const DistributorCommissionRate = 0.1
 
-// DistributorParentCommissionRate 是上级分销商另拿的比例：下级分销商的人每笔在线充值按实付再返上级这么多，
-// 和下级自己的 10% 分开算，现金月结。只算直接上级，上级的上级不拿（店主 11-11 定）。谁是谁的上级见 distributorParents。
+// DistributorParentCommissionRate 是上级分销商另拿的比例：下级分销商的人在线充值按同样口径再返上级这么多，
+// 和下级自己的 10% 分开算。只算直接上级，上级的上级不拿（店主 11-11 定）。谁是谁的上级见 distributorParents。
 const DistributorParentCommissionRate = 0.05
 
 // ErrDistributorMoneyMismatch 是付款回调的实付金额和订单金额对不上，不出码。
@@ -153,18 +153,25 @@ func GetDistributorOrderCodes(userId int, orderId int) (*DistributorOrder, []str
 }
 
 type DistributorMonth struct {
-	Month      string  `json:"month"`
-	Count      int     `json:"count"`
-	Money      float64 `json:"money"`
-	Commission float64 `json:"commission"`
+	Month string  `json:"month"`
+	Count int     `json:"count"`
+	Money float64 `json:"money"`
 }
 
+// DistributorStats 里的提现四个数（店主 11-11）：返佣只算他的人在线充值里已经用掉的部分，用掉的退不了。
+// Paid 是他自己的人累计在线充值（实付）；Pending 是还没用掉那部分的返佣，可能退款，先不结；
+// Withdrawable 是已用掉那部分的返佣减去已打款；Withdrawn 是 Payouts 合计。Pending、Withdrawable 含下级那份。
 type DistributorStats struct {
-	CodesTotal    int64              `json:"codes_total"`
-	CodesRedeemed int64              `json:"codes_redeemed"`
-	Users         int                `json:"users"`
-	Months        []DistributorMonth `json:"months"`
-	// Children 是他名下的下级分销商，Months 里的返佣是他按 DistributorParentCommissionRate 拿的那份
+	CodesTotal    int64                                 `json:"codes_total"`
+	CodesRedeemed int64                                 `json:"codes_redeemed"`
+	Users         int                                   `json:"users"`
+	Months        []DistributorMonth                    `json:"months"`
+	Paid          float64                               `json:"paid"`
+	Pending       float64                               `json:"pending"`
+	Withdrawable  float64                               `json:"withdrawable"`
+	Withdrawn     float64                               `json:"withdrawn"`
+	Payouts       []operation_setting.DistributorPayout `json:"payouts"`
+	// Children 是他名下的下级分销商，Earned、Pending 是他按 DistributorParentCommissionRate 拿的那份
 	Children []DistributorChild `json:"children"`
 	// Members 是他自己的人的明细；下级分销商的人不给明细
 	Members []DistributorMember `json:"members"`
@@ -174,9 +181,15 @@ type DistributorStats struct {
 type DistributorMember struct {
 	Name string `json:"name"`
 	// Since 是从什么时候算他的人（兑第一张码的时间），0 是分销商本人
-	Since     int64   `json:"since"`
-	ThisMonth float64 `json:"this_month"`
-	LastMonth float64 `json:"last_month"`
+	Since int64 `json:"since"`
+	// Paid 是累计在线充值（实付），Spent 是其中已经用掉的
+	Paid  float64 `json:"paid"`
+	Spent float64 `json:"spent"`
+}
+
+// roundYuan 把金额取到分。
+func roundYuan(v float64) float64 {
+	return math.Round(v*100) / 100
 }
 
 // maskDistributorMemberName 把像邮箱、手机号的用户名打码，别的原样给。
@@ -192,14 +205,17 @@ func maskDistributorMemberName(name string) string {
 }
 
 type DistributorChild struct {
-	No     int                `json:"no"`
-	Users  int                `json:"users"`
-	Months []DistributorMonth `json:"months"`
+	No    int     `json:"no"`
+	Users int     `json:"users"`
+	Paid  float64 `json:"paid"`
+	// Earned 是已用掉那部分里他的份，Pending 是没用掉那部分里他的份
+	Earned  float64 `json:"earned"`
+	Pending float64 `json:"pending"`
 }
 
-// GetDistributorStats 返回分销商自己的合计，再带上他每个下级分销商的人的充值和他该拿的那份。
+// GetDistributorStats 返回分销商自己的合计，再带上他每个下级分销商的人的充值和他该拿的那份，最后扣掉已打款。
 func GetDistributorStats(no int, now time.Time) (*DistributorStats, error) {
-	stats, err := distributorStats(no, now, DistributorCommissionRate)
+	stats, earned, err := distributorStats(no, now, DistributorCommissionRate)
 	if err != nil {
 		return nil, err
 	}
@@ -212,13 +228,29 @@ func GetDistributorStats(no int, now time.Time) (*DistributorStats, error) {
 		if parent != no || child == no {
 			continue
 		}
-		childStats, err := distributorStats(child, now, DistributorParentCommissionRate)
+		childStats, childEarned, err := distributorStats(child, now, DistributorParentCommissionRate)
 		if err != nil {
 			return nil, err
 		}
-		stats.Children = append(stats.Children, DistributorChild{No: child, Users: childStats.Users, Months: childStats.Months})
+		earned += childEarned
+		stats.Pending += childStats.Pending
+		stats.Children = append(stats.Children, DistributorChild{No: child, Users: childStats.Users, Paid: childStats.Paid, Earned: roundYuan(childEarned), Pending: roundYuan(childStats.Pending)})
 	}
 	slices.SortFunc(stats.Children, func(a, b DistributorChild) int { return a.No - b.No })
+
+	// 打款是对公转账后手记在支付设置 distributor_payouts。余额后来又变多（签到、兑码）会让「已用掉」暂时变少，
+	// 这时多打的部分先从待结算里扣，所以 待结算 + 可提现 + 已提现 总是等于 没退款的充值 × 比例
+	stats.Payouts = slices.Clone(operation_setting.GetPaymentSetting().DistributorPayouts[no])
+	if stats.Payouts == nil {
+		stats.Payouts = []operation_setting.DistributorPayout{}
+	}
+	for _, p := range stats.Payouts {
+		stats.Withdrawn += p.Amount
+	}
+	stats.Withdrawn = roundYuan(stats.Withdrawn)
+	earned = roundYuan(earned)
+	stats.Withdrawable = max(0, roundYuan(earned-stats.Withdrawn))
+	stats.Pending = max(0, roundYuan(earned+stats.Pending-stats.Withdrawn-stats.Withdrawable))
 	return stats, nil
 }
 
@@ -261,17 +293,18 @@ func distributorParents() (map[int]int, error) {
 
 // distributorStats 算一个分销商名下的合计，返佣按 rate 算，口径和 中转/分销月结.sh 一样：
 // 用户兑的第一张码是他的就算他的人；兑码前 24 小时以外就充过值的不算；
-// 兑码前 24 小时起的成功充值都算，按北京时间分本月、上月。退款这里看不到，月结时扣。
+// 兑码前 24 小时起的成功充值都算，按北京时间分本月、上月。
 // 分销商本人的号算他自己的人、充值全算；别的分销商本人的号不算他的人（店主 11-11：3 号本人归 3 号）。
-func distributorStats(no int, now time.Time, rate float64) (*DistributorStats, error) {
+// 返回的 Pending 是没用掉的充值 × rate，earned 是已用掉的充值 × rate，都没取整。
+func distributorStats(no int, now time.Time, rate float64) (stats *DistributorStats, earned float64, err error) {
 	prefix := DistributorBatchPrefix(no) + "%"
-	stats := &DistributorStats{Members: []DistributorMember{}}
+	stats = &DistributorStats{Members: []DistributorMember{}}
 	// 作废的码不算，但作废前已经兑掉的照算（兑换码是软删除，所以要 Unscoped）
 	if err := DB.Unscoped().Model(&Redemption{}).Where("name LIKE ? AND (deleted_at IS NULL OR used_user_id > 0)", prefix).Count(&stats.CodesTotal).Error; err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if err := DB.Unscoped().Model(&Redemption{}).Where("name LIKE ? AND used_user_id > 0", prefix).Count(&stats.CodesRedeemed).Error; err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	type firstUse struct {
@@ -281,7 +314,7 @@ func distributorStats(no int, now time.Time, rate float64) (*DistributorStats, e
 	var his []firstUse
 	if err := DB.Unscoped().Model(&Redemption{}).Select("used_user_id AS user_id, MIN(redeemed_time) AS t").
 		Where("name LIKE ? AND used_user_id > 0", prefix).Group("used_user_id").Scan(&his).Error; err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	since := make(map[int]int64, len(his))
 	ids := make([]int, 0, len(his))
@@ -301,12 +334,12 @@ func distributorStats(no int, now time.Time, rate float64) (*DistributorStats, e
 		var first []firstUse
 		if err := DB.Unscoped().Model(&Redemption{}).Select("used_user_id AS user_id, MIN(redeemed_time) AS t").
 			Where("used_user_id IN ?", ids).Group("used_user_id").Scan(&first).Error; err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		var paidFirst []firstUse
 		if err := DB.Model(&TopUp{}).Select("user_id, MIN(complete_time) AS t").
 			Where("user_id IN ? AND status = ?", ids, common.TopUpStatusSuccess).Group("user_id").Scan(&paidFirst).Error; err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		firstPaid := make(map[int]int64, len(paidFirst))
 		for _, p := range paidFirst {
@@ -331,55 +364,66 @@ func distributorStats(no int, now time.Time, rate float64) (*DistributorStats, e
 	}
 	stats.Users = len(mine)
 	if len(mine) == 0 {
-		return stats, nil
+		return stats, 0, nil
 	}
 
 	var users []User
-	if err := DB.Unscoped().Select("id", "username").Where("id IN ?", mine).Find(&users).Error; err != nil {
-		return nil, err
+	if err := DB.Unscoped().Select("id", "username", "quota", "used_quota").Where("id IN ?", mine).Find(&users).Error; err != nil {
+		return nil, 0, err
 	}
-	members := make(map[int]*DistributorMember, len(users))
+	accounts := make(map[int]User, len(users))
 	for _, u := range users {
-		members[u.Id] = &DistributorMember{Name: maskDistributorMemberName(u.Username), Since: since[u.Id]}
+		accounts[u.Id] = u
 	}
 
 	var topUps []TopUp
-	if err := DB.Select("user_id", "money", "complete_time").
-		Where("user_id IN ? AND status = ? AND complete_time >= ? AND complete_time < ?", mine, common.TopUpStatusSuccess, lastStart.Unix(), start.AddDate(0, 1, 0).Unix()).
-		Find(&topUps).Error; err != nil {
-		return nil, err
+	if err := DB.Select("user_id", "money", "complete_time").Where("user_id IN ? AND status = ?", mine, common.TopUpStatusSuccess).Find(&topUps).Error; err != nil {
+		return nil, 0, err
 	}
+	paid := make(map[int]float64, len(mine))
 	for _, t := range topUps {
 		if t.CompleteTime < since[t.UserId]-86400 {
 			continue
 		}
-		m := &stats.Months[1]
-		member := members[t.UserId]
-		if member == nil { // 用户行被硬删了也照算钱
-			member = &DistributorMember{Name: "#" + strconv.Itoa(t.UserId), Since: since[t.UserId]}
-			members[t.UserId] = member
+		paid[t.UserId] += t.Money
+		if t.CompleteTime < lastStart.Unix() || t.CompleteTime >= start.AddDate(0, 1, 0).Unix() {
+			continue
 		}
-		memberMoney := &member.LastMonth
+		m := &stats.Months[1]
 		if t.CompleteTime >= start.Unix() {
 			m = &stats.Months[0]
-			memberMoney = &member.ThisMonth
 		}
 		m.Count++
 		m.Money += t.Money
-		*memberMoney += t.Money
 	}
 	for i := range stats.Months {
-		stats.Months[i].Money = math.Round(stats.Months[i].Money*100) / 100
-		stats.Months[i].Commission = math.Round(stats.Months[i].Money*rate*100) / 100
+		stats.Months[i].Money = roundYuan(stats.Months[i].Money)
 	}
-	for _, member := range members {
-		member.ThisMonth = math.Round(member.ThisMonth*100) / 100
-		member.LastMonth = math.Round(member.LastMonth*100) / 100
-		stats.Members = append(stats.Members, *member)
+
+	// 先扣赠送和兑换码的、再扣充值的（店主 11-11），所以余额先当成没用掉的充值；
+	// 用掉的不超过他真用掉的额度，这样后台扣掉退款的那部分余额不会算成用掉。
+	// ponytail: 退款时送的部分已经用掉了的，那部分会多算成用掉；要准得按时间逐笔记账
+	quotaPerYuan := common.QuotaPerUnit / operation_setting.USDExchangeRate
+	for _, userId := range mine {
+		account := accounts[userId] // 用户行被硬删了就是零值：余额和用量都是 0，钱照列但不返
+		name := maskDistributorMemberName(account.Username)
+		if account.Id == 0 {
+			name = "#" + strconv.Itoa(userId)
+		}
+		left, spent := paid[userId], 0.0
+		if quotaPerYuan > 0 {
+			left = min(left, float64(max(account.Quota, 0))/quotaPerYuan)
+			spent = min(paid[userId]-left, float64(account.UsedQuota)/quotaPerYuan)
+		}
+		stats.Paid += paid[userId]
+		stats.Pending += left * rate
+		earned += spent * rate
+		stats.Members = append(stats.Members, DistributorMember{Name: name, Since: since[userId], Paid: roundYuan(paid[userId]), Spent: roundYuan(spent)})
 	}
-	// 本月充得多的在前，再按上月、按先来后到
+	stats.Paid = roundYuan(stats.Paid)
+	// 充得多的在前，再按先来后到
 	slices.SortFunc(stats.Members, func(a, b DistributorMember) int {
-		return cmp.Or(cmp.Compare(b.ThisMonth, a.ThisMonth), cmp.Compare(b.LastMonth, a.LastMonth), cmp.Compare(a.Since, b.Since), cmp.Compare(a.Name, b.Name))
+		return cmp.Or(cmp.Compare(b.Paid, a.Paid), cmp.Compare(a.Since, b.Since), cmp.Compare(a.Name, b.Name))
 	})
-	return stats, nil
+	return stats, earned, nil
 }

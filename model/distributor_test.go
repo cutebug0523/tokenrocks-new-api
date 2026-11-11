@@ -196,17 +196,30 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 					{Name: "分销-78号-本人", UsedUserId: 202, RedeemedTime: ts("2026-11-01 10:00"), Key: "fxself78"},
 					{Name: "分销-7号-1106", UsedUserId: 202, RedeemedTime: ts("2026-11-03 09:00"), Key: "fxchild78"},
 				}).Error)
+				// 余额和用量按 ¥1 = 500000/7 额度：alice 余额 ¥70、用过 ¥140；D 退过款，余额 0、只用过 ¥7；
+				// E 余额 ¥49 比充的多（送的还没用完）；7 号本人充的全用掉；106、202 是两个下级那边的人
+				yuan := func(v int) int { return v * 500000 / 7 }
 				for _, u := range []User{
-					{Id: a, Username: "alice"}, {Id: d, Username: "13812345678"}, {Id: e, Username: "eve@qq.com"}, {Id: 201, Username: "boss7"},
+					{Id: a, Username: "alice", Quota: yuan(70), UsedQuota: yuan(140)},
+					{Id: d, Username: "13812345678", UsedQuota: yuan(7)},
+					{Id: e, Username: "eve@qq.com", Quota: yuan(49), UsedQuota: yuan(14)},
+					{Id: 201, Username: "boss7", UsedQuota: yuan(21)},
+					{Id: 106, Username: "u106", UsedQuota: yuan(35)},
+					{Id: 202, Username: "boss78", Quota: yuan(28), UsedQuota: yuan(70)},
 				} {
 					u.Password, u.Status, u.Group, u.AffCode = "unused", common.UserStatusEnabled, "default", "fxaff"+strconv.Itoa(u.Id)
 					require.NoError(t, db.Create(&u).Error)
 				}
 				payment := operation_setting.GetPaymentSetting()
-				previousUsers, previousParents := payment.DistributorUsers, payment.DistributorParents
+				previousUsers, previousParents, previousPayouts, previousRate := payment.DistributorUsers, payment.DistributorParents, payment.DistributorPayouts, operation_setting.USDExchangeRate
 				payment.DistributorUsers = map[int]int{201: 7, 202: 78}
 				payment.DistributorParents = map[int]int{77: 7, 7: 7}
-				t.Cleanup(func() { payment.DistributorUsers, payment.DistributorParents = previousUsers, previousParents })
+				payment.DistributorPayouts = map[int][]operation_setting.DistributorPayout{7: {{Date: "2026-11-10", Amount: 10}}}
+				operation_setting.USDExchangeRate = 7
+				t.Cleanup(func() {
+					payment.DistributorUsers, payment.DistributorParents, payment.DistributorPayouts = previousUsers, previousParents, previousPayouts
+					operation_setting.USDExchangeRate = previousRate
+				})
 
 				stats, err := GetDistributorStats(7, time.Unix(ts("2026-11-15 12:00"), 0))
 				require.NoError(t, err)
@@ -215,48 +228,58 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 					CodesRedeemed: 7,
 					Users:         4, // A、D、E 和 7 号本人；78 号本人兑过 7 号的码也不算 7 号的人
 					Months: []DistributorMonth{
-						{Month: "2026-11", Count: 6, Money: 230, Commission: 23},
-						{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
+						{Month: "2026-11", Count: 6, Money: 230},
+						{Month: "2026-10", Count: 0, Money: 0},
 					},
-					// 本月充得多的在前；手机号、邮箱打码；本人 Since 是 0
+					// 累计充值不分月：alice 12 月那笔 40 也在里面
+					Paid: 270,
+					// 没用掉的：alice 70、E 40 → 11；下级 202 那边 28 × 5% → 1.4
+					Pending: 12.4,
+					// 用掉的：alice 120、D 7（退掉的 13 不算）、本人 20 → 14.7；下级 106 用掉 35、202 用掉 32 → 1.75 + 1.6；减去打过的 10
+					Withdrawable: 8.05,
+					Withdrawn:    10,
+					Payouts:      []operation_setting.DistributorPayout{{Date: "2026-11-10", Amount: 10}},
+					// 充得多的在前；手机号、邮箱打码；本人 Since 是 0
 					Members: []DistributorMember{
-						{Name: "alice", Since: ts("2026-11-02 10:00"), ThisMonth: 150},
-						{Name: "e***@qq.com", Since: ts("2026-11-07 10:00"), ThisMonth: 40},
-						{Name: "boss7", Since: 0, ThisMonth: 20},
-						{Name: "138****78", Since: ts("2026-11-04 10:00"), ThisMonth: 20},
+						{Name: "alice", Since: ts("2026-11-02 10:00"), Paid: 190, Spent: 120},
+						{Name: "e***@qq.com", Since: ts("2026-11-07 10:00"), Paid: 40, Spent: 0},
+						{Name: "boss7", Since: 0, Paid: 20, Spent: 20},
+						{Name: "138****78", Since: ts("2026-11-04 10:00"), Paid: 20, Spent: 7},
 					},
 					Children: []DistributorChild{
-						{No: 77, Users: 1, Months: []DistributorMonth{
-							{Month: "2026-11", Count: 1, Money: 40, Commission: 2},
-							{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
-						}},
-						{No: 78, Users: 1, Months: []DistributorMonth{
-							{Month: "2026-11", Count: 1, Money: 60, Commission: 3},
-							{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
-						}},
+						{No: 77, Users: 1, Paid: 40, Earned: 1.75, Pending: 0},
+						{No: 78, Users: 1, Paid: 60, Earned: 1.6, Pending: 1.4},
 					},
 				}, stats)
+
+				// 打多了（余额后来又变多会这样）：可提现是 0，多打的从待结算里扣，三个数加起来还是 30.45
+				payment.DistributorPayouts = map[int][]operation_setting.DistributorPayout{7: {{Date: "2026-11-10", Amount: 10}, {Date: "2026-11-11", Amount: 10}}}
+				stats, err = GetDistributorStats(7, time.Unix(ts("2026-11-15 12:00"), 0))
+				require.NoError(t, err)
+				assert.Equal(t, []float64{10.45, 0, 20}, []float64{stats.Pending, stats.Withdrawable, stats.Withdrawn})
+				payment.DistributorPayouts = map[int][]operation_setting.DistributorPayout{}
 
 				// 下级自己看：自己的人照拿 10%，没有下级
 				stats, err = GetDistributorStats(77, time.Unix(ts("2026-11-15 12:00"), 0))
 				require.NoError(t, err)
 				assert.Equal(t, 1, stats.Users)
-				assert.Equal(t, 4.0, stats.Months[0].Commission)
+				assert.Equal(t, []float64{0, 3.5, 0}, []float64{stats.Pending, stats.Withdrawable, stats.Withdrawn})
+				assert.Empty(t, stats.Payouts, "别人的打款不算他的")
 				assert.Empty(t, stats.Children)
 
 				// 12 月看：本月是 A 的 a4，上月是 11 月那 6 笔
 				stats, err = GetDistributorStats(7, time.Unix(ts("2026-12-01 00:00"), 0))
 				require.NoError(t, err)
 				assert.Equal(t, []DistributorMonth{
-					{Month: "2026-12", Count: 1, Money: 40, Commission: 4},
-					{Month: "2026-11", Count: 6, Money: 230, Commission: 23},
+					{Month: "2026-12", Count: 1, Money: 40},
+					{Month: "2026-11", Count: 6, Money: 230},
 				}, stats.Months)
 
 				// 下级自己看：本人照拿 10%，上级的上级不拿
 				stats, err = GetDistributorStats(78, time.Unix(ts("2026-11-15 12:00"), 0))
 				require.NoError(t, err)
 				assert.Equal(t, 1, stats.Users)
-				assert.Equal(t, 6.0, stats.Months[0].Commission)
+				assert.Equal(t, []float64{2.8, 3.2, 0}, []float64{stats.Pending, stats.Withdrawable, stats.Withdrawn})
 				assert.Empty(t, stats.Children)
 
 				// 手写的上级优先于按码认的
@@ -298,6 +321,12 @@ func TestDistributorOptionValidation(t *testing.T) {
 		{"payment_setting.distributor_parents", `{"3":3}`, false},
 		{"payment_setting.distributor_parents", `{"3":0}`, false},
 		{"payment_setting.distributor_parents", `null`, false},
+		{"payment_setting.distributor_payouts", `{"7":[{"date":"2026-12-01","amount":26.5}]}`, true},
+		{"payment_setting.distributor_payouts", `{}`, true},
+		{"payment_setting.distributor_payouts", `{"7":[{"date":"12-01","amount":26}]}`, false},
+		{"payment_setting.distributor_payouts", `{"7":[{"date":"2026-12-01","amount":0}]}`, false},
+		{"payment_setting.distributor_payouts", `{"0":[{"date":"2026-12-01","amount":1}]}`, false},
+		{"payment_setting.distributor_payouts", `null`, false},
 		{"payment_setting.distributor_face_values", `[1,2,5]`, true},
 		{"payment_setting.distributor_face_values", `[]`, true},
 		{"payment_setting.distributor_face_values", `[0,2]`, false},

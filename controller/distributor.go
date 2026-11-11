@@ -153,6 +153,21 @@ func GetDistributorOrderCodes(c *gin.Context) {
 }
 
 // GetAllDistributorOrders 给记账用：since（秒）以后付款的所有买码订单。
+// GetDistributorStatsByAdmin 给后台看某个分销商的账，和他自己在 /distributor 看到的一样，结算打款前核对用。
+func GetDistributorStatsByAdmin(c *gin.Context) {
+	no, err := strconv.Atoi(c.Query("no"))
+	if err != nil || no <= 0 {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	stats, err := model.GetDistributorStats(no, time.Now())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, stats)
+}
+
 func GetAllDistributorOrders(c *gin.Context) {
 	since, _ := strconv.ParseInt(c.Query("since"), 10, 64)
 	orders, err := model.GetPaidDistributorOrders(since)

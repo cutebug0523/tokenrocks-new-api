@@ -16,17 +16,34 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Banknote, HandCoins, Ticket, Users } from 'lucide-react'
+import {
+  Banknote,
+  Clock,
+  HandCoins,
+  Landmark,
+  Ticket,
+  Users,
+  Wallet,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { formatLocalCurrencyAmount } from '@/lib/currency'
 import { formatPercent } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 import type { DistributorSelf } from '../types'
 
 interface DistributorStatsProps {
   self: DistributorSelf
+}
+
+interface Tile {
+  label: string
+  value: string
+  description: string
+  icon: typeof Ticket
+  tone: IconBadgeTone
 }
 
 export function DistributorStats(props: DistributorStatsProps) {
@@ -35,22 +52,8 @@ export function DistributorStats(props: DistributorStatsProps) {
   const thisMonth = stats?.months[0]
   const lastMonth = stats?.months[1]
   const children = stats?.children ?? []
-  let childThisMonth = 0
-  let childLastMonth = 0
-  for (const child of children) {
-    childThisMonth += child.months[0]?.commission ?? 0
-    childLastMonth += child.months[1]?.commission ?? 0
-  }
-  const lastCommission = formatLocalCurrencyAmount(
-    (lastMonth?.commission ?? 0) + childLastMonth
-  )
-  const tiles: {
-    label: string
-    value: string
-    description: string
-    icon: typeof Ticket
-    tone: IconBadgeTone
-  }[] = [
+  const payouts = stats?.payouts ?? []
+  const activity: Tile[] = [
     {
       label: t('Codes redeemed'),
       value: t('{{redeemed}} / {{total}}', {
@@ -78,48 +81,74 @@ export function DistributorStats(props: DistributorStatsProps) {
       icon: Banknote,
       tone: 'success',
     },
+  ]
+  const settlement: Tile[] = [
     {
-      label: t('Commission this month'),
-      value: formatLocalCurrencyAmount(
-        (thisMonth?.commission ?? 0) + childThisMonth
-      ),
-      description:
-        children.length > 0
-          ? t(
-              'Includes {{amount}} from sub-distributors · last month {{last}}',
-              {
-                amount: formatLocalCurrencyAmount(childThisMonth),
-                last: lastCommission,
-              }
-            )
-          : t('Last month {{amount}}', { amount: lastCommission }),
+      label: t('Total top-ups'),
+      value: formatLocalCurrencyAmount(stats?.paid ?? 0),
+      description: t('What your users have paid online'),
+      icon: Wallet,
+      tone: 'success',
+    },
+    {
+      label: t('Pending commission'),
+      value: formatLocalCurrencyAmount(stats?.pending ?? 0),
+      description: t('On money your users have not spent yet'),
+      icon: Clock,
+      tone: 'chart-4',
+    },
+    {
+      label: t('Withdrawable'),
+      value: formatLocalCurrencyAmount(stats?.withdrawable ?? 0),
+      description: t('On money your users have spent'),
       icon: HandCoins,
       tone: 'warning',
+    },
+    {
+      label: t('Paid out'),
+      value: formatLocalCurrencyAmount(stats?.withdrawn ?? 0),
+      description:
+        payouts.length > 0
+          ? t('{{count}} payouts · last on {{date}}', {
+              count: payouts.length,
+              date: payouts.at(-1)?.date,
+            })
+          : t('No payouts yet'),
+      icon: Landmark,
+      tone: 'info',
     },
   ]
 
   return (
     <div className='space-y-2'>
-      <div className='grid grid-cols-2 divide-y rounded-lg border md:grid-cols-4 md:divide-x md:divide-y-0'>
-        {tiles.map((item) => (
-          <div key={item.label} className='min-w-0 px-3 py-3 sm:px-5 sm:py-4'>
-            <div className='flex items-center gap-2'>
-              <IconBadge tone={item.tone} size='stat'>
-                <item.icon />
-              </IconBadge>
-              <div className='text-muted-foreground truncate text-xs font-medium'>
-                {item.label}
+      {[activity, settlement].map((tiles) => (
+        <div
+          key={tiles[0].label}
+          className={cn(
+            'grid grid-cols-2 divide-y rounded-lg border md:divide-x md:divide-y-0',
+            tiles.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-4'
+          )}
+        >
+          {tiles.map((item) => (
+            <div key={item.label} className='min-w-0 px-3 py-3 sm:px-5 sm:py-4'>
+              <div className='flex items-center gap-2'>
+                <IconBadge tone={item.tone} size='stat'>
+                  <item.icon />
+                </IconBadge>
+                <div className='text-muted-foreground truncate text-xs font-medium'>
+                  {item.label}
+                </div>
+              </div>
+              <div className='text-foreground mt-2 font-mono text-lg font-bold tabular-nums sm:text-2xl'>
+                {item.value}
+              </div>
+              <div className='text-muted-foreground mt-1 text-xs'>
+                {item.description}
               </div>
             </div>
-            <div className='text-foreground mt-2 font-mono text-lg font-bold tabular-nums sm:text-2xl'>
-              {item.value}
-            </div>
-            <div className='text-muted-foreground mt-1 text-xs'>
-              {item.description}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ))}
       {children.length > 0 && (
         <section
           aria-label={t('Sub-distributors')}
@@ -132,22 +161,13 @@ export function DistributorStats(props: DistributorStatsProps) {
             {children.map((child) => (
               <li key={child.no}>
                 {t(
-                  'No. {{no}} · {{users}} users · top-ups this month {{money}}, your share {{commission}} · last month {{lastMoney}}, your share {{lastCommission}}',
+                  'No. {{no}} · {{users}} users · top-ups {{money}} · your share {{earned}} from money spent, {{pending}} pending',
                   {
                     no: child.no,
                     users: child.users,
-                    money: formatLocalCurrencyAmount(
-                      child.months[0]?.money ?? 0
-                    ),
-                    commission: formatLocalCurrencyAmount(
-                      child.months[0]?.commission ?? 0
-                    ),
-                    lastMoney: formatLocalCurrencyAmount(
-                      child.months[1]?.money ?? 0
-                    ),
-                    lastCommission: formatLocalCurrencyAmount(
-                      child.months[1]?.commission ?? 0
-                    ),
+                    money: formatLocalCurrencyAmount(child.paid),
+                    earned: formatLocalCurrencyAmount(child.earned),
+                    pending: formatLocalCurrencyAmount(child.pending),
                   }
                 )}
               </li>
@@ -155,14 +175,31 @@ export function DistributorStats(props: DistributorStatsProps) {
           </ul>
         </section>
       )}
+      {payouts.length > 0 && (
+        <section
+          aria-label={t('Payouts')}
+          className='rounded-lg border px-3 py-3 text-sm sm:px-5'
+        >
+          <h3 className='text-muted-foreground text-xs font-medium'>
+            {t('Payouts')}
+          </h3>
+          <ul className='mt-2 space-y-1 tabular-nums'>
+            {payouts.map((payout) => (
+              <li key={`${payout.date}-${payout.amount}`}>
+                {`${payout.date} · ${formatLocalCurrencyAmount(payout.amount)}`}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p className='text-muted-foreground text-xs'>
         {t(
-          'Commission is {{rate}} of what your users pay online, paid in cash at the start of each month. Refunded orders are deducted at settlement.',
+          'Commission is {{rate}} of what your users pay online. It becomes withdrawable once they spend that money and stays pending until then. Bonus credit and redeemed codes are used first, and refunded money earns nothing. We pay by bank transfer at the start of each month.',
           { rate: formatPercent((props.self.commission_rate ?? 0.1) * 100) }
         )}
         {children.length > 0 &&
           ` ${t(
-            "You also get {{rate}} of what your sub-distributors' users pay online, settled together.",
+            "You also get {{rate}} of what your sub-distributors' users pay online, counted the same way.",
             {
               rate: formatPercent(
                 (props.self.parent_commission_rate ?? 0.05) * 100

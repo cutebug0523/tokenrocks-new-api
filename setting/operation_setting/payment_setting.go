@@ -13,12 +13,20 @@ type PaymentSetting struct {
 	DistributorParents map[int]int `json:"distributor_parents"`
 	// DistributorFaceValues 是分销商在线买码能选的面额，单位元（TokenRocks 改动）
 	DistributorFaceValues []int `json:"distributor_face_values"`
+	// DistributorPayouts 是给分销商的打款记录：编号 → 每笔对公转账，打完款手记一笔，分销后台的「已提现」就是它的合计（TokenRocks 改动）
+	DistributorPayouts map[int][]DistributorPayout `json:"distributor_payouts"`
 
 	ComplianceConfirmed    bool   `json:"compliance_confirmed"`
 	ComplianceTermsVersion string `json:"compliance_terms_version"`
 	ComplianceConfirmedAt  int64  `json:"compliance_confirmed_at"`
 	ComplianceConfirmedBy  int    `json:"compliance_confirmed_by"`
 	ComplianceConfirmedIP  string `json:"compliance_confirmed_ip"`
+}
+
+// DistributorPayout 是给分销商打的一笔款，Date 是北京时间 2006-01-02，Amount 单位元。
+type DistributorPayout struct {
+	Date   string  `json:"date"`
+	Amount float64 `json:"amount"`
 }
 
 const CurrentComplianceTermsVersion = "v1"
@@ -30,6 +38,7 @@ var paymentSetting = PaymentSetting{
 	DistributorUsers:      map[int]int{},
 	DistributorParents:    map[int]int{},
 	DistributorFaceValues: []int{1, 2, 5},
+	DistributorPayouts:    map[int][]DistributorPayout{},
 }
 
 func init() {

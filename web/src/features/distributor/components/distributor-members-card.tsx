@@ -31,7 +31,7 @@ interface DistributorMembersCardProps {
   members: DistributorMember[]
 }
 
-/** The distributor's own users with this and last month's top-ups. */
+/** The distributor's own users with their top-ups and how much of it is spent. */
 export function DistributorMembersCard(props: DistributorMembersCardProps) {
   const { t } = useTranslation()
 
@@ -58,14 +58,14 @@ export function DistributorMembersCard(props: DistributorMembersCardProps) {
                   : formatDateTimeObject(new Date(member.since * 1000)),
             },
             {
-              id: 'this-month',
-              header: t('Top-ups this month'),
-              cell: (member) => formatLocalCurrencyAmount(member.this_month),
+              id: 'paid',
+              header: t('Total top-ups'),
+              cell: (member) => formatLocalCurrencyAmount(member.paid),
             },
             {
-              id: 'last-month',
-              header: t('Top-ups last month'),
-              cell: (member) => formatLocalCurrencyAmount(member.last_month),
+              id: 'spent',
+              header: t('Top-ups spent'),
+              cell: (member) => formatLocalCurrencyAmount(member.spent),
             },
           ]}
         />

@@ -34,21 +34,30 @@ export interface DistributorMonth {
   month: string
   count: number
   money: number
-  commission: number
 }
 
 export interface DistributorMember {
   name: string
   /** When the user started counting as this distributor's; 0 is the distributor. */
   since: number
-  this_month: number
-  last_month: number
+  /** All online top-ups (amount paid) and the part already spent. */
+  paid: number
+  spent: number
 }
 
 export interface DistributorChild {
   no: number
   users: number
-  months: DistributorMonth[]
+  paid: number
+  /** This distributor's share of the money spent and not yet spent. */
+  earned: number
+  pending: number
+}
+
+export interface DistributorPayout {
+  /** Beijing date, YYYY-MM-DD. */
+  date: string
+  amount: number
 }
 
 export interface DistributorSelf {
@@ -65,7 +74,14 @@ export interface DistributorSelf {
     codes_redeemed: number
     users: number
     months: DistributorMonth[]
-    /** Sub-distributors; their months carry this distributor's share. */
+    /** Online top-ups by this distributor's own users. */
+    paid: number
+    /** Commission on money not spent yet; includes sub-distributor shares. */
+    pending: number
+    /** Commission on money already spent, minus payouts. */
+    withdrawable: number
+    withdrawn: number
+    payouts: DistributorPayout[]
     children?: DistributorChild[]
     /** This distributor's own users; emails and phone numbers come masked. */
     members?: DistributorMember[]

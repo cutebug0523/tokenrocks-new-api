@@ -288,6 +288,19 @@ func validateOptionValue(key string, value string) error {
 			}
 		}
 	}
+	if key == "payment_setting.distributor_payouts" {
+		var payouts map[int][]operation_setting.DistributorPayout
+		if common.UnmarshalJsonStr(value, &payouts) != nil || payouts == nil {
+			return common.NewMessage("Invalid parameters")
+		}
+		for no, list := range payouts {
+			for _, p := range list {
+				if _, err := time.Parse("2006-01-02", p.Date); no <= 0 || err != nil || !(p.Amount > 0 && p.Amount < 1e7) {
+					return common.NewMessage("Invalid parameters")
+				}
+			}
+		}
+	}
 	if key == "payment_setting.distributor_face_values" {
 		var faces []int
 		if common.UnmarshalJsonStr(value, &faces) != nil || faces == nil || slices.ContainsFunc(faces, func(face int) bool { return face <= 0 || face > 1000 }) {

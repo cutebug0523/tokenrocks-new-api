@@ -7441,6 +7441,10 @@
     "Commission is {{rate}} of what your users pay online, paid in cash at the start of each month. Refunded orders are deducted at settlement.": "Bạn nhận {{rate}} số tiền người dùng của bạn thanh toán trực tuyến, trả bằng tiền mặt vào đầu mỗi tháng. Đơn hoàn tiền sẽ bị trừ khi quyết toán.",
     "Contact us in the official group to become a distributor.": "Muốn làm nhà phân phối, hãy liên hệ chúng tôi trong nhóm chính thức.",
     "Distributor No. {{no}}": "Nhà phân phối số {{no}}",
+    "Includes {{amount}} from sub-distributors · last month {{last}}": "Gồm {{amount}} từ nhà phân phối cấp dưới · tháng trước {{last}}",
+    "Sub-distributors": "Nhà phân phối cấp dưới",
+    "No. {{no}} · {{users}} users · top-ups this month {{money}}, your share {{commission}} · last month {{lastMoney}}, your share {{lastCommission}}": "Số {{no}}: {{users}} người dùng · nạp tiền tháng này {{money}}, phần của bạn {{commission}} · tháng trước {{lastMoney}}, phần của bạn {{lastCommission}}",
+    "You also get {{rate}} of what your sub-distributors' users pay online, settled together.": "Bạn còn nhận {{rate}} trên số tiền người dùng của nhà phân phối cấp dưới thanh toán trực tuyến, quyết toán cùng lúc.",
     "Distributor": "Nhà phân phối"
   }
 }

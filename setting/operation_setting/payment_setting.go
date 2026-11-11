@@ -9,6 +9,8 @@ type PaymentSetting struct {
 	FirstTopUpBonus int `json:"first_topup_bonus"`
 	// DistributorUsers 是分销商名单：用户 id → 分销编号（几号）。只有名单里的人能打开 /distributor 买码（TokenRocks 改动）
 	DistributorUsers map[int]int `json:"distributor_users"`
+	// DistributorParents 是分销商的上级：下级编号 → 上级编号。上级另拿下级那边充值的 5%（TokenRocks 改动）
+	DistributorParents map[int]int `json:"distributor_parents"`
 	// DistributorFaceValues 是分销商在线买码能选的面额，单位元（TokenRocks 改动）
 	DistributorFaceValues []int `json:"distributor_face_values"`
 
@@ -26,6 +28,7 @@ var paymentSetting = PaymentSetting{
 	AmountOptions:         []int{10, 20, 50, 100, 200, 500},
 	AmountDiscount:        map[int]float64{},
 	DistributorUsers:      map[int]int{},
+	DistributorParents:    map[int]int{},
 	DistributorFaceValues: []int{1, 2, 5},
 }
 

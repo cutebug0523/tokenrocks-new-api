@@ -7441,6 +7441,10 @@
     "Commission is {{rate}} of what your users pay online, paid in cash at the start of each month. Refunded orders are deducted at settlement.": "你的用户在线充值，按实付返 {{rate}}，每月初现金结上个月；退款的单月结时扣掉。",
     "Contact us in the official group to become a distributor.": "想做分销，请在官方群联系我们。",
     "Distributor No. {{no}}": "分销 {{no}} 号",
+    "Includes {{amount}} from sub-distributors · last month {{last}}": "含下级分销 {{amount}} · 上月 {{last}}",
+    "Sub-distributors": "下级分销商",
+    "No. {{no}} · {{users}} users · top-ups this month {{money}}, your share {{commission}} · last month {{lastMoney}}, your share {{lastCommission}}": "{{no}} 号：{{users}} 人 · 本月充值 {{money}}，你拿 {{commission}} · 上月 {{lastMoney}}，你拿 {{lastCommission}}",
+    "You also get {{rate}} of what your sub-distributors' users pay online, settled together.": "你拉来的下级分销商，他们的用户在线充值，按实付你另拿 {{rate}}，一起月结。",
     "Distributor": "分销"
   }
 }

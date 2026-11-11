@@ -37,6 +37,12 @@ export interface DistributorMonth {
   commission: number
 }
 
+export interface DistributorChild {
+  no: number
+  users: number
+  months: DistributorMonth[]
+}
+
 export interface DistributorSelf {
   enabled: boolean
   no?: number
@@ -44,12 +50,15 @@ export interface DistributorSelf {
   min_count?: number
   max_count?: number
   commission_rate?: number
+  parent_commission_rate?: number
   pay_methods?: PaymentMethod[]
   stats?: {
     codes_total: number
     codes_redeemed: number
     users: number
     months: DistributorMonth[]
+    /** Sub-distributors; their months carry this distributor's share. */
+    children?: DistributorChild[]
   }
   orders?: DistributorOrder[]
 }

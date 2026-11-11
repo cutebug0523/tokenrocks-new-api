@@ -7441,6 +7441,10 @@
     "Commission is {{rate}} of what your users pay online, paid in cash at the start of each month. Refunded orders are deducted at settlement.": "Commission is {{rate}} of what your users pay online, paid in cash at the start of each month. Refunded orders are deducted at settlement.",
     "Contact us in the official group to become a distributor.": "Contact us in the official group to become a distributor.",
     "Distributor No. {{no}}": "Distributor No. {{no}}",
+    "Includes {{amount}} from sub-distributors · last month {{last}}": "Includes {{amount}} from sub-distributors · last month {{last}}",
+    "Sub-distributors": "Sub-distributors",
+    "No. {{no}} · {{users}} users · top-ups this month {{money}}, your share {{commission}} · last month {{lastMoney}}, your share {{lastCommission}}": "No. {{no}} · {{users}} users · top-ups this month {{money}}, your share {{commission}} · last month {{lastMoney}}, your share {{lastCommission}}",
+    "You also get {{rate}} of what your sub-distributors' users pay online, settled together.": "You also get {{rate}} of what your sub-distributors' users pay online, settled together.",
     "Distributor": "Distributor"
   }
 }

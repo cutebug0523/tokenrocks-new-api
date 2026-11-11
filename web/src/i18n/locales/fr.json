@@ -7441,6 +7441,10 @@
     "Commission is {{rate}} of what your users pay online, paid in cash at the start of each month. Refunded orders are deducted at settlement.": "Vous recevez {{rate}} de ce que vos utilisateurs paient en ligne, versé en espèces au début de chaque mois. Les commandes remboursées sont déduites lors du règlement.",
     "Contact us in the official group to become a distributor.": "Contactez-nous dans le groupe officiel pour devenir distributeur.",
     "Distributor No. {{no}}": "Distributeur n° {{no}}",
+    "Includes {{amount}} from sub-distributors · last month {{last}}": "Dont {{amount}} des sous-distributeurs · mois dernier {{last}}",
+    "Sub-distributors": "Sous-distributeurs",
+    "No. {{no}} · {{users}} users · top-ups this month {{money}}, your share {{commission}} · last month {{lastMoney}}, your share {{lastCommission}}": "N° {{no}} : {{users}} utilisateurs · recharges ce mois-ci {{money}}, votre part {{commission}} · mois dernier {{lastMoney}}, votre part {{lastCommission}}",
+    "You also get {{rate}} of what your sub-distributors' users pay online, settled together.": "Vous touchez aussi {{rate}} de ce que les utilisateurs de vos sous-distributeurs paient en ligne, réglé en même temps.",
     "Distributor": "Distributeur"
   }
 }

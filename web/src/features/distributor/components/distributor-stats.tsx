@@ -34,6 +34,16 @@ export function DistributorStats(props: DistributorStatsProps) {
   const stats = props.self.stats
   const thisMonth = stats?.months[0]
   const lastMonth = stats?.months[1]
+  const children = stats?.children ?? []
+  let childThisMonth = 0
+  let childLastMonth = 0
+  for (const child of children) {
+    childThisMonth += child.months[0]?.commission ?? 0
+    childLastMonth += child.months[1]?.commission ?? 0
+  }
+  const lastCommission = formatLocalCurrencyAmount(
+    (lastMonth?.commission ?? 0) + childLastMonth
+  )
   const tiles: {
     label: string
     value: string
@@ -70,10 +80,19 @@ export function DistributorStats(props: DistributorStatsProps) {
     },
     {
       label: t('Commission this month'),
-      value: formatLocalCurrencyAmount(thisMonth?.commission ?? 0),
-      description: t('Last month {{amount}}', {
-        amount: formatLocalCurrencyAmount(lastMonth?.commission ?? 0),
-      }),
+      value: formatLocalCurrencyAmount(
+        (thisMonth?.commission ?? 0) + childThisMonth
+      ),
+      description:
+        children.length > 0
+          ? t(
+              'Includes {{amount}} from sub-distributors · last month {{last}}',
+              {
+                amount: formatLocalCurrencyAmount(childThisMonth),
+                last: lastCommission,
+              }
+            )
+          : t('Last month {{amount}}', { amount: lastCommission }),
       icon: HandCoins,
       tone: 'warning',
     },
@@ -101,11 +120,55 @@ export function DistributorStats(props: DistributorStatsProps) {
           </div>
         ))}
       </div>
+      {children.length > 0 && (
+        <section
+          aria-label={t('Sub-distributors')}
+          className='rounded-lg border px-3 py-3 text-sm sm:px-5'
+        >
+          <h3 className='text-muted-foreground text-xs font-medium'>
+            {t('Sub-distributors')}
+          </h3>
+          <ul className='mt-2 space-y-1'>
+            {children.map((child) => (
+              <li key={child.no}>
+                {t(
+                  'No. {{no}} · {{users}} users · top-ups this month {{money}}, your share {{commission}} · last month {{lastMoney}}, your share {{lastCommission}}',
+                  {
+                    no: child.no,
+                    users: child.users,
+                    money: formatLocalCurrencyAmount(
+                      child.months[0]?.money ?? 0
+                    ),
+                    commission: formatLocalCurrencyAmount(
+                      child.months[0]?.commission ?? 0
+                    ),
+                    lastMoney: formatLocalCurrencyAmount(
+                      child.months[1]?.money ?? 0
+                    ),
+                    lastCommission: formatLocalCurrencyAmount(
+                      child.months[1]?.commission ?? 0
+                    ),
+                  }
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p className='text-muted-foreground text-xs'>
         {t(
           'Commission is {{rate}} of what your users pay online, paid in cash at the start of each month. Refunded orders are deducted at settlement.',
           { rate: formatPercent((props.self.commission_rate ?? 0.1) * 100) }
         )}
+        {children.length > 0 &&
+          ` ${t(
+            "You also get {{rate}} of what your sub-distributors' users pay online, settled together.",
+            {
+              rate: formatPercent(
+                (props.self.parent_commission_rate ?? 0.05) * 100
+              ),
+            }
+          )}`}
       </p>
     </div>
   )

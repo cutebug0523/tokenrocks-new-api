@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -21,6 +22,10 @@ const DistributorTradeNoPrefix = "FX"
 
 // DistributorCommissionRate 是分销商的人在线充值返给分销商的比例，按实付算，现金月结。
 const DistributorCommissionRate = 0.1
+
+// DistributorParentCommissionRate 是上级分销商另拿的比例：下级分销商的人每笔在线充值按实付再返上级这么多，
+// 和下级自己的 10% 分开算，现金月结。谁是谁的上级见支付设置 distributor_parents（店主 11-11 定，只算一级上级）。
+const DistributorParentCommissionRate = 0.05
 
 // ErrDistributorMoneyMismatch 是付款回调的实付金额和订单金额对不上，不出码。
 var ErrDistributorMoneyMismatch = errors.New("distributor order paid amount mismatch")
@@ -155,12 +160,41 @@ type DistributorStats struct {
 	CodesRedeemed int64              `json:"codes_redeemed"`
 	Users         int                `json:"users"`
 	Months        []DistributorMonth `json:"months"`
+	// Children 是他名下的下级分销商，Months 里的返佣是他按 DistributorParentCommissionRate 拿的那份
+	Children []DistributorChild `json:"children"`
 }
 
-// GetDistributorStats 算分销商的合计，口径和 中转/分销月结.sh 一样：
+type DistributorChild struct {
+	No     int                `json:"no"`
+	Users  int                `json:"users"`
+	Months []DistributorMonth `json:"months"`
+}
+
+// GetDistributorStats 返回分销商自己的合计，再带上他每个下级分销商的人的充值和他该拿的那份。
+func GetDistributorStats(no int, now time.Time) (*DistributorStats, error) {
+	stats, err := distributorStats(no, now, DistributorCommissionRate)
+	if err != nil {
+		return nil, err
+	}
+	stats.Children = []DistributorChild{}
+	for child, parent := range operation_setting.GetPaymentSetting().DistributorParents {
+		if parent != no || child == no {
+			continue
+		}
+		childStats, err := distributorStats(child, now, DistributorParentCommissionRate)
+		if err != nil {
+			return nil, err
+		}
+		stats.Children = append(stats.Children, DistributorChild{No: child, Users: childStats.Users, Months: childStats.Months})
+	}
+	slices.SortFunc(stats.Children, func(a, b DistributorChild) int { return a.No - b.No })
+	return stats, nil
+}
+
+// distributorStats 算一个分销商名下的合计，返佣按 rate 算，口径和 中转/分销月结.sh 一样：
 // 用户兑的第一张码是他的就算他的人；兑码前 24 小时以外就充过值的不算；
 // 兑码前 24 小时起的成功充值都算，按北京时间分本月、上月。退款这里看不到，月结时扣。
-func GetDistributorStats(no int, now time.Time) (*DistributorStats, error) {
+func distributorStats(no int, now time.Time, rate float64) (*DistributorStats, error) {
 	prefix := DistributorBatchPrefix(no) + "%"
 	stats := &DistributorStats{}
 	// 作废的码不算，但作废前已经兑掉的照算（兑换码是软删除，所以要 Unscoped）
@@ -244,7 +278,7 @@ func GetDistributorStats(no int, now time.Time) (*DistributorStats, error) {
 	}
 	for i := range stats.Months {
 		stats.Months[i].Money = math.Round(stats.Months[i].Money*100) / 100
-		stats.Months[i].Commission = math.Round(stats.Months[i].Money*DistributorCommissionRate*100) / 100
+		stats.Months[i].Commission = math.Round(stats.Months[i].Money*rate*100) / 100
 	}
 	return stats, nil
 }

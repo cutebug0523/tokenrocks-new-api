@@ -7441,6 +7441,10 @@
     "Commission is {{rate}} of what your users pay online, paid in cash at the start of each month. Refunded orders are deducted at settlement.": "Вы получаете {{rate}} от онлайн-оплат ваших пользователей, выплата наличными в начале каждого месяца. Возвращённые заказы вычитаются при расчёте.",
     "Contact us in the official group to become a distributor.": "Чтобы стать дистрибьютором, напишите нам в официальной группе.",
     "Distributor No. {{no}}": "Дистрибьютор № {{no}}",
+    "Includes {{amount}} from sub-distributors · last month {{last}}": "Включая {{amount}} от субдистрибьюторов · прошлый месяц {{last}}",
+    "Sub-distributors": "Субдистрибьюторы",
+    "No. {{no}} · {{users}} users · top-ups this month {{money}}, your share {{commission}} · last month {{lastMoney}}, your share {{lastCommission}}": "№ {{no}}: пользователей {{users}} · пополнения за месяц {{money}}, ваша доля {{commission}} · прошлый месяц {{lastMoney}}, ваша доля {{lastCommission}}",
+    "You also get {{rate}} of what your sub-distributors' users pay online, settled together.": "Вы также получаете {{rate}} от онлайн-оплат пользователей ваших субдистрибьюторов, выплата вместе с остальным.",
     "Distributor": "Дистрибьютор"
   }
 }

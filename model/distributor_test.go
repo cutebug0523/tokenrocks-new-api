@@ -185,8 +185,13 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 					{UserId: d, TradeNo: "d1", Money: 20, CompleteTime: ts("2026-11-06 10:00"), Status: common.TopUpStatusSuccess},
 					{UserId: e, TradeNo: "e1", Money: 30, CompleteTime: ts("2026-11-07 09:00"), Status: common.TopUpStatusSuccess},
 					{UserId: e, TradeNo: "e2", Money: 10, CompleteTime: ts("2026-11-08 10:00"), Status: common.TopUpStatusSuccess},
+					{UserId: 106, TradeNo: "f1", Money: 40, CompleteTime: ts("2026-11-09 10:00"), Status: common.TopUpStatusSuccess},
 				}
 				require.NoError(t, db.Create(&topUps).Error)
+				// 77 号是 7 号拉来的：7 号另拿 77 号的人充值的 5%；自己当自己上级的写法不算
+				previousParents := operation_setting.GetPaymentSetting().DistributorParents
+				operation_setting.GetPaymentSetting().DistributorParents = map[int]int{77: 7, 7: 7}
+				t.Cleanup(func() { operation_setting.GetPaymentSetting().DistributorParents = previousParents })
 
 				stats, err := GetDistributorStats(7, time.Unix(ts("2026-11-15 12:00"), 0))
 				require.NoError(t, err)
@@ -198,7 +203,18 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 						{Month: "2026-11", Count: 5, Money: 210, Commission: 21},
 						{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
 					},
+					Children: []DistributorChild{{No: 77, Users: 1, Months: []DistributorMonth{
+						{Month: "2026-11", Count: 1, Money: 40, Commission: 2},
+						{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
+					}}},
 				}, stats)
+
+				// 下级自己看：自己的人照拿 10%，没有下级
+				stats, err = GetDistributorStats(77, time.Unix(ts("2026-11-15 12:00"), 0))
+				require.NoError(t, err)
+				assert.Equal(t, 1, stats.Users)
+				assert.Equal(t, 4.0, stats.Months[0].Commission)
+				assert.Empty(t, stats.Children)
 
 				// 12 月看：本月是 A 的 a4，上月是 11 月那 5 笔
 				stats, err = GetDistributorStats(7, time.Unix(ts("2026-12-01 00:00"), 0))
@@ -231,6 +247,11 @@ func TestDistributorOptionValidation(t *testing.T) {
 		{"payment_setting.distributor_users", `null`, false},
 		{"payment_setting.distributor_users", `{"535":"1"}`, false},
 		{"payment_setting.distributor_users", `{"535":0}`, false},
+		{"payment_setting.distributor_parents", `{"3":1}`, true},
+		{"payment_setting.distributor_parents", `{}`, true},
+		{"payment_setting.distributor_parents", `{"3":3}`, false},
+		{"payment_setting.distributor_parents", `{"3":0}`, false},
+		{"payment_setting.distributor_parents", `null`, false},
 		{"payment_setting.distributor_face_values", `[1,2,5]`, true},
 		{"payment_setting.distributor_face_values", `[]`, true},
 		{"payment_setting.distributor_face_values", `[0,2]`, false},

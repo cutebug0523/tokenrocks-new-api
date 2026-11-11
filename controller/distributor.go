@@ -53,15 +53,16 @@ func GetDistributorSelf(c *gin.Context) {
 		payMethods = operation_setting.PayMethods
 	}
 	common.ApiSuccess(c, gin.H{
-		"enabled":         true,
-		"no":              no,
-		"face_values":     operation_setting.GetPaymentSetting().DistributorFaceValues,
-		"min_count":       distributorMinCodes,
-		"max_count":       distributorMaxCodes,
-		"commission_rate": model.DistributorCommissionRate,
-		"pay_methods":     payMethods,
-		"stats":           stats,
-		"orders":          orders,
+		"enabled":                true,
+		"no":                     no,
+		"face_values":            operation_setting.GetPaymentSetting().DistributorFaceValues,
+		"min_count":              distributorMinCodes,
+		"max_count":              distributorMaxCodes,
+		"commission_rate":        model.DistributorCommissionRate,
+		"parent_commission_rate": model.DistributorParentCommissionRate,
+		"pay_methods":            payMethods,
+		"stats":                  stats,
+		"orders":                 orders,
 	})
 }
 

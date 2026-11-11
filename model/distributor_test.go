@@ -70,7 +70,7 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 				operation_setting.GetGeneralSetting().QuotaDisplayType = previousDisplay
 				assert.NoError(t, sqlDB.Close())
 			})
-			tables := []any{&User{}, &Redemption{}, &TopUp{}, &DistributorOrder{}}
+			tables := []any{&User{}, &Redemption{}, &TopUp{}, &DistributorOrder{}, &Option{}}
 			for _, table := range tables {
 				require.False(t, db.Migrator().HasTable(table), "use an empty test database")
 			}
@@ -297,6 +297,41 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 				require.NoError(t, err)
 				assert.Zero(t, stats.CodesTotal)
 				assert.Zero(t, stats.Users)
+			})
+
+			// 后台用户列表「设为分销商」：编号接着用过的最大号排（名单、订单、批次名、打款记录都算），写进设置
+			t.Run("set distributor", func(t *testing.T) {
+				payment := operation_setting.GetPaymentSetting()
+				previousUsers, previousPayouts, previousOptions := payment.DistributorUsers, payment.DistributorPayouts, common.OptionMap
+				payment.DistributorUsers = map[int]int{201: 7, 202: 78}
+				payment.DistributorPayouts = map[int][]operation_setting.DistributorPayout{85: {{Date: "2026-11-10", Amount: 1}}}
+				common.OptionMap = map[string]string{}
+				t.Cleanup(func() {
+					payment.DistributorUsers, payment.DistributorPayouts, common.OptionMap = previousUsers, previousPayouts, previousOptions
+				})
+
+				no, err := SetDistributor(101, true)
+				require.NoError(t, err)
+				assert.Equal(t, 86, no, "打款记录里有 85 号")
+				assert.Equal(t, map[int]int{101: 86, 201: 7, 202: 78}, payment.DistributorUsers)
+				var saved Option
+				require.NoError(t, db.Where(&Option{Key: "payment_setting.distributor_users"}).First(&saved).Error)
+				assert.JSONEq(t, `{"101":86,"201":7,"202":78}`, saved.Value)
+
+				no, err = SetDistributor(101, true)
+				require.NoError(t, err)
+				assert.Equal(t, 86, no, "已经是分销商就不换号")
+
+				no, err = SetDistributor(101, false)
+				require.NoError(t, err)
+				assert.Equal(t, 86, no)
+				assert.Equal(t, map[int]int{201: 7, 202: 78}, payment.DistributorUsers)
+
+				// 没有打款记录时看批次名：分销-78号-本人 最大
+				payment.DistributorPayouts = map[int][]operation_setting.DistributorPayout{}
+				no, err = SetDistributor(104, true)
+				require.NoError(t, err)
+				assert.Equal(t, 79, no)
 			})
 		})
 	}

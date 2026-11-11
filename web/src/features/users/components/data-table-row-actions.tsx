@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Row } from '@tanstack/react-table'
 import {
   Pencil,
@@ -28,6 +29,7 @@ import {
   ShieldAlert,
   Link2,
   CreditCard,
+  Store,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -51,7 +53,13 @@ import { UserSubscriptionsDialog } from '@/features/subscriptions/components/dia
 import { handleServerError } from '@/lib/handle-server-error'
 import { AuthOperationError } from '@/lib/secure-verification'
 
-import { manageUser, resetUserPasskey, resetUserTwoFA } from '../api'
+import {
+  getDistributorUsers,
+  manageUser,
+  resetUserPasskey,
+  resetUserTwoFA,
+  setDistributorUser,
+} from '../api'
 import {
   USER_STATUS,
   USER_ROLE,
@@ -88,6 +96,34 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [resetTwoFAOpen, setResetTwoFAOpen] = useState(false)
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [subscriptionsDialogOpen, setSubscriptionsDialogOpen] = useState(false)
+  const [removeDistributorOpen, setRemoveDistributorOpen] = useState(false)
+  const queryClient = useQueryClient()
+  const { data: distributorUsers } = useQuery({
+    queryKey: ['admin-distributor-users'],
+    queryFn: async () => (await getDistributorUsers()).data ?? {},
+    staleTime: 60_000,
+  })
+  const distributorNo = distributorUsers?.[String(user.id)]
+
+  const handleDistributor = async (enabled: boolean) => {
+    try {
+      const result = await setDistributorUser(user.id, enabled)
+      if (!result.success) {
+        handleServerError(result, t('Failed to update distributor'))
+        return
+      }
+      toast.success(
+        enabled
+          ? t('Set as distributor No. {{no}}', { no: result.data?.no })
+          : t('Removed from distributors')
+      )
+      await queryClient.invalidateQueries({
+        queryKey: ['admin-distributor-users'],
+      })
+    } catch (error) {
+      handleServerError(error, t('Failed to update distributor'))
+    }
+  }
 
   const handleEdit = () => {
     setCurrentRow(user)
@@ -251,6 +287,28 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </DropdownMenuItem>
         )}
 
+        {distributorUsers &&
+          (distributorNo === undefined ? (
+            <DropdownMenuItem onClick={() => handleDistributor(true)}>
+              {t('Set as distributor')}
+              <DropdownMenuShortcut>
+                <Store size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault()
+                setRemoveDistributorOpen(true)
+              }}
+            >
+              {t('Remove distributor No. {{no}}', { no: distributorNo })}
+              <DropdownMenuShortcut>
+                <Store size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          ))}
+
         <DropdownMenuItem
           onSelect={(event) => {
             event.preventDefault()
@@ -316,6 +374,21 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </DropdownMenuShortcut>
         </DropdownMenuItem>
       </DataTableRowActionMenu>
+
+      <ConfirmDialog
+        open={removeDistributorOpen}
+        onOpenChange={setRemoveDistributorOpen}
+        title={t('Remove distributor')}
+        desc={t(
+          'Remove {{username}} from distributors? They can no longer open the distributor page. Their codes, users and settlement records stay.',
+          { username: user.username }
+        )}
+        confirmText={t('Remove')}
+        handleConfirm={() => {
+          setRemoveDistributorOpen(false)
+          void handleDistributor(false)
+        }}
+      />
 
       <ConfirmDialog
         open={resetPasskeyOpen && !verificationActive}

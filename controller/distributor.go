@@ -168,6 +168,45 @@ func GetDistributorStatsByAdmin(c *gin.Context) {
 	common.ApiSuccess(c, stats)
 }
 
+// GetDistributorUsers 给后台用户列表标出谁是分销商：用户 ID → 编号。
+func GetDistributorUsers(c *gin.Context) {
+	common.ApiSuccess(c, operation_setting.GetPaymentSetting().DistributorUsers)
+}
+
+type distributorUserRequest struct {
+	UserId  int  `json:"user_id"`
+	Enabled bool `json:"enabled"`
+}
+
+// SetDistributorUser 管理员在用户列表里把人设成分销商（自动编号）或移出名单；上级照旧按码自动认。
+func SetDistributorUser(c *gin.Context) {
+	var req distributorUserRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil || req.UserId <= 0 {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	user, err := model.GetUserById(req.UserId, false)
+	if err != nil {
+		common.ApiErrorT(c, "User does not exist")
+		return
+	}
+	if !canManageTargetRole(c.GetInt("role"), user.Role) {
+		common.ApiErrorT(c, "No permission to update users of same or higher permission level")
+		return
+	}
+	no, err := model.SetDistributor(user.Id, req.Enabled)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	action := "unset_distributor"
+	if req.Enabled {
+		action = "set_distributor"
+	}
+	recordManageAuditFor(c, user.Id, "user.manage", map[string]any{"action": action, "username": user.Username, "id": user.Id, "no": no})
+	common.ApiSuccess(c, gin.H{"no": no})
+}
+
 func GetAllDistributorOrders(c *gin.Context) {
 	since, _ := strconv.ParseInt(c.Query("since"), 10, 64)
 	orders, err := model.GetPaidDistributorOrders(since)

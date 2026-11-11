@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -254,6 +255,63 @@ func GetDistributorStats(no int, now time.Time) (*DistributorStats, error) {
 	return stats, nil
 }
 
+// distributorNoFromBatch 从「分销-N号-…」这样的批次名里取出编号 N。
+func distributorNoFromBatch(name string) (int, bool) {
+	rest, ok := strings.CutPrefix(name, "分销-")
+	if !ok {
+		return 0, false
+	}
+	noText, _, ok := strings.Cut(rest, "号-")
+	no, err := strconv.Atoi(noText)
+	return no, ok && err == nil && no > 0
+}
+
+var distributorUsersMu sync.Mutex
+
+// SetDistributor 把用户设成分销商或移出名单（改支付设置 distributor_users，各台 60 秒内同步），返回他的编号。
+// 新编号是用过的最大号 + 1：名单、买码订单、兑换码批次名、打款记录里出现过的号都不再发，免得新人接手旧人的码和账。
+// 上级不在这里定，照旧按他兑的第一张别家的码自动认（店主 11-11）。
+// ponytail: 进程内锁，两台同时点会丢掉一个，真撞上再改成库里加锁
+func SetDistributor(userId int, enabled bool) (int, error) {
+	distributorUsersMu.Lock()
+	defer distributorUsersMu.Unlock()
+	setting := operation_setting.GetPaymentSetting()
+	users := maps.Clone(setting.DistributorUsers)
+	if users == nil {
+		users = map[int]int{}
+	}
+	no, exists := users[userId]
+	if enabled == exists {
+		return no, nil
+	}
+	if enabled {
+		used := slices.Collect(maps.Values(users))
+		used = append(used, slices.Collect(maps.Keys(setting.DistributorPayouts))...)
+		var orderMax int
+		if err := DB.Model(&DistributorOrder{}).Select("COALESCE(MAX(distributor_no), 0)").Scan(&orderMax).Error; err != nil {
+			return 0, err
+		}
+		var names []string
+		if err := DB.Unscoped().Model(&Redemption{}).Where("name LIKE ?", "分销-%").Distinct("name").Pluck("name", &names).Error; err != nil {
+			return 0, err
+		}
+		for _, name := range names {
+			if n, ok := distributorNoFromBatch(name); ok {
+				used = append(used, n)
+			}
+		}
+		no = slices.Max(append(used, orderMax)) + 1
+		users[userId] = no
+	} else {
+		delete(users, userId)
+	}
+	value, err := common.Marshal(users)
+	if err != nil {
+		return 0, err
+	}
+	return no, UpdateOption("payment_setting.distributor_users", string(value))
+}
+
 // distributorParents 返回下级编号 → 上级编号。分销商本人的号兑的第一张别家的码（自己批次的不算）是哪个分销商的，
 // 那个分销商就是他上级，不用手写；支付设置 distributor_parents 手写的优先，拉人不靠码的时候用。
 func distributorParents() (map[int]int, error) {
@@ -272,13 +330,8 @@ func distributorParents() (map[int]int, error) {
 				continue
 			}
 			decided[r.UsedUserId] = true
-			rest, ok := strings.CutPrefix(r.Name, "分销-")
-			if !ok {
-				continue
-			}
-			noText, _, ok := strings.Cut(rest, "号-")
-			parent, err := strconv.Atoi(noText)
-			if !ok || err != nil || parent <= 0 || parent == self {
+			parent, ok := distributorNoFromBatch(r.Name)
+			if !ok || parent == self {
 				continue
 			}
 			// ponytail: 一个编号挂了几个号时，按兑码先后取第一个认出来的上级

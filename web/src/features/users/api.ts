@@ -162,6 +162,26 @@ export async function manageUser(
   return res.data
 }
 
+/** Distributor numbers by user id (TokenRocks). */
+export async function getDistributorUsers(): Promise<
+  ApiResponse<Record<string, number>>
+> {
+  const res = await api.get('/api/user/distributor/users')
+  return res.data
+}
+
+/** Add a user to the distributor list (next free number) or remove them. */
+export async function setDistributorUser(
+  userId: number,
+  enabled: boolean
+): Promise<ApiResponse<{ no: number }>> {
+  const res = await api.post('/api/user/distributor/users', {
+    user_id: userId,
+    enabled,
+  })
+  return res.data
+}
+
 /**
  * Adjust user quota atomically (add/subtract/override)
  */

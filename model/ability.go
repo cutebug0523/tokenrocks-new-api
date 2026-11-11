@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -105,35 +106,24 @@ func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
 	return channelQuery, nil
 }
 
+// GetChannel is the database path of GetRandomSatisfiedChannel and follows the
+// same retry-tier and tried-channel rules.
 func GetChannel(
 	group string,
 	model string,
 	retry int,
 	filters []dto.ChannelFilter,
+	tried ...int,
 ) (*Channel, error) {
-	var abilities []Ability
-	err := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, model, true).Order("priority DESC, weight DESC").Find(&abilities).Error
+	abilities, err := servingAbilities(group, model, filters)
 	if err != nil {
 		return nil, err
-	}
-	abilities = filterAbilitiesByConstraints(abilities, model, filters)
-	// Like the memory cache, retry with the routing name (for example without
-	// @ modifiers) when no channel serves the exact name.
-	if normalized := ratio_setting.RoutingMatchModelName(model); len(abilities) == 0 && normalized != "" && normalized != model {
-		err = DB.Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, normalized, true).Order("priority DESC, weight DESC").Find(&abilities).Error
-		if err != nil {
-			return nil, err
-		}
-		abilities = filterAbilitiesByConstraints(abilities, model, filters)
 	}
 	if len(abilities) > 0 {
 		priorities := make([]int64, 0)
 		seen := make(map[int64]bool)
 		for _, ability := range abilities {
-			priority := int64(0)
-			if ability.Priority != nil {
-				priority = *ability.Priority
-			}
+			priority := ability.priority()
 			if !seen[priority] {
 				seen[priority] = true
 				priorities = append(priorities, priority)
@@ -144,8 +134,14 @@ func GetChannel(
 			retry = len(priorities) - 1
 		}
 		targetPriority := priorities[retry]
+		if fresh := lo.Reject(abilities, func(ability Ability, _ int) bool { return slices.Contains(tried, ability.ChannelId) }); len(fresh) > 0 {
+			abilities = fresh
+			if !slices.ContainsFunc(fresh, func(ability Ability) bool { return ability.priority() == targetPriority }) {
+				targetPriority = lo.MaxBy(fresh, func(a Ability, b Ability) bool { return a.priority() > b.priority() }).priority()
+			}
+		}
 		abilities = lo.Filter(abilities, func(ability Ability, _ int) bool {
-			return ability.Priority == nil && targetPriority == 0 || ability.Priority != nil && *ability.Priority == targetPriority
+			return ability.priority() == targetPriority
 		})
 	}
 	channel := Channel{}
@@ -170,6 +166,34 @@ func GetChannel(
 	}
 	err = DB.First(&channel, "id = ?", channel.Id).Error
 	return &channel, err
+}
+
+// servingAbilities lists the enabled abilities serving group/model that pass
+// filters, retrying with the routing name (for example without @ modifiers)
+// when no channel serves the exact name, like the memory cache.
+func servingAbilities(group string, model string, filters []dto.ChannelFilter) ([]Ability, error) {
+	var abilities []Ability
+	err := DB.Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, model, true).Order("priority DESC, weight DESC").Find(&abilities).Error
+	if err != nil {
+		return nil, err
+	}
+	abilities = filterAbilitiesByConstraints(abilities, model, filters)
+	if normalized := ratio_setting.RoutingMatchModelName(model); len(abilities) == 0 && normalized != "" && normalized != model {
+		err = DB.Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, normalized, true).Order("priority DESC, weight DESC").Find(&abilities).Error
+		if err != nil {
+			return nil, err
+		}
+		abilities = filterAbilitiesByConstraints(abilities, model, filters)
+	}
+	return abilities, nil
+}
+
+// priority treats an unset ability priority as 0, the column default.
+func (ability Ability) priority() int64 {
+	if ability.Priority == nil {
+		return 0
+	}
+	return *ability.Priority
 }
 
 // filterAbilitiesByConstraints applies the same ChannelSatisfiesFilters

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/cachex"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -629,6 +630,17 @@ func GetPreferredChannelByAffinity(c *gin.Context, modelName string, usingGroup 
 	return 0, false
 }
 
+// sessionMayBindChannel reports whether a session may stay bound to channelID.
+// Outside strict mode a channel outranked by another serving channel is a
+// fallback: a session that landed there returns to the main tier on its next
+// request instead of staying bound to the fallback.
+func sessionMayBindChannel(c *gin.Context, group string, modelName string, channelID int) bool {
+	if RequestPolicy(c).SessionMode == "strict" {
+		return true
+	}
+	return !model.HasHigherPriorityChannel(group, modelName, channelID, GetChannelConstraints(c).Filters)
+}
+
 func ShouldSkipRetryAfterChannelAffinityFailure(c *gin.Context) bool {
 	if c == nil {
 		return false
@@ -738,10 +750,22 @@ func RecordChannelAffinity(c *gin.Context, channelID int) {
 		if successChannelID := c.GetInt("channel_id"); successChannelID > 0 {
 			channelID = successChannelID
 		}
+	} else if c != nil && len(c.GetStringSlice("use_channel")) > 1 {
+		// channelID is the first pick and it failed in this request.
+		return
 	}
 	cacheKey, ttlSeconds, ok := getChannelAffinityContext(c)
 	if !ok {
 		return
+	}
+	if meta, ok := getChannelAffinityMeta(c); ok {
+		group := meta.UsingGroup
+		if group == "auto" {
+			group = common.GetContextKeyString(c, constant.ContextKeyAutoGroup)
+		}
+		if !sessionMayBindChannel(c, group, meta.ModelName, channelID) {
+			return
+		}
 	}
 	if ttlSeconds <= 0 {
 		ttlSeconds = setting.DefaultTTLSeconds

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/samber/lo"
 )
 
 var group2model2channels map[string]map[string][]int // enabled channel
@@ -114,29 +116,27 @@ func SyncChannelCache(frequency int) {
 	}
 }
 
+// GetRandomSatisfiedChannel picks a channel serving group/model. retry selects
+// the priority tier (0 is the highest). tried lists the channels the current
+// request has already failed on; they are avoided while another serving channel
+// is left, and when the retry tier has none of those left the highest tier that
+// does is used instead.
 func GetRandomSatisfiedChannel(
 	group string,
 	model string,
 	retry int,
 	filters []dto.ChannelFilter,
+	tried ...int,
 ) (*Channel, error) {
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
-		return GetChannel(group, model, retry, filters)
+		return GetChannel(group, model, retry, filters, tried...)
 	}
 
 	channelSyncLock.RLock()
 	defer channelSyncLock.RUnlock()
 
-	// First, try to find channels with the exact model name.
-	channels, _ := filterCandidateIDs(group2model2channels[group][model], model, filters)
-
-	// If no channels found, try to find channels with the normalized model name.
-	if len(channels) == 0 {
-		normalizedModel := ratio_setting.RoutingMatchModelName(model)
-		channels, _ = filterCandidateIDs(group2model2channels[group][normalizedModel], model, filters)
-	}
-
+	channels := servingChannelIDs(group, model, filters)
 	if len(channels) == 0 {
 		return nil, nil
 	}
@@ -167,10 +167,23 @@ func GetRandomSatisfiedChannel(
 	}
 	targetPriority := int64(sortedUniquePriorities[retry])
 
+	// A session-bound channel in a fallback tier that failed must hand the
+	// retry back to the higher tiers instead of being picked again.
+	candidates := channels
+	if fresh := lo.Reject(channels, func(id int, _ int) bool { return slices.Contains(tried, id) }); len(fresh) > 0 {
+		candidates = fresh
+		if !slices.ContainsFunc(fresh, func(id int) bool { return channelsIDM[id].GetPriority() == targetPriority }) {
+			targetPriority = channelsIDM[fresh[0]].GetPriority()
+			for _, id := range fresh[1:] {
+				targetPriority = max(targetPriority, channelsIDM[id].GetPriority())
+			}
+		}
+	}
+
 	// get the priority for the given retry number
 	var sumWeight = 0
 	var targetChannels []*Channel
-	for _, channelId := range channels {
+	for _, channelId := range candidates {
 		if channel, ok := channelsIDM[channelId]; ok {
 			if channel.GetPriority() == targetPriority {
 				sumWeight += channel.GetWeight()
@@ -214,6 +227,47 @@ func GetRandomSatisfiedChannel(
 	}
 	// return null if no channel is not found
 	return nil, errors.New("channel not found")
+}
+
+// servingChannelIDs lists the enabled channels that serve group/model and pass
+// filters, falling back to the routing model name like channel selection does.
+// The caller must hold channelSyncLock.
+func servingChannelIDs(group string, model string, filters []dto.ChannelFilter) []int {
+	channels, _ := filterCandidateIDs(group2model2channels[group][model], model, filters)
+	if len(channels) == 0 {
+		normalizedModel := ratio_setting.RoutingMatchModelName(model)
+		channels, _ = filterCandidateIDs(group2model2channels[group][normalizedModel], model, filters)
+	}
+	return channels
+}
+
+// HasHigherPriorityChannel reports whether an enabled channel serving
+// group/model and passing filters has a higher priority than channelID.
+// Unknown channels are never outranked.
+func HasHigherPriorityChannel(group string, model string, channelID int, filters []dto.ChannelFilter) bool {
+	if !common.MemoryCacheEnabled {
+		var channel Channel
+		if err := DB.Select("priority").First(&channel, "id = ?", channelID).Error; err != nil {
+			return false
+		}
+		abilities, err := servingAbilities(group, model, filters)
+		if err != nil {
+			return false
+		}
+		return slices.ContainsFunc(abilities, func(ability Ability) bool { return ability.priority() > channel.GetPriority() })
+	}
+
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+
+	channel, ok := channelsIDM[channelID]
+	if !ok {
+		return false
+	}
+	return slices.ContainsFunc(servingChannelIDs(group, model, filters), func(id int) bool {
+		other, exists := channelsIDM[id]
+		return exists && other.GetPriority() > channel.GetPriority()
+	})
 }
 
 func CacheGetChannel(id int) (*Channel, error) {

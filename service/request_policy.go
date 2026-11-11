@@ -124,6 +124,12 @@ func RecordPolicyFailure(c *gin.Context, channelID int, err *types.NewAPIError, 
 		}
 	}
 	state.AddEvent(event)
+	// A session stays bound to a channel only while it works: after a failure the
+	// next request selects again instead of returning to the failed channel.
+	// Strict sessions keep their binding and stop instead.
+	if source != "local" && state.SessionMode != "strict" && ClearCurrentChannelAffinityCache(c) {
+		state.AddEvent(PolicyEvent{ChannelID: channelID, Decision: PolicyDecision{Action: "release", Reason: "session_channel_failed", Source: "session_rule"}})
+	}
 }
 
 func MarkRequestPolicySuccess(c *gin.Context, stream *relaycommon.StreamStatus) {

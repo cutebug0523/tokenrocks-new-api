@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -117,6 +118,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 	selectGroup := param.TokenGroup
 	userGroup := common.GetContextKeyString(param.Ctx, constant.ContextKeyUserGroup)
 	filters := GetChannelConstraints(param.Ctx).Filters
+	tried := UsedChannelIDs(param.Ctx)
 
 	if param.TokenGroup == "auto" {
 		autoGroups := GetRequestAutoGroups(param.Ctx, userGroup)
@@ -152,6 +154,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 				param.ModelName,
 				priorityRetry,
 				filters,
+				tried...,
 			)
 			if channel == nil {
 				// Current group has no available channel for this model, try next group
@@ -195,6 +198,7 @@ func CacheGetRandomSatisfiedChannel(param *RetryParam) (*model.Channel, string, 
 			param.ModelName,
 			param.GetRetry(),
 			filters,
+			tried...,
 		)
 		if err != nil {
 			return nil, param.TokenGroup, err
@@ -321,7 +325,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 				if usingGroup == "auto" {
 					userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 					for _, g := range GetRequestAutoGroups(c, userGroup) {
-						if model.IsChannelEnabledForGroupModel(g, modelName, preferred.Id) {
+						if model.IsChannelEnabledForGroupModel(g, modelName, preferred.Id) && sessionMayBindChannel(c, g, modelName, preferred.Id) {
 							selectGroup = g
 							common.SetContextKey(c, constant.ContextKeyAutoGroup, g)
 							channel = preferred
@@ -330,7 +334,7 @@ func SelectChannelForRequest(c *gin.Context, modelName string, retry *RetryParam
 							break
 						}
 					}
-				} else if model.IsChannelEnabledForGroupModel(usingGroup, modelName, preferred.Id) {
+				} else if model.IsChannelEnabledForGroupModel(usingGroup, modelName, preferred.Id) && sessionMayBindChannel(c, usingGroup, modelName, preferred.Id) {
 					channel = preferred
 					selectGroup = usingGroup
 					affinityUsable = true
@@ -389,4 +393,18 @@ func pinnedChannelUnavailable(pin dto.ChannelPin, statusCode int, messageID stri
 // trail, which the retry log and the consume log's admin_info both read.
 func AppendUsedChannel(c *gin.Context, channelID int) {
 	c.Set("use_channel", append(c.GetStringSlice("use_channel"), fmt.Sprintf("%d", channelID)))
+}
+
+// UsedChannelIDs returns the channels the current request has been sent to.
+func UsedChannelIDs(c *gin.Context) []int {
+	if c == nil {
+		return nil
+	}
+	var ids []int
+	for _, value := range c.GetStringSlice("use_channel") {
+		if id, err := strconv.Atoi(value); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -464,4 +465,89 @@ func TestSessionRulesInheritOrOverrideGlobalDefault(t *testing.T) {
 			})
 		}
 	}
+}
+
+// A session stays bound only to a working channel in the highest priority tier:
+// a binding to a fallback channel is not followed, success on a fallback
+// channel does not bind, and a failure drops the binding unless the session is
+// strict.
+func TestSessionBindingOnlyKeepsWorkingMainTierChannel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupChannelSelectAutoGroupsTest(t)
+	const modelName = "binding-model"
+	weight := uint(10)
+	for id, priority := range map[int]int64{2301: 0, 2302: -1} {
+		require.NoError(t, db.Create(&model.Channel{Id: id, Type: constant.ChannelTypeOpenAI, Key: fmt.Sprintf("key-%d", id), Status: common.ChannelStatusEnabled,
+			Name: fmt.Sprintf("channel-%d", id), Weight: &weight, Models: modelName, Group: "default", Priority: &priority}).Error)
+		require.NoError(t, db.Create(&model.Ability{Group: "default", Model: modelName, ChannelId: id, Enabled: true, Priority: &priority, Weight: weight}).Error)
+	}
+	model.InitChannelCache()
+
+	rule := operation_setting.ChannelAffinityRule{
+		Name:             "binding-rule",
+		ModelRegex:       []string{"^binding-model$"},
+		KeySources:       []operation_setting.ChannelAffinityKeySource{{Type: "request_header", Key: "X-Session"}},
+		IncludeRuleName:  true,
+		IncludeModelName: true,
+		TTLSeconds:       60,
+	}
+	setting := operation_setting.GetChannelAffinitySetting()
+	originalRules, originalSwitch := setting.Rules, setting.SwitchOnSuccess
+	setting.Rules = append([]operation_setting.ChannelAffinityRule{rule}, originalRules...)
+	setting.SwitchOnSuccess = true
+	t.Cleanup(func() { setting.Rules, setting.SwitchOnSuccess = originalRules, originalSwitch })
+
+	session := fmt.Sprintf("session-%d", time.Now().UnixNano())
+	cacheKeySuffix := buildChannelAffinityCacheKeySuffix(rule, modelName, "default", session)
+	cache := getChannelAffinityCache()
+	t.Cleanup(func() { _, _ = cache.DeleteMany([]string{cacheKeySuffix}) })
+	bound := func() (int, bool) {
+		channelID, found, err := cache.Get(cacheKeySuffix)
+		require.NoError(t, err)
+		return channelID, found
+	}
+	newRequest := func() *gin.Context {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		ctx.Request.Header.Set("X-Session", session)
+		return ctx
+	}
+	selectFirst := func(ctx *gin.Context) int {
+		retry := 0
+		channel, _, selectErr := SelectChannelForRequest(ctx, modelName, &RetryParam{Ctx: ctx, TokenGroup: "default", ModelName: modelName, RequestPath: "/v1/chat/completions", Retry: &retry})
+		require.Nil(t, selectErr)
+		AppendUsedChannel(ctx, channel.Id)
+		ctx.Set("channel_id", channel.Id)
+		return channel.Id
+	}
+	upstreamFailure := types.NewOpenAIError(errors.New("upstream failed"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway)
+
+	require.NoError(t, cache.SetWithTTL(cacheKeySuffix, 2302, time.Minute))
+	ctx := newRequest()
+	assert.Equal(t, 2301, selectFirst(ctx), "a binding to the fallback tier is not followed")
+	AppendUsedChannel(ctx, 2302)
+	ctx.Set("channel_id", 2302)
+	RecordChannelAffinity(ctx, 2301)
+	_, found := bound()
+	assert.False(t, found, "success on the fallback tier does not bind the session")
+
+	ctx = newRequest()
+	require.Equal(t, 2301, selectFirst(ctx))
+	RecordChannelAffinity(ctx, 2301)
+	channelID, found := bound()
+	require.True(t, found)
+	assert.Equal(t, 2301, channelID, "success on the main tier binds the session")
+
+	ctx = newRequest()
+	require.Equal(t, 2301, selectFirst(ctx))
+	RequestPolicy(ctx).SessionMode = "strict"
+	RecordPolicyFailure(ctx, 2301, upstreamFailure, PolicyDecision{Action: "stop", Reason: "strict_session", Source: "session_rule"})
+	_, found = bound()
+	assert.True(t, found, "a strict session keeps its binding after a failure")
+
+	ctx = newRequest()
+	require.Equal(t, 2301, selectFirst(ctx))
+	RecordPolicyFailure(ctx, 2301, upstreamFailure, PolicyDecision{Action: "retry", Reason: "retry_status_matched", Source: "global"})
+	_, found = bound()
+	assert.False(t, found, "a failure on the bound channel drops the binding")
 }

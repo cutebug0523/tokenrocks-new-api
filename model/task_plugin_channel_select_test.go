@@ -137,3 +137,49 @@ func TestModelModifierNamesRouteWithAndWithoutMemoryCache(t *testing.T) {
 		assert.Nil(t, selected, "memory cache %v", memoryCache)
 	}
 }
+
+// A retry avoids channels the request already failed on: a failed binding in
+// the fallback tier hands the retry back to the main tier, the plain retry tier
+// is kept while it still has an untried channel, and once every channel was
+// tried the plain retry tier is used again.
+func TestRetryAvoidsTriedChannelsOnBothCachePaths(t *testing.T) {
+	truncateTables(t)
+	originalMemoryCache := common.MemoryCacheEnabled
+	t.Cleanup(func() { common.MemoryCacheEnabled = originalMemoryCache; InitChannelCache() })
+	main, fallback := int64(0), int64(-1)
+	weight := uint(10)
+	channels := []Channel{
+		{Id: 940001, Type: constant.ChannelTypeDeepSeek, Status: common.ChannelStatusEnabled, Name: "main-a", Models: "ds", Group: "default", Priority: &main, Weight: &weight},
+		{Id: 940002, Type: constant.ChannelTypeDeepSeek, Status: common.ChannelStatusEnabled, Name: "main-b", Models: "ds", Group: "default", Priority: &main, Weight: &weight},
+		{Id: 940003, Type: constant.ChannelTypeDeepSeek, Status: common.ChannelStatusEnabled, Name: "fallback", Models: "ds", Group: "default", Priority: &fallback, Weight: &weight},
+	}
+	for i := range channels {
+		require.NoError(t, channels[i].Insert())
+	}
+
+	tests := []struct {
+		name  string
+		retry int
+		tried []int
+		want  []string
+	}{
+		{name: "failed fallback binding returns to the main tier", retry: 1, tried: []int{940003}, want: []string{"main-a", "main-b"}},
+		{name: "retry tier with an untried channel is kept", retry: 1, tried: []int{940001}, want: []string{"fallback"}},
+		{name: "untried main channel after the fallback failed", retry: 2, tried: []int{940001, 940003}, want: []string{"main-b"}},
+		{name: "first attempt without tried channels", retry: 0, want: []string{"main-a", "main-b"}},
+		{name: "every channel tried uses the plain retry tier", retry: 1, tried: []int{940001, 940002, 940003}, want: []string{"fallback"}},
+	}
+	for _, memoryCache := range []bool{false, true} {
+		common.MemoryCacheEnabled = memoryCache
+		InitChannelCache()
+		for _, testCase := range tests {
+			selected, err := GetRandomSatisfiedChannel("default", "ds", testCase.retry, nil, testCase.tried...)
+			require.NoError(t, err)
+			require.NotNil(t, selected, "%s (memory cache %v)", testCase.name, memoryCache)
+			assert.Contains(t, testCase.want, selected.Name, "%s (memory cache %v)", testCase.name, memoryCache)
+		}
+		assert.False(t, HasHigherPriorityChannel("default", "ds", 940001, nil), "memory cache %v", memoryCache)
+		assert.True(t, HasHigherPriorityChannel("default", "ds", 940003, nil), "memory cache %v", memoryCache)
+		assert.False(t, HasHigherPriorityChannel("default", "ds", 949999, nil), "memory cache %v", memoryCache)
+	}
+}

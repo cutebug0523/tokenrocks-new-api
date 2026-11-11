@@ -196,6 +196,12 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 					{Name: "分销-78号-本人", UsedUserId: 202, RedeemedTime: ts("2026-11-01 10:00"), Key: "fxself78"},
 					{Name: "分销-7号-1106", UsedUserId: 202, RedeemedTime: ts("2026-11-03 09:00"), Key: "fxchild78"},
 				}).Error)
+				for _, u := range []User{
+					{Id: a, Username: "alice"}, {Id: d, Username: "13812345678"}, {Id: e, Username: "eve@qq.com"}, {Id: 201, Username: "boss7"},
+				} {
+					u.Password, u.Status, u.Group, u.AffCode = "unused", common.UserStatusEnabled, "default", "fxaff"+strconv.Itoa(u.Id)
+					require.NoError(t, db.Create(&u).Error)
+				}
 				payment := operation_setting.GetPaymentSetting()
 				previousUsers, previousParents := payment.DistributorUsers, payment.DistributorParents
 				payment.DistributorUsers = map[int]int{201: 7, 202: 78}
@@ -211,6 +217,13 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 					Months: []DistributorMonth{
 						{Month: "2026-11", Count: 6, Money: 230, Commission: 23},
 						{Month: "2026-10", Count: 0, Money: 0, Commission: 0},
+					},
+					// 本月充得多的在前；手机号、邮箱打码；本人 Since 是 0
+					Members: []DistributorMember{
+						{Name: "alice", Since: ts("2026-11-02 10:00"), ThisMonth: 150},
+						{Name: "e***@qq.com", Since: ts("2026-11-07 10:00"), ThisMonth: 40},
+						{Name: "boss7", Since: 0, ThisMonth: 20},
+						{Name: "138****78", Since: ts("2026-11-04 10:00"), ThisMonth: 20},
 					},
 					Children: []DistributorChild{
 						{No: 77, Users: 1, Months: []DistributorMonth{

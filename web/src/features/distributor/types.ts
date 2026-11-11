@@ -37,6 +37,14 @@ export interface DistributorMonth {
   commission: number
 }
 
+export interface DistributorMember {
+  name: string
+  /** When the user started counting as this distributor's; 0 is the distributor. */
+  since: number
+  this_month: number
+  last_month: number
+}
+
 export interface DistributorChild {
   no: number
   users: number
@@ -59,6 +67,8 @@ export interface DistributorSelf {
     months: DistributorMonth[]
     /** Sub-distributors; their months carry this distributor's share. */
     children?: DistributorChild[]
+    /** This distributor's own users; emails and phone numbers come masked. */
+    members?: DistributorMember[]
   }
   orders?: DistributorOrder[]
 }

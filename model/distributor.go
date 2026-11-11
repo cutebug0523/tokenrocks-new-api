@@ -1,6 +1,7 @@
 package model
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -165,6 +166,29 @@ type DistributorStats struct {
 	Months        []DistributorMonth `json:"months"`
 	// Children 是他名下的下级分销商，Months 里的返佣是他按 DistributorParentCommissionRate 拿的那份
 	Children []DistributorChild `json:"children"`
+	// Members 是他自己的人的明细；下级分销商的人不给明细
+	Members []DistributorMember `json:"members"`
+}
+
+// DistributorMember 是给分销商看的一个用户：用户名给，邮箱、手机号样子的打码（店主 11-11：「可以给用户名，不给邮箱」）。
+type DistributorMember struct {
+	Name string `json:"name"`
+	// Since 是从什么时候算他的人（兑第一张码的时间），0 是分销商本人
+	Since     int64   `json:"since"`
+	ThisMonth float64 `json:"this_month"`
+	LastMonth float64 `json:"last_month"`
+}
+
+// maskDistributorMemberName 把像邮箱、手机号的用户名打码，别的原样给。
+func maskDistributorMemberName(name string) string {
+	if local, domain, ok := strings.Cut(name, "@"); ok {
+		r := []rune(local)
+		return string(r[:min(3, len(r)/2)]) + "***@" + domain
+	}
+	if len(name) >= 7 && strings.Trim(name, "0123456789") == "" {
+		return name[:3] + "****" + name[len(name)-2:]
+	}
+	return name
 }
 
 type DistributorChild struct {
@@ -241,7 +265,7 @@ func distributorParents() (map[int]int, error) {
 // 分销商本人的号算他自己的人、充值全算；别的分销商本人的号不算他的人（店主 11-11：3 号本人归 3 号）。
 func distributorStats(no int, now time.Time, rate float64) (*DistributorStats, error) {
 	prefix := DistributorBatchPrefix(no) + "%"
-	stats := &DistributorStats{}
+	stats := &DistributorStats{Members: []DistributorMember{}}
 	// 作废的码不算，但作废前已经兑掉的照算（兑换码是软删除，所以要 Unscoped）
 	if err := DB.Unscoped().Model(&Redemption{}).Where("name LIKE ? AND (deleted_at IS NULL OR used_user_id > 0)", prefix).Count(&stats.CodesTotal).Error; err != nil {
 		return nil, err
@@ -310,6 +334,15 @@ func distributorStats(no int, now time.Time, rate float64) (*DistributorStats, e
 		return stats, nil
 	}
 
+	var users []User
+	if err := DB.Unscoped().Select("id", "username").Where("id IN ?", mine).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	members := make(map[int]*DistributorMember, len(users))
+	for _, u := range users {
+		members[u.Id] = &DistributorMember{Name: maskDistributorMemberName(u.Username), Since: since[u.Id]}
+	}
+
 	var topUps []TopUp
 	if err := DB.Select("user_id", "money", "complete_time").
 		Where("user_id IN ? AND status = ? AND complete_time >= ? AND complete_time < ?", mine, common.TopUpStatusSuccess, lastStart.Unix(), start.AddDate(0, 1, 0).Unix()).
@@ -321,15 +354,32 @@ func distributorStats(no int, now time.Time, rate float64) (*DistributorStats, e
 			continue
 		}
 		m := &stats.Months[1]
+		member := members[t.UserId]
+		if member == nil { // 用户行被硬删了也照算钱
+			member = &DistributorMember{Name: "#" + strconv.Itoa(t.UserId), Since: since[t.UserId]}
+			members[t.UserId] = member
+		}
+		memberMoney := &member.LastMonth
 		if t.CompleteTime >= start.Unix() {
 			m = &stats.Months[0]
+			memberMoney = &member.ThisMonth
 		}
 		m.Count++
 		m.Money += t.Money
+		*memberMoney += t.Money
 	}
 	for i := range stats.Months {
 		stats.Months[i].Money = math.Round(stats.Months[i].Money*100) / 100
 		stats.Months[i].Commission = math.Round(stats.Months[i].Money*rate*100) / 100
 	}
+	for _, member := range members {
+		member.ThisMonth = math.Round(member.ThisMonth*100) / 100
+		member.LastMonth = math.Round(member.LastMonth*100) / 100
+		stats.Members = append(stats.Members, *member)
+	}
+	// 本月充得多的在前，再按上月、按先来后到
+	slices.SortFunc(stats.Members, func(a, b DistributorMember) int {
+		return cmp.Or(cmp.Compare(b.ThisMonth, a.ThisMonth), cmp.Compare(b.LastMonth, a.LastMonth), cmp.Compare(a.Since, b.Since), cmp.Compare(a.Name, b.Name))
+	})
 	return stats, nil
 }

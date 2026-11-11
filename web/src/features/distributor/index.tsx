@@ -28,6 +28,7 @@ import { LoadingState } from '@/components/loading-state'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { getDistributorSelf } from './api'
+import { DistributorMembersCard } from './components/distributor-members-card'
 import { DistributorOrderCard } from './components/distributor-order-card'
 import { DistributorOrdersCard } from './components/distributor-orders-card'
 import { DistributorStats } from './components/distributor-stats'
@@ -72,6 +73,7 @@ export function Distributor() {
           refreshing={query.isFetching}
           onRefresh={() => query.refetch()}
         />
+        <DistributorMembersCard members={self.stats?.members ?? []} />
       </>
     )
   }

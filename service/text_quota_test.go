@@ -924,6 +924,57 @@ func TestPostTextConsumeQuotaBillsOpenAI12hCacheWrites(t *testing.T) {
 	}
 }
 
+// A client that leaves before upstream sends any stream event leaves only the
+// gateway's own prompt estimate behind; that request returned nothing and must
+// not be charged. Once upstream has sent something the estimate still bills.
+func TestPostTextConsumeQuotaSkipsEstimateWhenUpstreamSentNothing(t *testing.T) {
+	truncate(t)
+	const userID, channelID = 64, 64
+	seedUser(t, userID, 10_000_000)
+	seedChannel(t, channelID)
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		name      string
+		received  int
+		endReason relaycommon.StreamEndReason
+		expr      string
+		wantQuota int
+	}{
+		{"client gone before any event", 0, relaycommon.StreamEndReasonClientGone, "", 0},
+		{"fixed price, client gone before any event", 0, relaycommon.StreamEndReasonClientGone, `tier("per call", fixed(0.01))`, 0},
+		{"client gone after upstream started", 1, relaycommon.StreamEndReasonClientGone, "", 2000},
+		{"upstream ended without usage", 0, relaycommon.StreamEndReasonEOF, "", 2000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+			common.SetContextKey(ctx, constant.ContextKeyLocalCountTokens, true)
+			status := relaycommon.NewStreamStatus()
+			status.SetEndReason(tc.endReason, nil)
+			info := &relaycommon.RelayInfo{
+				UserId:                userID,
+				OriginModelName:       "claude-opus-5-5",
+				UsingGroup:            "default",
+				StartTime:             time.Now(),
+				RelayFormat:           types.RelayFormatOpenAI,
+				ChannelMeta:           &relaycommon.ChannelMeta{ChannelId: channelID},
+				PriceData:             hosttypes.PriceData{ModelRatio: 1, CompletionRatio: 1, GroupRatioInfo: hosttypes.GroupRatioInfo{GroupRatio: 1}},
+				StreamStatus:          status,
+				ReceivedResponseCount: tc.received,
+			}
+			if tc.expr != "" {
+				info.TieredBillingSnapshot = makeSnapshot(tc.expr, 1, 2000, 0)
+			}
+
+			PostTextConsumeQuota(ctx, info, &dto.Usage{PromptTokens: 2000, TotalTokens: 2000}, nil)
+
+			log := getLastLog(t)
+			require.NotNil(t, log)
+			assert.Equal(t, tc.wantQuota, log.Quota)
+		})
+	}
+}
+
 func TestCalculateTextQuotaSummarySeparatesOpenRouterCacheReadFromPromptBilling(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

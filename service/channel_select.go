@@ -77,6 +77,24 @@ func (p *RetryParam) ResetRetryNextTry() {
 	p.resetNextTry = true
 }
 
+// SkipToNextAutoGroup sends the next retry of an auto-group request with
+// cross-group retry to the next group, the same way an exhausted group hands
+// over. It reports false for any other request, which has nowhere else to go.
+func (p *RetryParam) SkipToNextAutoGroup() bool {
+	if p.TokenGroup != "auto" || !common.GetContextKeyBool(p.Ctx, constant.ContextKeyTokenCrossGroupRetry) {
+		return false
+	}
+	if p.resetNextTry {
+		// Selection already handed the next retry to the next group.
+		return true
+	}
+	index, _ := common.GetContextKeyType[int](p.Ctx, constant.ContextKeyAutoGroupIndex)
+	common.SetContextKey(p.Ctx, constant.ContextKeyAutoGroupIndex, index+1)
+	p.SetRetry(0)
+	p.ResetRetryNextTry()
+	return true
+}
+
 // CacheGetRandomSatisfiedChannel tries to get a random channel that satisfies the requirements.
 // 尝试获取一个满足要求的随机渠道。
 //

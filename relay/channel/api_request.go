@@ -655,7 +655,7 @@ func streamFirstDataTimeout(info *common.RelayInfo) time.Duration {
 // code and its 500 status.
 func newStreamFirstDataTimeoutError(c *gin.Context, timeout time.Duration) *types.NewAPIError {
 	logger.LogWarn(c, common2.LogText("no stream data from upstream within %s, abandoning attempt", timeout))
-	return types.NewError(fmt.Errorf("upstream sent no stream data within %d seconds", int(timeout.Seconds())), types.ErrorCodeDoRequestFailed)
+	return types.NewError(fmt.Errorf("%w within %d seconds", service.ErrStreamFirstDataTimeout, int(timeout.Seconds())), types.ErrorCodeDoRequestFailed)
 }
 
 func DoTaskApiRequest(a TaskAdaptor, c *gin.Context, info *common.RelayInfo, requestBody io.Reader) (*http.Response, error) {

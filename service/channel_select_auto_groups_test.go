@@ -127,3 +127,55 @@ func TestCacheGetRandomSatisfiedChannelUsesTokenAutoGroupsWhenGlobalAutoIsEmpty(
 	assert.Equal(t, "default", selectedGroup)
 	assert.Equal(t, "default", common.GetContextKeyString(ctx, constant.ContextKeyAutoGroup))
 }
+
+// A channel that stalled twice is the only one its group has left, so the
+// relay loop hands the next retry to the next auto group; requests outside
+// auto groups have nowhere to go and stop.
+func TestSkipToNextAutoGroupLeavesStalledGroup(t *testing.T) {
+	db := setupChannelSelectAutoGroupsTest(t)
+	const modelName = "auto-groups-stall-model"
+	common.RetryTimes = 3
+	createChannelSelectAutoGroupsChannel(t, db, 2201, "vip", modelName)
+	createChannelSelectAutoGroupsChannel(t, db, 2202, "default", modelName)
+	model.InitChannelCache()
+
+	gin.SetMode(gin.TestMode)
+	newParam := func(group string, crossGroup bool) *RetryParam {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+		common.SetContextKey(ctx, constant.ContextKeyTokenAutoGroups, []string{"vip", "default"})
+		common.SetContextKey(ctx, constant.ContextKeyTokenCrossGroupRetry, crossGroup)
+		retry := 0
+		return &RetryParam{Ctx: ctx, TokenGroup: group, ModelName: modelName, RequestPath: "/v1/chat/completions", Retry: &retry}
+	}
+
+	param := newParam("auto", true)
+	first, _, err := CacheGetRandomSatisfiedChannel(param)
+	require.NoError(t, err)
+	require.Equal(t, 2201, first.Id)
+	param.IncreaseRetry()
+	again, _, err := CacheGetRandomSatisfiedChannel(param)
+	require.NoError(t, err)
+	require.Equal(t, 2201, again.Id, "without the skip a retry stays on the only vip channel")
+
+	require.True(t, param.SkipToNextAutoGroup())
+	param.IncreaseRetry()
+	assert.Equal(t, 0, param.GetRetry(), "the new group starts at its top priority")
+	next, group, err := CacheGetRandomSatisfiedChannel(param)
+	require.NoError(t, err)
+	assert.Equal(t, 2202, next.Id)
+	assert.Equal(t, "default", group)
+
+	exhausted := newParam("auto", true)
+	exhausted.SetRetry(common.RetryTimes)
+	_, _, err = CacheGetRandomSatisfiedChannel(exhausted)
+	require.NoError(t, err)
+	require.True(t, exhausted.SkipToNextAutoGroup())
+	exhausted.IncreaseRetry()
+	_, group, err = CacheGetRandomSatisfiedChannel(exhausted)
+	require.NoError(t, err)
+	assert.Equal(t, "default", group, "a group that already used its retries moves on by one group, not two")
+
+	assert.False(t, newParam("auto", false).SkipToNextAutoGroup(), "without cross-group retry the request stays in its group")
+	assert.False(t, newParam("vip", true).SkipToNextAutoGroup(), "a fixed group has no next group")
+}

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -14,6 +15,11 @@ import (
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 )
+
+// ErrStreamFirstDataTimeout marks an attempt abandoned because its stream sent
+// no data line in time. The relay loop counts it per channel so a stalled
+// channel is not picked again and again.
+var ErrStreamFirstDataTimeout = errors.New("upstream sent no stream data")
 
 // DecideRelayRetry is the single retry decision for relay attempts. The reason
 // is recorded in the request policy decision events of the log details.

@@ -302,6 +302,8 @@ func TestDoRequestAbandonsStreamWithoutFirstData(t *testing.T) {
 				require.ErrorAs(t, err, &apiErr)
 				assert.Equal(t, types.ErrorCodeDoRequestFailed, apiErr.GetErrorCode())
 				assert.Equal(t, http.StatusInternalServerError, apiErr.StatusCode)
+				assert.ErrorIs(t, err, service.ErrStreamFirstDataTimeout, "the relay loop counts stalls per channel by this error")
+				assert.Equal(t, "upstream sent no stream data within 0 seconds", apiErr.Err.Error())
 				return
 			}
 			require.NoError(t, err)

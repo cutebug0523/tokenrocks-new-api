@@ -190,6 +190,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 	relayInfo.RetryIndex = 0
 	relayInfo.LastError = nil
+	firstDataTimeouts := map[int]int{}
 
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		relayInfo.StreamStatus = nil
@@ -252,6 +253,24 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if decision.Action != "retry" {
 			break
+		}
+		// A channel gets one more try after its stream stalls before the first
+		// data line. Selection prefers untried channels, so a second stall on
+		// the same channel means this group has no other one; further retries
+		// only make the client wait out the timeout again and again.
+		if errors.Is(newAPIError, service.ErrStreamFirstDataTimeout) {
+			firstDataTimeouts[channel.Id]++
+			if firstDataTimeouts[channel.Id] >= 2 {
+				moved := retryParam.SkipToNextAutoGroup()
+				stalled := service.PolicyDecision{Action: "next_group", Reason: "first_data_timeout_repeated", Source: "system"}
+				if !moved {
+					stalled.Action = "stop"
+				}
+				service.RequestPolicy(c).AddEvent(service.PolicyEvent{ChannelID: channel.Id, Decision: stalled})
+				if !moved {
+					break
+				}
+			}
 		}
 	}
 

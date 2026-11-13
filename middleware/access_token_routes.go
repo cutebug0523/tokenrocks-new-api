@@ -25,6 +25,8 @@ const (
 type accessTokenRouteRule struct {
 	kind  accessTokenRuleKind
 	scope string
+	// orScope, when set, is a second scope that also satisfies the rule.
+	orScope string
 }
 
 var (
@@ -34,6 +36,20 @@ var (
 
 func accessTokenScopeRule(scope string) accessTokenRouteRule {
 	return accessTokenRouteRule{kind: accessTokenRuleScope, scope: scope}
+}
+
+// accessTokenScopeOrRule requires scope but also accepts orScope. TokenRocks:
+// the helper signs in with wallet:write only (it can place a top-up order),
+// and its top-up page must show the same presets, discounts and first top-up
+// bonus as the website, which are read-only wallet data. A token that may
+// place the order may read what the order would cost.
+func accessTokenScopeOrRule(scope, orScope string) accessTokenRouteRule {
+	return accessTokenRouteRule{kind: accessTokenRuleScope, scope: scope, orScope: orScope}
+}
+
+// Granted reports whether a token carrying scopes satisfies a scope rule.
+func (rule accessTokenRouteRule) Granted(scopes []string) bool {
+	return service.AccessTokenScopeGranted(scopes, rule.scope) || (rule.orScope != "" && service.AccessTokenScopeGranted(scopes, rule.orScope))
 }
 
 // accessTokenRouteRules declares the token rule of every dashboard route that
@@ -86,11 +102,11 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/user/passkey/verify/finish":         accessTokenAnyRule,
 	"DELETE /api/user/passkey":                     accessTokenScopeRule("account_security:write"),
 	"GET /api/user/aff":                            accessTokenScopeRule("wallet:read"),
-	"GET /api/user/topup/info":                     accessTokenScopeRule("wallet:read"),
+	"GET /api/user/topup/info":                     accessTokenScopeOrRule("wallet:read", "wallet:write"),
 	"GET /api/user/topup/self":                     accessTokenScopeRule("wallet:read"),
 	"POST /api/user/topup":                         accessTokenScopeRule("wallet:write"),
 	"POST /api/user/pay":                           accessTokenScopeRule("wallet:write"),
-	"POST /api/user/amount":                        accessTokenScopeRule("wallet:read"),
+	"POST /api/user/amount":                        accessTokenScopeOrRule("wallet:read", "wallet:write"),
 	"POST /api/user/stripe/pay":                    accessTokenScopeRule("wallet:write"),
 	"POST /api/user/stripe/amount":                 accessTokenScopeRule("wallet:read"),
 	"POST /api/user/creem/pay":                     accessTokenScopeRule("wallet:write"),

@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -122,6 +123,10 @@ func redisRateLimitHandler(subject string, duration int64, totalMaxCount, succes
 			}
 		}
 
+		if !sharedRateLimitGate(c) {
+			return
+		}
+
 		// 4. 处理请求
 		c.Next()
 
@@ -154,6 +159,10 @@ func memoryRateLimitHandler(subject string, duration int64, totalMaxCount, succe
 				return
 			}
 			defer reservation.Complete(false)
+		}
+
+		if !sharedRateLimitGate(c) {
+			return
 		}
 
 		// 3. 处理请求
@@ -199,6 +208,11 @@ func ModelRequestRateLimit() func(c *gin.Context) {
 			subject += ":" + group
 		}
 
+		// TokenRocks: 确认是同一个人的几个号，另外合计限流（各号自己的上限照旧）。先过单号的限，过了才占合计名额
+		if key, count, ok := operation_setting.SharedRateLimitFor(c.GetInt("id")); ok {
+			c.Set(sharedRateLimitCtxKey, sharedRateLimit{key, count, duration})
+		}
+
 		// 根据存储类型选择并执行限流处理器
 		if common.RedisEnabled {
 			redisRateLimitHandler(subject, duration, totalMaxCount, successMaxCount)(c)
@@ -206,6 +220,44 @@ func ModelRequestRateLimit() func(c *gin.Context) {
 			memoryRateLimitHandler(subject, duration, totalMaxCount, successMaxCount)(c)
 		}
 	}
+}
+
+const sharedRateLimitCtxKey = "tr_shared_rate_limit"
+
+type sharedRateLimit struct {
+	key      string
+	count    int
+	duration int64
+}
+
+// sharedRateLimitGate 单号的限过了以后查合计；超了回 429。不在任何合计名单里直接放行。
+func sharedRateLimitGate(c *gin.Context) bool {
+	v, ok := c.Get(sharedRateLimitCtxKey)
+	if !ok {
+		return true
+	}
+	l := v.(sharedRateLimit)
+	if sharedRateLimitAllow(c, l.key, l.count, l.duration) {
+		return true
+	}
+	abortWithOpenAiMessage(c, http.StatusTooManyRequests, i18n.T(c, i18n.MsgRateLimitTotalReached, map[string]any{"Minutes": setting.ModelRequestRateLimitDurationMinutes, "Max": l.count}))
+	return false
+}
+
+// sharedRateLimitAllow 合计限流用和单人总数一样的令牌桶；Redis 出错放行（只是额外一道闸，别因为它挡掉正常请求）。
+func sharedRateLimitAllow(c *gin.Context, key string, count int, duration int64) bool {
+	if !common.RedisEnabled {
+		inMemoryRateLimiter.Init(time.Duration(setting.ModelRequestRateLimitDurationMinutes) * time.Minute)
+		return inMemoryRateLimiter.Request(ModelRequestRateLimitCountMark+key, count, duration)
+	}
+	ctx := context.Background()
+	allowed, err := limiter.New(ctx, common.RDB).Allow(ctx, "rateLimit:"+key,
+		limiter.WithCapacity(rateLimitCapacity(count, duration)), limiter.WithRate(int64(count)), limiter.WithRequested(duration))
+	if err != nil {
+		common.SysLog("shared rate limit check failed: " + err.Error())
+		return true
+	}
+	return allowed
 }
 
 func rateLimitDurationSeconds(durationMinutes int) int64 {

@@ -2,7 +2,6 @@ package limiter
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -21,15 +20,10 @@ func useLimiterMiniRedis(t *testing.T) (*miniredis.Miniredis, *redis.Client) {
 	require.NoError(t, redisClient.Ping(context.Background()).Err())
 
 	instance = nil
-	once = sync.Once{}
 
 	t.Cleanup(func() {
 		_ = redisClient.Close()
 		instance = previousInstance
-		once = sync.Once{}
-		if previousInstance != nil {
-			once.Do(func() {})
-		}
 	})
 
 	return redisServer, redisClient

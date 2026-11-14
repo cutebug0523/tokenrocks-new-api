@@ -21,11 +21,14 @@ type RedisLimiter struct {
 
 var (
 	instance *RedisLimiter
-	once     sync.Once
+	mu       sync.Mutex
 )
 
+// New 返回绑定到 r 的限流器。Redis 客户端换了（测试里每个用例一个 miniredis）就重新绑定、重新加载脚本；线上只有一个客户端，等同单例。
 func New(ctx context.Context, r *redis.Client) *RedisLimiter {
-	once.Do(func() {
+	mu.Lock()
+	defer mu.Unlock()
+	if instance == nil || instance.client != r {
 		// 预加载脚本
 		limitSHA, err := r.ScriptLoad(ctx, rateLimitScript).Result()
 		if err != nil {
@@ -35,8 +38,7 @@ func New(ctx context.Context, r *redis.Client) *RedisLimiter {
 			client:         r,
 			limitScriptSHA: limitSHA,
 		}
-	})
-
+	}
 	return instance
 }
 

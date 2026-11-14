@@ -1,6 +1,11 @@
 package operation_setting
 
-import "github.com/QuantumNous/new-api/setting/config"
+import (
+	"fmt"
+	"slices"
+
+	"github.com/QuantumNous/new-api/setting/config"
+)
 
 // 额度展示类型
 const (
@@ -30,6 +35,24 @@ type GeneralSetting struct {
 	// A user whose streamed output tokens within one 10-minute window reach
 	// this many is switched for 24 hours; 0 turns the automatic switch off.
 	NonStreamAutoOutputTokens int `json:"non_stream_auto_output_tokens"`
+	// TokenRocks: accounts known to be one person share an extra per-window
+	// request cap on top of each account's own ModelRequestRateLimitCount.
+	SharedRateLimits []SharedRateLimit `json:"shared_rate_limits"`
+}
+
+type SharedRateLimit struct {
+	UserIds []int `json:"user_ids"`
+	Count   int   `json:"count"`
+}
+
+// SharedRateLimitFor returns the shared bucket a user belongs to (first match).
+func SharedRateLimitFor(userId int) (key string, count int, ok bool) {
+	for _, l := range generalSetting.SharedRateLimits {
+		if l.Count > 0 && slices.Contains(l.UserIds, userId) {
+			return fmt.Sprintf("shared:%v", l.UserIds), l.Count, true
+		}
+	}
+	return "", 0, false
 }
 
 // 默认配置

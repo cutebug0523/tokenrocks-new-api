@@ -34,8 +34,10 @@ const HELPER_ACCESS_DAYS = 30
 export function HelperLogin(props: { search: HelperLoginSearch }) {
   const { t } = useTranslation()
   const [approved, setApproved] = useState(false)
+  const lee = props.search.client === 'lee'
   const approve = useMutation({
-    mutationFn: () => approveHelperLogin(props.search.code_challenge),
+    mutationFn: () =>
+      approveHelperLogin(props.search.code_challenge, props.search.client),
     onSuccess: (code) => {
       setApproved(true)
       window.location.assign(
@@ -51,19 +53,25 @@ export function HelperLogin(props: { search: HelperLoginSearch }) {
 
   let body = (
     <p className='text-muted-foreground text-center text-sm'>
-      {t('This sign-in link is incomplete. Click Sign in in the helper again.')}
+      {lee
+        ? t('This sign-in link is incomplete. Click Sign in in LEE again.')
+        : t('This sign-in link is incomplete. Click Sign in in the helper again.')}
     </p>
   )
   if (usable && approved) {
     body = (
       <p className='text-center text-sm'>
-        {t('Authorized. You can go back to the helper now.')}
+        {lee
+          ? t('Authorized. You can go back to LEE now.')
+          : t('Authorized. You can go back to the helper now.')}
       </p>
     )
   } else if (usable) {
     body = (
       <div className='space-y-4 text-sm'>
-        <p>{t('The helper will be able to:')}</p>
+        <p>
+          {lee ? t('LEE will be able to:') : t('The helper will be able to:')}
+        </p>
         <ul className='list-disc space-y-1 pl-5'>
           <li>{t('See your account, balance, usage and API keys')}</li>
           <li>{t('Read API keys to set them up in AI apps on this computer')}</li>
@@ -77,7 +85,9 @@ export function HelperLogin(props: { search: HelperLoginSearch }) {
           )}
         </p>
         <p className='text-muted-foreground'>
-          {t('Only authorize if you just clicked Sign in in the helper.')}
+          {lee
+            ? t('Only authorize if you just clicked Sign in in LEE.')
+            : t('Only authorize if you just clicked Sign in in the helper.')}
         </p>
         <div className='flex gap-3 pt-2'>
           <Button
@@ -115,7 +125,7 @@ export function HelperLogin(props: { search: HelperLoginSearch }) {
             <KeyRound className='h-8 w-8' aria-hidden='true' />
           </div>
           <h2 className='text-2xl font-semibold tracking-tight'>
-            {t('Authorize TokenRocks Helper')}
+            {lee ? t('Authorize LEE') : t('Authorize TokenRocks Helper')}
           </h2>
         </div>
         {body}

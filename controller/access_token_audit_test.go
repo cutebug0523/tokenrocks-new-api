@@ -1298,6 +1298,48 @@ func redeemHelperLogin(router http.Handler, code, verifier string) *httptest.Res
 	return accessTokenRequest(router, "POST", "/api/user/helper/token", "", "", `{"code":"`+code+`","code_verifier":"`+verifier+`"}`)
 }
 
+// LEE signs in through the helper flow with client=lee: its access token is
+// named LEE and the TR助手 welcome bonus stays for the helper.
+func TestHelperLoginNamesLEE(t *testing.T) {
+	user, _ := setupAccessTokenAudit(t)
+	router := newAccessTokenTestRouter()
+	_, browser := createAccessTokenTestSession(t, user.Id, "lee-session")
+	require.NoError(t, model.DB.AutoMigrate(&model.HelperWelcome{}))
+	setting := operation_setting.GetCheckinSetting()
+	previousYuan, previousRate := setting.HelperWelcomeYuan, operation_setting.USDExchangeRate
+	setting.HelperWelcomeYuan, operation_setting.USDExchangeRate = 5, 7
+	t.Cleanup(func() { setting.HelperWelcomeYuan, operation_setting.USDExchangeRate = previousYuan, previousRate })
+	login := func(client string) (string, int) {
+		verifier, challenge := helperPKCE(t)
+		approved := accessTokenRequest(router, "POST", "/api/user/helper/approve", browser, "", `{"code_challenge":"`+challenge+`","client":"`+client+`"}`)
+		require.Equal(t, http.StatusOK, approved.Code, approved.Body.String())
+		var code struct {
+			Data struct {
+				Code string `json:"code"`
+			} `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(approved.Body.Bytes(), &code))
+		response := redeemHelperLogin(router, code.Data.Code, verifier)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		var issued struct {
+			Data struct {
+				AccessToken  string `json:"access_token"`
+				WelcomeQuota int    `json:"welcome_quota"`
+			} `json:"data"`
+		}
+		require.NoError(t, common.Unmarshal(response.Body.Bytes(), &issued))
+		stored, err := model.FindUserAccessTokenByHash(model.AccessTokenFingerprint(issued.Data.AccessToken))
+		require.NoError(t, err)
+		return stored.Name, issued.Data.WelcomeQuota
+	}
+	name, welcome := login("lee")
+	assert.Equal(t, "LEE", name)
+	assert.Zero(t, welcome, "LEE sign-in does not use up the TR助手 bonus")
+	name, welcome = login("evil")
+	assert.Equal(t, helperAccessTokenName, name, "an unknown client is the helper")
+	assert.Positive(t, welcome, "the helper still gets its bonus afterwards")
+}
+
 // The helper signs in with an authorization code bound to a PKCE challenge
 // (RFC 8252, RFC 7636). The code is single use, short lived, needs the
 // verifier and a still-live approving session, and the token it yields is

@@ -26,6 +26,10 @@ import (
 const (
 	helperLoginCodeTTL    = 5 * time.Minute
 	helperAccessTokenName = "TokenRocks 小助手"
+	// LEE (TokenRocks' desktop agent) signs in through the same flow with
+	// client=lee; its token gets its own name and no TR助手 welcome bonus.
+	leeAccessTokenName = "LEE"
+	helperClientLEE    = "lee"
 )
 
 var helperAccessTokenScopes = []string{"api_key:read", "api_key:reveal", "api_key:write", "profile:read", "usage:read", "wallet:write"}
@@ -40,6 +44,7 @@ var (
 type helperLoginGrant struct {
 	CodeChallenge string                    `json:"code_challenge"`
 	Session       model.AuthSessionIdentity `json:"session"`
+	Client        string                    `json:"client,omitempty"`
 }
 
 // HelperLoginApprove issues the one-time code for a challenge the signed-in
@@ -51,12 +56,17 @@ func HelperLoginApprove(c *gin.Context) {
 	}
 	var req struct {
 		CodeChallenge string `json:"code_challenge"`
+		Client        string `json:"client"`
 	}
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil || !pkceChallengePattern.MatchString(req.CodeChallenge) {
 		writeAccessTokenError(c, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body.")
 		return
 	}
-	payload, err := common.Marshal(helperLoginGrant{CodeChallenge: req.CodeChallenge, Session: identity})
+	grant := helperLoginGrant{CodeChallenge: req.CodeChallenge, Session: identity}
+	if req.Client == helperClientLEE {
+		grant.Client = helperClientLEE
+	}
+	payload, err := common.Marshal(grant)
 	if err != nil {
 		writeSecurityOperationError(c, err)
 		return
@@ -112,7 +122,11 @@ func HelperLoginToken(c *gin.Context) {
 		writeSecurityOperationError(c, err)
 		return
 	}
-	raw, token, err := issueAccessToken(user.Id, helperAccessTokenName, scopes, common.GetTimestamp()+int64(service.AccessTokenDefaultExpiryDays)*24*60*60)
+	name, client := helperAccessTokenName, "helper"
+	if grant.Client == helperClientLEE {
+		name, client = leeAccessTokenName, helperClientLEE
+	}
+	raw, token, err := issueAccessToken(user.Id, name, scopes, common.GetTimestamp()+int64(service.AccessTokenDefaultExpiryDays)*24*60*60)
 	if err != nil {
 		writeIssueAccessTokenError(c, err)
 		return
@@ -123,11 +137,14 @@ func HelperLoginToken(c *gin.Context) {
 		"scopes":     scopes,
 		"expires_at": token.ExpiresAt,
 		"token_ref":  token.TokenHash,
-		"client":     "helper",
+		"client":     client,
 	})
-	welcome, err := model.GrantHelperWelcome(user.Id)
-	if err != nil {
-		common.SysError(common.LogText("helper welcome bonus failed for user %d: %s", user.Id, err.Error()))
+	var welcome int
+	if client == "helper" {
+		welcome, err = model.GrantHelperWelcome(user.Id)
+		if err != nil {
+			common.SysError(common.LogText("helper welcome bonus failed for user %d: %s", user.Id, err.Error()))
+		}
 	}
 	common.ApiSuccess(c, gin.H{"access_token": raw, "expires_at": token.ExpiresAt, "welcome_quota": welcome})
 }

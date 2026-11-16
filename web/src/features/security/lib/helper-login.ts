@@ -19,8 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { z } from 'zod'
 
 // The helper opens this page with a PKCE S256 challenge, its own state and the
-// port of its loopback listener (RFC 8252, RFC 7636).
+// port of its loopback listener (RFC 8252, RFC 7636). LEE uses the same flow
+// and adds client=lee so the page names it; anything else means TR助手.
 export const helperLoginSearchSchema = z.object({
+  client: z.enum(['lee']).optional().catch(undefined),
   code_challenge: z.coerce
     .string()
     .regex(/^[A-Za-z0-9_-]{43}$/)

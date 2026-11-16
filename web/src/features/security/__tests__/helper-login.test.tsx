@@ -99,3 +99,25 @@ it.each([
     screen.getByText('This sign-in link is incomplete. Click Sign in in the helper again.')
   ).toBeVisible()
 })
+
+it('names LEE and tells the server when LEE opened the page', async () => {
+  const post = vi
+    .spyOn(api, 'post')
+    .mockResolvedValue({ data: { success: true, data: { code: 'one-time-code' } } })
+  renderPage({ code_challenge: challenge, state: 'helper-state-123456', port: 51234, client: 'lee' })
+
+  expect(screen.getByRole('heading', { name: 'Authorize LEE' })).toBeVisible()
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Authorize' }))
+
+  await waitFor(() => expect(assign).toHaveBeenCalled())
+  expect(post).toHaveBeenCalledWith(
+    '/api/user/helper/approve',
+    { code_challenge: challenge, client: 'lee' },
+    expect.anything()
+  )
+})
+
+it('treats an unknown client as the helper', () => {
+  renderPage({ code_challenge: challenge, state: 'helper-state-123456', port: 51234, client: 'evil' })
+  expect(screen.getByRole('heading', { name: 'Authorize TokenRocks Helper' })).toBeVisible()
+})

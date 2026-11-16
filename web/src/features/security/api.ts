@@ -220,11 +220,14 @@ export function enable2FA(
 
 // approveHelperLogin returns the one-time code the helper redeems with its
 // PKCE verifier for an access token.
-export async function approveHelperLogin(codeChallenge: string): Promise<string> {
+export async function approveHelperLogin(
+  codeChallenge: string,
+  client?: 'lee'
+): Promise<string> {
   const approved = await authResult<{ code: string }>(
     api.post(
       '/api/user/helper/approve',
-      { code_challenge: codeChallenge },
+      { code_challenge: codeChallenge, client },
       authRequestOptions
     ),
     'Authorization failed'

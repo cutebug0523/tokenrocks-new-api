@@ -70,7 +70,7 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 				operation_setting.GetGeneralSetting().QuotaDisplayType = previousDisplay
 				assert.NoError(t, sqlDB.Close())
 			})
-			tables := []any{&User{}, &Redemption{}, &TopUp{}, &DistributorOrder{}, &Option{}}
+			tables := []any{&User{}, &Redemption{}, &TopUp{}, &DistributorOrder{}, &DistributorWithdrawal{}, &Option{}}
 			for _, table := range tables {
 				require.False(t, db.Migrator().HasTable(table), "use an empty test database")
 			}
@@ -299,6 +299,78 @@ func TestDistributorDatabaseMatrix(t *testing.T) {
 				assert.Zero(t, stats.Users)
 			})
 
+			// 申请提现（店主 11-24）：满门槛把可提现全提，提现中不算可提现；驳回退回；已打款算进已提现，和手记的老打款按日期合在一起。
+			// 用的是上面 stats 那份数据：7 号用掉部分的返佣 18.05，没用掉的 12.4
+			t.Run("withdraw", func(t *testing.T) {
+				ts := func(s string) time.Time {
+					v, err := time.ParseInLocation("2006-01-02 15:04", s, distributorZone)
+					require.NoError(t, err)
+					return v
+				}
+				now := ts("2026-11-24 12:00")
+				payment := operation_setting.GetPaymentSetting()
+				previousUsers, previousParents, previousPayouts := payment.DistributorUsers, payment.DistributorParents, payment.DistributorPayouts
+				payment.DistributorUsers = map[int]int{201: 7, 202: 78}
+				payment.DistributorParents = map[int]int{77: 7}
+				payment.DistributorPayouts = map[int][]operation_setting.DistributorPayout{}
+				t.Cleanup(func() {
+					payment.DistributorUsers, payment.DistributorParents, payment.DistributorPayouts = previousUsers, previousParents, previousPayouts
+				})
+				four := func() []float64 {
+					stats, err := GetDistributorStats(7, now)
+					require.NoError(t, err)
+					return []float64{stats.Pending, stats.Withdrawable, stats.Requested, stats.Withdrawn}
+				}
+				require.Equal(t, []float64{12.4, 18.05, 0, 0}, four())
+
+				_, err := RequestDistributorWithdrawal(201, 7, "张三 支付宝 138", 50, now)
+				assert.ErrorIs(t, err, ErrDistributorWithdrawTooSmall, "不满 50 不让提")
+
+				first, err := RequestDistributorWithdrawal(201, 7, "张三 支付宝 138", 10, now)
+				require.NoError(t, err)
+				assert.Equal(t, 18.05, first.Amount)
+				assert.Equal(t, DistributorWithdrawPending, first.Status)
+				assert.Equal(t, []float64{12.4, 0, 18.05, 0}, four(), "提现中不再算进可提现")
+				_, err = RequestDistributorWithdrawal(201, 7, "张三", 0, now)
+				assert.ErrorIs(t, err, ErrDistributorWithdrawInProgress, "同时只能有一笔")
+
+				rejected, err := ResolveDistributorWithdrawal(first.Id, false, "卡号不对", now.Unix())
+				require.NoError(t, err)
+				assert.Equal(t, DistributorWithdrawRejected, rejected.Status)
+				assert.Equal(t, []float64{12.4, 18.05, 0, 0}, four(), "驳回的退回可提现")
+
+				second, err := RequestDistributorWithdrawal(201, 7, "张三 支付宝 139", 10, now)
+				require.NoError(t, err)
+				_, err = ResolveDistributorWithdrawal(second.Id, true, "", ts("2026-11-25 09:00").Unix())
+				require.NoError(t, err)
+				_, err = ResolveDistributorWithdrawal(second.Id, false, "", now.Unix())
+				assert.ErrorIs(t, err, ErrDistributorWithdrawNotPending, "处理过的不能再处理")
+				assert.Equal(t, []float64{12.4, 0, 0, 18.05}, four())
+
+				// 手记的老打款照算，和申请的按日期排；打多了从待结算里扣
+				payment.DistributorPayouts = map[int][]operation_setting.DistributorPayout{7: {{Date: "2026-11-10", Amount: 5}}}
+				stats, err := GetDistributorStats(7, now)
+				require.NoError(t, err)
+				assert.Equal(t, []operation_setting.DistributorPayout{{Date: "2026-11-10", Amount: 5}, {Date: "2026-11-25", Amount: 18.05}}, stats.Payouts)
+				assert.Equal(t, []float64{7.4, 0, 0, 23.05}, four())
+
+				// 下级 78 号自己也能提；后台列表待打款的在前，处理过的新的在前
+				child, err := RequestDistributorWithdrawal(202, 78, "李四 工行 6222", 1, now)
+				require.NoError(t, err)
+				assert.Equal(t, 3.2, child.Amount)
+				all, err := GetAllDistributorWithdrawals(100)
+				require.NoError(t, err)
+				var ids []int
+				for _, w := range all {
+					ids = append(ids, w.Id)
+				}
+				assert.Equal(t, []int{child.Id, second.Id, first.Id}, ids)
+				mine, err := GetDistributorWithdrawals(7, 20)
+				require.NoError(t, err)
+				require.Len(t, mine, 2)
+				assert.Equal(t, "张三 支付宝 139", mine[0].Account, "新的在前，前端拿它带出收款信息")
+			})
+
 			// 后台用户列表「设为分销商」：编号接着用过的最大号排（名单、订单、批次名、打款记录都算），写进设置
 			t.Run("set distributor", func(t *testing.T) {
 				payment := operation_setting.GetPaymentSetting()
@@ -362,6 +434,10 @@ func TestDistributorOptionValidation(t *testing.T) {
 		{"payment_setting.distributor_payouts", `{"7":[{"date":"2026-12-01","amount":0}]}`, false},
 		{"payment_setting.distributor_payouts", `{"0":[{"date":"2026-12-01","amount":1}]}`, false},
 		{"payment_setting.distributor_payouts", `null`, false},
+		{"payment_setting.distributor_withdraw_min", `50`, true},
+		{"payment_setting.distributor_withdraw_min", `0`, true},
+		{"payment_setting.distributor_withdraw_min", `-1`, false},
+		{"payment_setting.distributor_withdraw_min", `abc`, false},
 		{"payment_setting.distributor_face_values", `[1,2,5]`, true},
 		{"payment_setting.distributor_face_values", `[]`, true},
 		{"payment_setting.distributor_face_values", `[0,2]`, false},

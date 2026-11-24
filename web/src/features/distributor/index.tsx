@@ -25,13 +25,19 @@ import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { SectionPageLayout } from '@/components/layout'
 import { LoadingState } from '@/components/loading-state'
+import { ROLE } from '@/lib/roles'
 import { requireServerSuccess } from '@/lib/server-error-message'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { getDistributorSelf } from './api'
 import { DistributorMembersCard } from './components/distributor-members-card'
 import { DistributorOrderCard } from './components/distributor-order-card'
 import { DistributorOrdersCard } from './components/distributor-orders-card'
 import { DistributorStats } from './components/distributor-stats'
+import {
+  DistributorWithdrawCard,
+  DistributorWithdrawalsAdminCard,
+} from './components/distributor-withdraw-card'
 
 /**
  * Hidden page for distributors (not in the menu; fx.tokenrocks.ai redirects
@@ -46,6 +52,9 @@ export function Distributor() {
     refetchOnWindowFocus: true,
   })
   const self = query.data
+  const isAdmin = useAuthStore(
+    (state) => (state.auth.user?.role ?? ROLE.GUEST) >= ROLE.ADMIN
+  )
 
   let content: ReactNode
   if (query.isLoading) {
@@ -67,6 +76,7 @@ export function Distributor() {
     content = (
       <>
         <DistributorStats self={self} />
+        <DistributorWithdrawCard self={self} />
         <DistributorOrderCard self={self} />
         <DistributorOrdersCard
           orders={self.orders ?? []}
@@ -88,6 +98,7 @@ export function Distributor() {
       <SectionPageLayout.Content>
         <div className='mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5'>
           {content}
+          {isAdmin && <DistributorWithdrawalsAdminCard />}
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>

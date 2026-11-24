@@ -142,6 +142,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/distributor", controller.GetDistributorSelf)
 				selfRoute.POST("/distributor/order", middleware.CriticalRateLimit(), controller.RequestDistributorOrder)
 				selfRoute.GET("/distributor/order/:id/codes", controller.GetDistributorOrderCodes)
+				selfRoute.POST("/distributor/withdraw", middleware.CriticalRateLimit(), controller.RequestDistributorWithdraw)
 				selfRoute.POST("/aff_transfer", middleware.UserCriticalRateLimit("aff-transfer"), controller.TransferAffQuota)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)
 
@@ -171,6 +172,8 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/distributor/stats", controller.GetDistributorStatsByAdmin)
 				adminRoute.GET("/distributor/users", controller.GetDistributorUsers)
 				adminRoute.POST("/distributor/users", controller.SetDistributorUser)
+				adminRoute.GET("/distributor/withdrawals", controller.GetDistributorWithdrawals)
+				adminRoute.POST("/distributor/withdrawals/:id", controller.ResolveDistributorWithdrawal)
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)

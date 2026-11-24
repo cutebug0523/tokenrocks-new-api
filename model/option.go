@@ -301,6 +301,11 @@ func validateOptionValue(key string, value string) error {
 			}
 		}
 	}
+	if key == "payment_setting.distributor_withdraw_min" {
+		if v, err := strconv.ParseFloat(value, 64); err != nil || v < 0 || v > 1e6 {
+			return common.NewMessage("Invalid parameters")
+		}
+	}
 	if key == "payment_setting.distributor_face_values" {
 		var faces []int
 		if common.UnmarshalJsonStr(value, &faces) != nil || faces == nil || slices.ContainsFunc(faces, func(face int) bool { return face <= 0 || face > 1000 }) {

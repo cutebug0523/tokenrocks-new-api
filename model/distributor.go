@@ -161,7 +161,8 @@ type DistributorMonth struct {
 
 // DistributorStats 里的提现四个数（店主 11-11）：返佣只算他的人在线充值里已经用掉的部分，用掉的退不了。
 // Paid 是他自己的人累计在线充值（实付）；Pending 是还没用掉那部分的返佣，可能退款，先不结；
-// Withdrawable 是已用掉那部分的返佣减去已打款；Withdrawn 是 Payouts 合计。Pending、Withdrawable 含下级那份。
+// Withdrawable 是已用掉那部分的返佣减去已打款和提现中；Requested 是申请了还没打的（提现中）；
+// Withdrawn 是 Payouts 合计。Pending、Withdrawable 含下级那份。
 type DistributorStats struct {
 	CodesTotal    int64                                 `json:"codes_total"`
 	CodesRedeemed int64                                 `json:"codes_redeemed"`
@@ -170,6 +171,7 @@ type DistributorStats struct {
 	Paid          float64                               `json:"paid"`
 	Pending       float64                               `json:"pending"`
 	Withdrawable  float64                               `json:"withdrawable"`
+	Requested     float64                               `json:"requested"`
 	Withdrawn     float64                               `json:"withdrawn"`
 	Payouts       []operation_setting.DistributorPayout `json:"payouts"`
 	// Children 是他名下的下级分销商，Earned、Pending 是他按 DistributorParentCommissionRate 拿的那份
@@ -239,19 +241,33 @@ func GetDistributorStats(no int, now time.Time) (*DistributorStats, error) {
 	}
 	slices.SortFunc(stats.Children, func(a, b DistributorChild) int { return a.No - b.No })
 
-	// 打款是对公转账后手记在支付设置 distributor_payouts。余额后来又变多（签到、兑码）会让「已用掉」暂时变少，
-	// 这时多打的部分先从待结算里扣，所以 待结算 + 可提现 + 已提现 总是等于 没退款的充值 × 比例
+	// 打款有两种来源：11-24 以前对公转账后手记在支付设置 distributor_payouts；之后是分销商申请、后台点「已打款」的
+	// （distributor_withdrawals）。还没打的申请算「提现中」，不再算进可提现。余额后来又变多（签到、兑码）会让「已用掉」
+	// 暂时变少，这时多打的部分先从待结算里扣，所以 待结算 + 可提现 + 提现中 + 已提现 总是等于 没退款的充值 × 比例
 	stats.Payouts = slices.Clone(operation_setting.GetPaymentSetting().DistributorPayouts[no])
 	if stats.Payouts == nil {
 		stats.Payouts = []operation_setting.DistributorPayout{}
 	}
+	var withdrawals []DistributorWithdrawal
+	if err := DB.Where("distributor_no = ? AND status IN ?", no, []string{DistributorWithdrawPending, DistributorWithdrawPaid}).Order("id").Find(&withdrawals).Error; err != nil {
+		return nil, err
+	}
+	for _, w := range withdrawals {
+		if w.Status == DistributorWithdrawPending {
+			stats.Requested += w.Amount
+			continue
+		}
+		stats.Payouts = append(stats.Payouts, operation_setting.DistributorPayout{Date: time.Unix(w.DoneTime, 0).In(distributorZone).Format("2006-01-02"), Amount: w.Amount})
+	}
+	slices.SortStableFunc(stats.Payouts, func(a, b operation_setting.DistributorPayout) int { return strings.Compare(a.Date, b.Date) })
 	for _, p := range stats.Payouts {
 		stats.Withdrawn += p.Amount
 	}
 	stats.Withdrawn = roundYuan(stats.Withdrawn)
+	stats.Requested = roundYuan(stats.Requested)
 	earned = roundYuan(earned)
-	stats.Withdrawable = max(0, roundYuan(earned-stats.Withdrawn))
-	stats.Pending = max(0, roundYuan(earned+stats.Pending-stats.Withdrawn-stats.Withdrawable))
+	stats.Withdrawable = max(0, roundYuan(earned-stats.Withdrawn-stats.Requested))
+	stats.Pending = max(0, roundYuan(earned+stats.Pending-stats.Withdrawn-stats.Requested-stats.Withdrawable))
 	return stats, nil
 }
 

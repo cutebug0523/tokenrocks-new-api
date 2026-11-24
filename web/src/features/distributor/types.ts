@@ -60,6 +60,19 @@ export interface DistributorPayout {
   amount: number
 }
 
+export interface DistributorWithdrawal {
+  id: number
+  distributor_no: number
+  user_id: number
+  amount: number
+  /** Where the distributor asked to be paid (name + Alipay or bank card). */
+  account: string
+  status: 'pending' | 'paid' | 'rejected'
+  note: string
+  create_time: number
+  done_time: number
+}
+
 export interface DistributorSelf {
   enabled: boolean
   no?: number
@@ -81,12 +94,19 @@ export interface DistributorSelf {
     /** Commission on money already spent, minus payouts. */
     withdrawable: number
     withdrawn: number
+    /** The withdrawal waiting to be paid; not part of withdrawable. */
+    requested?: number
     payouts: DistributorPayout[]
     children?: DistributorChild[]
     /** This distributor's own users; emails and phone numbers come masked. */
     members?: DistributorMember[]
   }
   orders?: DistributorOrder[]
+  /** Withdrawable must reach this many yuan before a withdrawal request. */
+  withdraw_min?: number
+  withdrawals?: DistributorWithdrawal[]
+  /** The account of the last request, to prefill the next one. */
+  withdraw_account?: string
 }
 
 export interface DistributorOrderRequest {

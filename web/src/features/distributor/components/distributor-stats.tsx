@@ -100,7 +100,11 @@ export function DistributorStats(props: DistributorStatsProps) {
     {
       label: t('Withdrawable'),
       value: formatLocalCurrencyAmount(stats?.withdrawable ?? 0),
-      description: t('On money your users have spent'),
+      description: stats?.requested
+        ? t('{{amount}} more being withdrawn', {
+            amount: formatLocalCurrencyAmount(stats.requested),
+          })
+        : t('On money your users have spent'),
       icon: HandCoins,
       tone: 'warning',
     },
@@ -194,7 +198,7 @@ export function DistributorStats(props: DistributorStatsProps) {
       )}
       <p className='text-muted-foreground text-xs'>
         {t(
-          'Commission is {{rate}} of what your users pay online. It becomes withdrawable once they spend that money and stays pending until then. Bonus credit and redeemed codes are used first, and refunded money earns nothing. We pay by bank transfer at the start of each month.',
+          'Commission is {{rate}} of what your users pay online. It becomes withdrawable once they spend that money and stays pending until then. Bonus credit and redeemed codes are used first, and refunded money earns nothing.',
           { rate: formatPercent((props.self.commission_rate ?? 0.1) * 100) }
         )}
         {children.length > 0 &&

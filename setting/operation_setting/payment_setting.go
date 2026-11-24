@@ -15,6 +15,8 @@ type PaymentSetting struct {
 	DistributorFaceValues []int `json:"distributor_face_values"`
 	// DistributorPayouts 是给分销商的打款记录：编号 → 每笔对公转账，打完款手记一笔，分销后台的「已提现」就是它的合计（TokenRocks 改动）
 	DistributorPayouts map[int][]DistributorPayout `json:"distributor_payouts"`
+	// DistributorWithdrawMin 是分销商在后台申请提现的门槛，可提现满这么多元才能点（店主 11-24，TokenRocks 改动）
+	DistributorWithdrawMin float64 `json:"distributor_withdraw_min"`
 
 	ComplianceConfirmed    bool   `json:"compliance_confirmed"`
 	ComplianceTermsVersion string `json:"compliance_terms_version"`
@@ -33,12 +35,13 @@ const CurrentComplianceTermsVersion = "v1"
 
 // 默认配置
 var paymentSetting = PaymentSetting{
-	AmountOptions:         []int{10, 20, 50, 100, 200, 500},
-	AmountDiscount:        map[int]float64{},
-	DistributorUsers:      map[int]int{},
-	DistributorParents:    map[int]int{},
-	DistributorFaceValues: []int{1, 2, 5},
-	DistributorPayouts:    map[int][]DistributorPayout{},
+	AmountOptions:          []int{10, 20, 50, 100, 200, 500},
+	AmountDiscount:         map[int]float64{},
+	DistributorUsers:       map[int]int{},
+	DistributorParents:     map[int]int{},
+	DistributorFaceValues:  []int{1, 2, 5},
+	DistributorPayouts:     map[int][]DistributorPayout{},
+	DistributorWithdrawMin: 50,
 }
 
 func init() {

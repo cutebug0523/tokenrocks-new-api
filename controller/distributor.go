@@ -1,12 +1,15 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Calcium-Ion/go-epay/epay"
 	"github.com/QuantumNous/new-api/common"
@@ -48,6 +51,16 @@ func GetDistributorSelf(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	withdrawals, err := model.GetDistributorWithdrawals(no, 20)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	// 收款信息按他上次填的带出来，不用每次重填
+	withdrawAccount := ""
+	if len(withdrawals) > 0 {
+		withdrawAccount = withdrawals[0].Account
+	}
 	payMethods := []map[string]string{}
 	if isEpayTopUpEnabled() {
 		payMethods = operation_setting.PayMethods
@@ -63,7 +76,89 @@ func GetDistributorSelf(c *gin.Context) {
 		"pay_methods":            payMethods,
 		"stats":                  stats,
 		"orders":                 orders,
+		"withdraw_min":           operation_setting.GetPaymentSetting().DistributorWithdrawMin,
+		"withdrawals":            withdrawals,
+		"withdraw_account":       withdrawAccount,
 	})
+}
+
+type distributorWithdrawRequest struct {
+	Account string `json:"account"`
+}
+
+// RequestDistributorWithdraw 分销商申请提现：把当时的可提现全提，满支付设置 distributor_withdraw_min 才行，
+// 同时只能有一笔在处理。店主对公打完款在后台点「已打款」（ResolveDistributorWithdrawal）。
+func RequestDistributorWithdraw(c *gin.Context) {
+	var req distributorWithdrawRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	id := c.GetInt("id")
+	setting := operation_setting.GetPaymentSetting()
+	no, ok := setting.DistributorUsers[id]
+	if !ok {
+		common.ApiErrorT(c, "This page is only for distributors")
+		return
+	}
+	account := strings.TrimSpace(req.Account)
+	if account == "" || utf8.RuneCountInString(account) > 200 {
+		common.ApiErrorT(c, "Enter where we should pay you, within 200 characters")
+		return
+	}
+	w, err := model.RequestDistributorWithdrawal(id, no, account, setting.DistributorWithdrawMin, time.Now())
+	switch {
+	case errors.Is(err, model.ErrDistributorWithdrawInProgress):
+		common.ApiErrorT(c, "You already have a withdrawal in progress")
+	case errors.Is(err, model.ErrDistributorWithdrawTooSmall):
+		common.ApiErrorT(c, "You can withdraw once at least {{min}} is withdrawable", map[string]any{"min": setting.DistributorWithdrawMin})
+	case err != nil:
+		common.ApiError(c, err)
+	default:
+		common.ApiSuccess(c, w)
+	}
+}
+
+// GetDistributorWithdrawals 给后台：待打款的提现申请在前，再带最近处理过的 100 笔。
+func GetDistributorWithdrawals(c *gin.Context) {
+	list, err := model.GetAllDistributorWithdrawals(100)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, list)
+}
+
+type distributorWithdrawResolveRequest struct {
+	// Action 是 paid（对公打完款了）或 reject（驳回，钱退回他的可提现）
+	Action string `json:"action"`
+	Note   string `json:"note"`
+}
+
+// ResolveDistributorWithdrawal 后台处理一笔提现申请，记审计日志。
+func ResolveDistributorWithdrawal(c *gin.Context) {
+	var req distributorWithdrawResolveRequest
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil || id <= 0 || (req.Action != "paid" && req.Action != "reject") {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	note := strings.TrimSpace(req.Note)
+	if utf8.RuneCountInString(note) > 200 {
+		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	w, err := model.ResolveDistributorWithdrawal(id, req.Action == "paid", note, time.Now().Unix())
+	if errors.Is(err, model.ErrDistributorWithdrawNotPending) {
+		common.ApiErrorT(c, "This withdrawal has already been handled")
+		return
+	}
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAuditFor(c, w.UserId, "user.manage", map[string]any{"action": "distributor_withdraw_" + req.Action, "id": w.Id, "no": w.DistributorNo, "amount": w.Amount})
+	common.ApiSuccess(c, w)
 }
 
 // RequestDistributorOrder 下买码订单，回的格式和充值下单（RequestEpay）一样，前端照样提交表单去付款。

@@ -22,6 +22,7 @@ import type {
   DistributorCodes,
   DistributorOrderRequest,
   DistributorSelf,
+  DistributorWithdrawal,
 } from './types'
 
 interface ApiResponse<T> {
@@ -51,5 +52,32 @@ export async function getDistributorOrderCodes(
   orderId: number
 ): Promise<ApiResponse<DistributorCodes>> {
   const res = await api.get(`/api/user/distributor/order/${orderId}/codes`)
+  return res.data
+}
+
+export async function requestDistributorWithdraw(
+  account: string
+): Promise<ApiResponse<DistributorWithdrawal>> {
+  const res = await api.post('/api/user/distributor/withdraw', { account })
+  return res.data
+}
+
+/** Admin: every pending request, then the latest handled ones. */
+export async function getDistributorWithdrawals(): Promise<
+  ApiResponse<DistributorWithdrawal[]>
+> {
+  const res = await api.get('/api/user/distributor/withdrawals')
+  return res.data
+}
+
+export async function resolveDistributorWithdrawal(
+  id: number,
+  action: 'paid' | 'reject',
+  note: string
+): Promise<ApiResponse<DistributorWithdrawal>> {
+  const res = await api.post(`/api/user/distributor/withdrawals/${id}`, {
+    action,
+    note,
+  })
   return res.data
 }

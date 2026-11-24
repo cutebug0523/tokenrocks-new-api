@@ -169,6 +169,11 @@ func CreateAccessToken(c *gin.Context) {
 // issueAccessToken stores a new access token for userID and returns its
 // plaintext, which is shown once and never stored.
 func issueAccessToken(userID int, name string, scopes []string, expiresAt int64) (string, *model.UserAccessToken, error) {
+	return issueAccessTokenFor(userID, name, "", scopes, expiresAt)
+}
+
+// issueAccessTokenFor is issueAccessToken for a desktop sign-in from deviceID.
+func issueAccessTokenFor(userID int, name, deviceID string, scopes []string, expiresAt int64) (string, *model.UserAccessToken, error) {
 	suffix, err := common.GenerateRandomCharsKey(43)
 	if err != nil {
 		return "", nil, err
@@ -180,6 +185,7 @@ func issueAccessToken(userID int, name string, scopes []string, expiresAt int64)
 		TokenHint: model.AccessTokenHint(raw),
 		ExpiresAt: expiresAt,
 		CreatedAt: common.GetTimestamp(),
+		DeviceId:  deviceID,
 	}
 	if err := token.SetScopes(scopes); err != nil {
 		return "", nil, err

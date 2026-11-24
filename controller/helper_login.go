@@ -37,7 +37,13 @@ var helperAccessTokenScopes = []string{"api_key:read", "api_key:reveal", "api_ke
 var (
 	pkceChallengePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 	pkceVerifierPattern  = regexp.MustCompile(`^[A-Za-z0-9._~-]{43,128}$`)
+	helperDevicePattern  = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
 )
+
+// A desktop sign-in clears the same install's earlier token and any token of
+// the same name left unused this long, so stale tokens from reinstalls and
+// repeated sign-ins never fill the per-user limit.
+const helperStaleTokenAge = 3 * 24 * 60 * 60
 
 // helperLoginGrant is the code's payload: the challenge and the browser session
 // that approved it, which must still be live when the code is redeemed.
@@ -89,6 +95,8 @@ func HelperLoginToken(c *gin.Context) {
 	var req struct {
 		Code         string `json:"code"`
 		CodeVerifier string `json:"code_verifier"`
+		// DeviceId identifies the install (optional; older helpers omit it).
+		DeviceId string `json:"device_id"`
 	}
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil || req.Code == "" || !pkceVerifierPattern.MatchString(req.CodeVerifier) {
 		writeAccessTokenError(c, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body.")
@@ -126,7 +134,20 @@ func HelperLoginToken(c *gin.Context) {
 	if grant.Client == helperClientLEE {
 		name, client = leeAccessTokenName, helperClientLEE
 	}
-	raw, token, err := issueAccessToken(user.Id, name, scopes, common.GetTimestamp()+int64(service.AccessTokenDefaultExpiryDays)*24*60*60)
+	device := req.DeviceId
+	if !helperDevicePattern.MatchString(device) {
+		device = ""
+	}
+	now := common.GetTimestamp()
+	dropped, err := model.PruneSignInAccessTokens(user.Id, name, device, now-helperStaleTokenAge, service.AccessTokenMaxPerUser)
+	if err != nil {
+		writeSecurityOperationError(c, err)
+		return
+	}
+	for _, old := range dropped {
+		recordUserSecurityAudit(c, user.Id, "access_token.revoke", map[string]any{"token_id": old.Id, "name": old.Name, "token_ref": old.TokenHash, "client": client, "reason": "replaced_on_sign_in"})
+	}
+	raw, token, err := issueAccessTokenFor(user.Id, name, device, scopes, now+int64(service.AccessTokenDefaultExpiryDays)*24*60*60)
 	if err != nil {
 		writeIssueAccessTokenError(c, err)
 		return

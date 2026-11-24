@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -49,6 +50,10 @@ type UserAccessToken struct {
 	LastUsedAt int64  `json:"last_used_at" gorm:"type:bigint"`
 	LastUsedIp string `json:"last_used_ip" gorm:"type:varchar(64)"`
 	CreatedAt  int64  `json:"created_at" gorm:"type:bigint"`
+	// DeviceId is the install that signed in through the helper flow (TR助手, LEE),
+	// so signing in again on the same machine replaces its old token. Empty for
+	// tokens made on the console.
+	DeviceId string `json:"-" gorm:"type:varchar(64);index"`
 }
 
 func (UserAccessToken) TableName() string {
@@ -140,6 +145,54 @@ func CreateUserAccessToken(userID int, token *UserAccessToken, limit int) error 
 		}
 		return tx.Create(token).Error
 	})
+}
+
+// PruneSignInAccessTokens makes room before a desktop sign-in issues a new
+// token named name: it deletes userID's tokens of that name that were issued to
+// the same deviceID (when given) or have not been used since cutoff, and if the
+// user still holds limit tokens, the least recently used of that name until one
+// slot is free. Tokens with other names are never touched. Returns the deleted
+// rows for auditing.
+func PruneSignInAccessTokens(userID int, name, deviceID string, cutoff int64, limit int) ([]UserAccessToken, error) {
+	var dropped []UserAccessToken
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var user User
+		if err := lockForUpdate(tx).Select("id").First(&user, userID).Error; err != nil {
+			return err
+		}
+		var all []UserAccessToken
+		if err := tx.Where("user_id = ?", userID).Find(&all).Error; err != nil {
+			return err
+		}
+		lastSeen := func(t UserAccessToken) int64 { return max(t.LastUsedAt, t.CreatedAt) }
+		var spare []UserAccessToken
+		for _, t := range all {
+			if t.Name != name {
+				continue
+			}
+			if (deviceID != "" && t.DeviceId == deviceID) || lastSeen(t) < cutoff {
+				dropped = append(dropped, t)
+			} else {
+				spare = append(spare, t)
+			}
+		}
+		sort.Slice(spare, func(i, j int) bool { return lastSeen(spare[i]) < lastSeen(spare[j]) })
+		for left := len(all) - len(dropped); left >= limit && len(spare) > 0; left-- {
+			dropped, spare = append(dropped, spare[0]), spare[1:]
+		}
+		if len(dropped) == 0 {
+			return nil
+		}
+		ids := make([]int, len(dropped))
+		for i, t := range dropped {
+			ids[i] = t.Id
+		}
+		return tx.Where("user_id = ? AND id IN ?", userID, ids).Delete(&UserAccessToken{}).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dropped, nil
 }
 
 // UpdateUserAccessToken renames one token owned by userID and, when scopes is

@@ -157,7 +157,8 @@ func ResolveDistributorWithdrawal(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	recordManageAuditFor(c, w.UserId, "user.manage", map[string]any{"action": "distributor_withdraw_" + req.Action, "id": w.Id, "no": w.DistributorNo, "amount": w.Amount})
+	username, _ := model.GetUsernameById(w.UserId, false)
+	recordManageAuditFor(c, w.UserId, "user.manage", map[string]any{"action": "distributor_withdraw_" + req.Action, "username": username, "id": w.UserId, "withdrawal_id": w.Id, "no": w.DistributorNo, "amount": w.Amount})
 	common.ApiSuccess(c, w)
 }
 

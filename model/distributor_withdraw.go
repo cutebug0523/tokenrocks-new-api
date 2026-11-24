@@ -2,9 +2,11 @@ package model
 
 import (
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"gorm.io/gorm"
 )
 
@@ -59,10 +61,18 @@ func RequestDistributorWithdrawal(userId int, no int, account string, minimum fl
 		Status:        DistributorWithdrawPending,
 		CreateTime:    now.Unix(),
 	}
+	// 这个编号下所有的号（一个编号可以挂几个号）加上申请人自己，按 id 排好一起锁：
+	// 同一编号的几个号在不同的机器上同时点，后到的等先到的提交完，再数到已经有一笔
+	ids := []int{userId}
+	for id, n := range operation_setting.GetPaymentSetting().DistributorUsers {
+		if n == no && id != userId {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		// 锁住申请人的用户行：同一个人在两台上同时点，后到的等先到的提交完，再看到已经有一笔
-		// ponytail: 一个编号挂了几个号、几个号同时点会各提一笔；真有这种编号再改成按编号锁
-		if err := lockForUpdate(tx).Select("id").Where("id = ?", userId).First(&User{}).Error; err != nil {
+		var locked []User
+		if err := lockForUpdate(tx).Select("id").Where("id IN ?", ids).Order("id").Find(&locked).Error; err != nil {
 			return err
 		}
 		var n int64

@@ -172,8 +172,6 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/distributor/stats", controller.GetDistributorStatsByAdmin)
 				adminRoute.GET("/distributor/users", controller.GetDistributorUsers)
 				adminRoute.POST("/distributor/users", controller.SetDistributorUser)
-				adminRoute.GET("/distributor/withdrawals", controller.GetDistributorWithdrawals)
-				adminRoute.POST("/distributor/withdrawals/:id", controller.ResolveDistributorWithdrawal)
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
@@ -188,6 +186,14 @@ func SetApiRouter(router *gin.Engine) {
 				// Admin 2FA routes
 				adminRoute.GET("/2fa/stats", controller.Admin2FAStats)
 				adminRoute.DELETE("/:id/2fa", controller.AdminDisable2FA)
+			}
+
+			// 分销提现申请：里面有收款信息，点「已打款」就算打过款，和以前手记打款（改支付设置）一样只给超级管理员（TokenRocks 改动）
+			withdrawalRoute := userRoute.Group("/distributor/withdrawals")
+			withdrawalRoute.Use(middleware.RootAuth())
+			{
+				withdrawalRoute.GET("", controller.GetDistributorWithdrawals)
+				withdrawalRoute.POST("/:id", controller.ResolveDistributorWithdrawal)
 			}
 		}
 

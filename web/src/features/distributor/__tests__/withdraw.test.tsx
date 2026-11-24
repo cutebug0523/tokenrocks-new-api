@@ -168,7 +168,10 @@ it('lets an admin mark a request paid with a note', async () => {
 
   expect(await screen.findByText('张三 支付宝 139')).toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'Mark paid' }))
-  await user.type(screen.getByLabelText('Note (optional)'), '对公 11-25')
+  await user.type(
+    screen.getByLabelText('Note, the distributor sees it (optional)'),
+    '对公 11-25'
+  )
   await user.click(screen.getByRole('button', { name: 'Continue' }))
 
   await waitFor(() =>
@@ -177,4 +180,34 @@ it('lets an admin mark a request paid with a note', async () => {
       note: '对公 11-25',
     })
   )
+})
+
+it('shows an error instead of an empty list when requests fail to load', async () => {
+  vi.spyOn(api, 'get').mockRejectedValue(new Error('network down'))
+  wrap(<DistributorWithdrawalsAdminCard />)
+
+  expect(
+    await screen.findByRole('button', { name: /retry/i })
+  ).toBeInTheDocument()
+  expect(screen.queryByText('No withdrawal requests')).not.toBeInTheDocument()
+})
+
+it('closes the dialog and reloads when the request was already handled', async () => {
+  const get = vi
+    .spyOn(api, 'get')
+    .mockResolvedValue({ data: { success: true, data: [request()] } })
+  vi.spyOn(api, 'post').mockResolvedValue({
+    data: {
+      success: false,
+      message: 'This withdrawal has already been handled',
+    },
+  })
+  const user = userEvent.setup()
+  wrap(<DistributorWithdrawalsAdminCard />)
+
+  await user.click(await screen.findByRole('button', { name: 'Reject' }))
+  await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+  await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
 })

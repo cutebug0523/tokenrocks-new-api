@@ -18,11 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { HandCoins, Landmark } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { ErrorState } from '@/components/error-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -171,17 +172,28 @@ export function DistributorWithdrawalsAdminCard() {
         )
       )
     },
-    onSuccess: () => {
+    onError: (error: Error) => handleServerError(error),
+    // Also on failure: "already handled" means the list is stale.
+    onSettled: () => {
       setTarget(null)
       queryClient.invalidateQueries({ queryKey: ['distributor-withdrawals'] })
       queryClient.invalidateQueries({ queryKey: ['distributor-self'] })
     },
-    onError: (error: Error) => handleServerError(error),
   })
   const list = query.data ?? []
   const targetParams = {
     no: target?.w.distributor_no,
     amount: formatLocalCurrencyAmount(target?.w.amount ?? 0),
+  }
+  let listContent: ReactNode = null
+  if (query.isError && !query.data) {
+    listContent = <ErrorState onRetry={() => query.refetch()} />
+  } else if (list.length === 0) {
+    listContent = (
+      <p className='text-muted-foreground text-sm'>
+        {t('No withdrawal requests')}
+      </p>
+    )
   }
   const open = (w: DistributorWithdrawal, action: 'paid' | 'reject') => {
     setNote('')
@@ -192,15 +204,11 @@ export function DistributorWithdrawalsAdminCard() {
     <TitledCard
       title={t('Withdrawal requests')}
       description={t(
-        'Admins only. Pay by bank transfer first, then mark it paid. Rejecting puts the money back into withdrawable.'
+        'Only the super admin sees this. Pay by bank transfer first, then mark it paid. Rejecting puts the money back into withdrawable.'
       )}
       icon={<Landmark />}
     >
-      {list.length === 0 ? (
-        <p className='text-muted-foreground text-sm'>
-          {t('No withdrawal requests')}
-        </p>
-      ) : (
+      {listContent ?? (
         <ul className='divide-y text-sm'>
           {list.map((w) => (
             <li key={w.id} className='space-y-1 py-2'>
@@ -258,8 +266,8 @@ export function DistributorWithdrawalsAdminCard() {
         handleConfirm={() => mutation.mutate()}
       >
         <Input
-          aria-label={t('Note (optional)')}
-          placeholder={t('Note (optional)')}
+          aria-label={t('Note, the distributor sees it (optional)')}
+          placeholder={t('Note, the distributor sees it (optional)')}
           maxLength={200}
           value={note}
           onChange={(event) => setNote(event.target.value)}

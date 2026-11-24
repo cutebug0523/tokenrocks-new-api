@@ -52,8 +52,8 @@ export function Distributor() {
     refetchOnWindowFocus: true,
   })
   const self = query.data
-  const isAdmin = useAuthStore(
-    (state) => (state.auth.user?.role ?? ROLE.GUEST) >= ROLE.ADMIN
+  const isRoot = useAuthStore(
+    (state) => (state.auth.user?.role ?? ROLE.GUEST) >= ROLE.SUPER_ADMIN
   )
 
   let content: ReactNode
@@ -98,7 +98,7 @@ export function Distributor() {
       <SectionPageLayout.Content>
         <div className='mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-5'>
           {content}
-          {isAdmin && <DistributorWithdrawalsAdminCard />}
+          {isRoot && <DistributorWithdrawalsAdminCard />}
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>

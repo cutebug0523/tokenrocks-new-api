@@ -28,6 +28,9 @@ func TestPruneSignInAccessTokens(t *testing.T) {
 	add("console-old", "my script", "", now-10*86400, now-9*86400)       // 网站上建的，旧也不碰
 	add("lee-old", "LEE", "", now-10*86400, now-9*86400)                 // LEE 的，名字不同不碰
 
+	// 上线前建的行 device_id 是 NULL，读出来要当空的
+	require.NoError(t, DB.Exec("UPDATE user_access_tokens SET device_id = NULL WHERE token_hash IN ('stale', 'never-used-new')").Error)
+
 	dropped, err := PruneSignInAccessTokens(user.Id, helper, "dev-aaaaaaaaaaaaaaaa", cutoff, 20)
 	require.NoError(t, err)
 	assert.Len(t, dropped, 2)

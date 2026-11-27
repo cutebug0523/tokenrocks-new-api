@@ -89,12 +89,15 @@ type responsesWSCallState struct {
 }
 
 type responsesWSSession struct {
-	ctx            context.Context
-	cancel         context.CancelFunc
-	client         *websocket.Conn
-	runner         ResponsesWSRequestRunner
-	request        *http.Request
-	requestID      string
+	ctx       context.Context
+	cancel    context.CancelFunc
+	client    *websocket.Conn
+	runner    ResponsesWSRequestRunner
+	request   *http.Request
+	requestID string
+	// connection is the upgrade request's context, alive until the workers
+	// finish; it sanitizes upstream frames that arrive between requests.
+	connection     *gin.Context
 	nextEventIndex int
 	workers        sync.WaitGroup
 	closeOnce      sync.Once
@@ -125,7 +128,7 @@ type responsesWSSession struct {
 func ResponsesWebSocketHelper(c *gin.Context, client *websocket.Conn, runner ResponsesWSRequestRunner) *types.NewAPIError {
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	s := &responsesWSSession{ctx: ctx, cancel: cancel, client: client, runner: runner,
-		request: c.Request.Clone(ctx), requestID: c.GetString(common.RequestIdKey)}
+		request: c.Request.Clone(ctx), requestID: c.GetString(common.RequestIdKey), connection: c}
 	if s.requestID == "" {
 		s.requestID = common.NewRequestId()
 	}
@@ -395,6 +398,12 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				return nil
 			}
 			info.SetFirstResponseTime()
+			// The client gets the frame without upstream error text or upstream
+			// bookkeeping, like HTTP streams; accounting reads the original.
+			forClient := incoming
+			if incoming.kind == websocket.TextMessage {
+				forClient.body = []byte(service.SanitizeUpstreamJSON(c, string(incoming.body)))
+			}
 			var event struct {
 				dto.ResponsesStreamResponse
 				StreamID string `json:"stream_id"`
@@ -403,7 +412,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				info.StreamStatus.RecordError("invalid upstream websocket event")
 			} else {
 				if event.Type != "error" && event.StreamID != "" && event.StreamID != create.StreamID {
-					if err := s.writeClient(incoming.kind, incoming.body); err != nil {
+					if err := s.writeClient(forClient.kind, forClient.body); err != nil {
 						s.shutdown(websocket.CloseInternalServerErr, "")
 					}
 					continue
@@ -421,7 +430,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 					}
 					terminal, ambiguous, controlError := responsesWSErrorEndsRequest(rejection, create.StreamID, responseID, sentControl)
 					if !terminal {
-						if err := s.writeClient(incoming.kind, incoming.body); err != nil {
+						if err := s.writeClient(forClient.kind, forClient.body); err != nil {
 							s.shutdown(websocket.CloseInternalServerErr, "")
 						}
 						// Only a control error in this stream resolves its pending control.
@@ -441,7 +450,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 						accumulator.Observe(&event.ResponsesStreamResponse, incoming.body)
 						info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 						s.lastResponseID = responseID
-						state.terminal = &incoming
+						state.terminal = &forClient
 						if ambiguous {
 							state.closeCode = websocket.CloseInternalServerErr
 						}
@@ -477,11 +486,11 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 					s.lastResponseID = event.Response.ID
 				}
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
-				state.terminal = &incoming
+				state.terminal = &forClient
 				ConsumeResponsesQuota(c, info, accumulator.Finish())
 				return nil
 			}
-			if err := s.writeClient(incoming.kind, incoming.body); err != nil {
+			if err := s.writeClient(forClient.kind, forClient.body); err != nil {
 				s.shutdown(websocket.CloseInternalServerErr, "")
 			}
 			if accepted && pendingControl != nil {
@@ -661,6 +670,9 @@ func (s *responsesWSSession) startTargetReader(target *websocket.Conn) {
 				}
 				s.shutdown(code, "upstream connection closed")
 				return
+			}
+			if kind == websocket.TextMessage {
+				body = []byte(service.SanitizeUpstreamJSON(s.connection, string(body)))
 			}
 			if writeErr := s.writeClient(kind, body); writeErr != nil {
 				s.shutdown(websocket.CloseInternalServerErr, "")

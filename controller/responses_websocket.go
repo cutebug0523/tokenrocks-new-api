@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -42,6 +43,11 @@ var responsesWSRequestEngine = sync.OnceValue(func() *gin.Engine {
 		state := c.Request.Context().Value(responsesWSRequestContextKey{}).(*responsesWSRequestState)
 		state.apiError = state.handle(c)
 		if state.apiError != nil {
+			// Like the HTTP relay: the server log keeps the upstream text, the
+			// client gets the fixed message for its status.
+			logger.LogError(c, common.LogText("relay error: %s", common.LocalLogPreview(state.apiError.Error())))
+			state.apiError = service.UserFacingError(c, state.apiError)
+			state.apiError.SetMessage(common.MessageWithRequestId(state.apiError.Error(), state.requestID))
 			status := state.apiError.StatusCode
 			if status < http.StatusBadRequest {
 				status = http.StatusInternalServerError
